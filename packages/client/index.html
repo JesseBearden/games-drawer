@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Tank You For Being A Friend</title>
+    <meta name="description" content="A real-time artillery brawl. Drop in by helicopter, aim, fire, and climb to level 50." />
+    <meta property="og:title" content="Tank You For Being A Friend" />
+    <meta property="og:description" content="Drop in by helicopter and blow up your friends. Tap to join." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#1b2a6b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/sprites/tank-body.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <!-- Landing -->
+    <main id="landing" class="landing">
+      <div class="landing-card">
+        <h1 class="logo">Tank You<br /><span>For Being A Friend</span></h1>
+        <p class="tagline">Drop in. Dial in. Blow up your friends.</p>
+
+        <label class="field">
+          <span>Your name</span>
+          <div class="name-row">
+            <input id="name-input" maxlength="20" autocomplete="off" spellcheck="false" />
+            <button id="name-dice" class="icon-btn" type="button" aria-label="Pick a random name" title="Random name">🎲</button>
+          </div>
+        </label>
+
+        <div id="invite-panel" class="invite-panel" hidden>
+          <button id="join-invite" class="btn btn-primary btn-big" type="button">Join room <span id="invite-code"></span></button>
+          <p class="hint">You were invited to a private room.</p>
+        </div>
+
+        <div class="actions">
+          <button id="play-public" class="btn btn-primary btn-big" type="button">Play</button>
+          <button id="create-private" class="btn btn-secondary" type="button">Create private room</button>
+        </div>
+
+        <form id="code-form" class="code-form">
+          <input id="code-input" maxlength="5" placeholder="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
+          <button class="btn btn-secondary" type="submit">Join</button>
+        </form>
+
+        <p id="landing-error" class="error" role="alert" hidden></p>
+        <p class="fineprint">Text chat is moderated and logged.</p>
+      </div>
+    </main>
+
+    <!-- Game -->
+    <div id="game" class="game" hidden>
+      <div id="arena" class="arena">
+        <canvas id="canvas"></canvas>
+
+        <div class="hud-top-left">
+          <div id="hearts" class="hearts" aria-label="Lives"></div>
+          <div id="level-line" class="level-line"></div>
+        </div>
+
+        <div id="wind" class="wind" role="img" aria-label="Wind">
+          <img id="windsock" src="/sprites/windsock.png" alt="" />
+          <span id="wind-speed">0</span>
+        </div>
+
+        <div id="aim-box" class="aim-box">
+          <div><span class="aim-label">ANGLE</span> <span id="aim-angle">60°</span></div>
+          <div><span class="aim-label">POWER</span> <span id="aim-power">55%</span></div>
+          <div id="spread-badge" class="spread-badge" hidden>SPREAD READY</div>
+        </div>
+
+        <div id="banner" class="banner" hidden></div>
+        <div id="status" class="status" hidden></div>
+        <div id="feed" class="feed" aria-live="polite"></div>
+        <div id="toasts" class="toasts" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <button id="btn-share" class="tool-btn" type="button" hidden title="Invite friends">Invite</button>
+          <button id="btn-scores" class="tool-btn" type="button" title="Scoreboard (Tab)" aria-label="Scoreboard">🏆</button>
+          <button id="btn-zoom" class="tool-btn" type="button" title="Zoom (Z)" aria-label="Toggle zoom">🔍</button>
+          <button id="btn-fullscreen" class="tool-btn" type="button" title="Fullscreen (F)" aria-label="Fullscreen">⛶</button>
+          <button id="btn-chat" class="tool-btn chat-toggle" type="button" title="Chat (Enter)" aria-label="Chat">💬<span id="chat-unread" class="badge" hidden></span></button>
+          <button id="btn-menu" class="tool-btn" type="button" title="Menu" aria-label="Menu">☰</button>
+        </div>
+
+        <!-- Touch controls -->
+        <div id="touch" class="touch" hidden>
+          <div class="pad pad-left">
+            <div class="pad-row">
+              <button class="tbtn" data-act="angle-left" aria-label="Turret left">⟲</button>
+              <button class="tbtn" data-act="angle-right" aria-label="Turret right">⟳</button>
+            </div>
+            <div class="pad-row">
+              <button class="tbtn" data-act="power-down" aria-label="Less power">−</button>
+              <button class="tbtn" data-act="power-up" aria-label="More power">+</button>
+            </div>
+          </div>
+          <div class="pad pad-right">
+            <div id="move-row" class="pad-row" hidden>
+              <button class="tbtn" data-act="move-left" aria-label="Move left">◀</button>
+              <button class="tbtn" data-act="move-right" aria-label="Move right">▶</button>
+            </div>
+            <button id="fire-btn" class="tbtn fire" data-act="fire">FIRE</button>
+          </div>
+        </div>
+        <button id="drop-btn" class="drop-btn" type="button" hidden>DROP</button>
+
+        <div id="scores" class="scores" hidden></div>
+        <div id="menu" class="menu" hidden>
+          <div class="menu-card">
+            <h2>Menu</h2>
+            <label class="field">
+              <span>Name</span>
+              <div class="name-row">
+                <input id="menu-name" maxlength="20" autocomplete="off" spellcheck="false" />
+                <button id="menu-name-save" class="btn btn-secondary" type="button">Save</button>
+              </div>
+            </label>
+            <p id="menu-room" class="hint"></p>
+            <div class="help">
+              <p><b>Desktop:</b> ←/→ aim, ↑/↓ power, Space fire, A/D move (level 10), Enter chat, Tab scores, Z zoom, F fullscreen.</p>
+              <p><b>Drop:</b> any game key or button releases you from the helicopter.</p>
+            </div>
+            <div class="actions">
+              <button id="menu-close" class="btn btn-primary" type="button">Back to game</button>
+              <button id="menu-leave" class="btn btn-secondary" type="button">Leave room</button>
+            </div>
+          </div>
+        </div>
+        <div id="reconnect" class="overlay" hidden><div class="overlay-card">Reconnecting…</div></div>
+        <div id="rotate" class="overlay rotate"><div class="overlay-card">Turn your phone sideways to play</div></div>
+      </div>
+
+      <aside id="chat" class="chat">
+        <header class="chat-head">
+          <h2>Chat</h2>
+          <button id="chat-collapse" class="icon-btn" type="button" aria-label="Hide chat">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+        </header>
+        <ol id="chat-log" class="chat-log"></ol>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" maxlength="200" placeholder="Message…" autocomplete="off" enterkeyhint="send" />
+        </form>
+      </aside>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,3 @@
+# Extra blocked words or phrases for room chat and player names, one per line.
+# Matching ignores case, spaces, punctuation, accents and common leetspeak (0->o, 3->e, @->a...).
+# The obscenity library's English profanity and slur list already applies; add anything it misses here.

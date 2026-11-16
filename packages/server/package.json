@@ -1,0 +1,11 @@
+{
+  "name": "@tank/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tank/shared": "*",
+    "obscenity": "^0.4.6",
+    "ws": "^8.23.0"
+  }
+}
