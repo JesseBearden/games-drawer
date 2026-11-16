@@ -1,6 +1,9 @@
 import './styles.css';
+import './room.css';
 import { cleanName, isRoomCode, normalizeRoomCode, randomName, ROOM_CODE_LENGTH, type RoomRequest, type ServerMessage } from '@tank/shared';
-import { GameApp, type Device } from './game';
+import { RoomApp } from './shell';
+import type { Device } from './views';
+import { Sfx } from './audio';
 import { Net } from './net';
 import { loadSprites, type Sprites } from './sprites';
 
@@ -8,6 +11,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 const NAME_KEY = 'tank.name';
 const spritesReady: Promise<Sprites> = loadSprites();
+const sfx = new Sfx();
 
 function detectDevice(): Device {
   const touch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
@@ -78,11 +82,11 @@ function setBusy(busy: boolean) {
   for (const id of ['play-public', 'create-private', 'join-invite']) ($<HTMLButtonElement>(id)).disabled = busy;
 }
 
-let app: GameApp | null = null;
+let app: RoomApp | null = null;
 let net: Net | null = null;
 
 /**
- * The room this tab is playing in. If the page reloads (or a phone discards the tab while
+ * The room this tab is in. If the page reloads (or a phone discards the tab while
  * you switch apps) we go straight back in and reclaim the tank.
  */
 const ACTIVE_KEY = 'tank.active';
@@ -104,6 +108,8 @@ function getActive(): RoomRequest | null {
 }
 
 async function start(room: RoomRequest) {
+  // Called from a button tap, so audio is allowed to start (required on iPhone).
+  sfx.unlock();
   showError(null);
   setBusy(true);
   const name = cleanName(nameInput.value) || randomName();
@@ -117,8 +123,8 @@ async function start(room: RoomRequest) {
       if (msg.t === 'welcome' && !app) {
         setActive(msg.room.kind === 'private' ? { kind: 'private', code: msg.room.code } : { kind: 'public' });
         enterGame();
-        app = new GameApp(msg, thisNet, sprites, device, leave);
-        if (import.meta.env.DEV) (window as unknown as { __tank: GameApp }).__tank = app;
+        app = new RoomApp(msg, thisNet, sprites, sfx, device, leave);
+        if (import.meta.env.DEV) (window as unknown as { __tank: RoomApp }).__tank = app;
         return;
       }
       app?.onMessage(msg);
@@ -142,6 +148,9 @@ async function start(room: RoomRequest) {
   thisNet.connect();
 }
 
+// iOS Safari ignores user-scalable=no; block pinch-zoom so the game never zooms by accident.
+for (const ev of ['gesturestart', 'gesturechange'] as const) document.addEventListener(ev, (e) => e.preventDefault());
+
 const resume = getActive();
 if (resume) start(resume);
 
@@ -159,5 +168,5 @@ function leave() {
   net = null;
   $('game').hidden = true;
   $('landing').hidden = false;
-  if (location.pathname !== '/' && !inviteCode()) history.replaceState(null, '', '/');
+  if (location.pathname !== '/' && !inviteCode()) history.replaceState(null, '', '/' + location.search);
 }

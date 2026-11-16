@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cleanName, cleanText } from '../src/names';
 import { parseClientMessage } from '../src/protocol';
 import { Rng } from '../src/rng';
-import { addPlaced, flatWorld, runTicks } from './helpers';
+import { addPlaced, dropShellAt, flatWorld, runTicks } from './helpers';
 
 /** Anti-cheat rules live in the authoritative simulation; these prove a client can't bend them. */
 describe('shot limits', () => {
@@ -23,22 +23,28 @@ describe('shot limits', () => {
     expect(w.fire(a.id, 60, 50)).toBe(true);
   });
 
-  it('a spread volley holds the shot slot until all three shells land', () => {
-    const w = flatWorld(800);
-    const a = addPlaced(w, 'A', 300);
-    a.level = 15;
-    a.shotsUntilSpread = 0;
-    expect(w.fire(a.id, 70, 60)).toBe(true);
-    expect(w.shells).toHaveLength(3);
-    let blockedWhileInFlight = true;
-    while (w.shells.length > 0) {
-      if (w.fire(a.id, 70, 60)) blockedWhileInFlight = false;
-      w.step();
-    }
-    expect(blockedWhileInFlight).toBe(true);
-    expect(a.shellsInFlight).toBe(0);
-    expect(w.fire(a.id, 70, 60)).toBe(true);
-  });
+  for (const [level, shells] of [
+    [5, 3],
+    [9, 5],
+  ] as const) {
+    it(`a ${shells}-shell spread (level ${level}) holds the shot slot until every shell lands`, () => {
+      const w = flatWorld(800);
+      const a = addPlaced(w, 'A', 300);
+      a.level = level;
+      a.shotsUntilSpread = 0;
+      expect(w.fire(a.id, 70, 60)).toBe(true);
+      expect(w.shells).toHaveLength(shells);
+      let blockedWhileInFlight = true;
+      while (w.shells.length > 0) {
+        if (w.fire(a.id, 70, 60)) blockedWhileInFlight = false;
+        w.step();
+      }
+      expect(blockedWhileInFlight).toBe(true);
+      expect(a.shellsInFlight).toBe(0);
+      expect(a.shotsFired).toBe(1);
+      expect(w.fire(a.id, 70, 60)).toBe(true);
+    });
+  }
 
   it('cannot fire while carried, parachuting, falling, dead, or after a win', () => {
     const w = flatWorld(800);
@@ -84,6 +90,24 @@ describe('events caused by input between ticks', () => {
   });
 });
 
+describe('slot reuse', () => {
+  it('a shell from a removed tank is not credited to whoever takes its slot', () => {
+    const w = flatWorld(800);
+    const a = addPlaced(w, 'A', 300);
+    const victim = addPlaced(w, 'V', 900);
+    dropShellAt(w, a.id, 900, 700);
+    const slot = a.id;
+    w.removeTank(slot);
+    const newcomer = w.addTank({ id: slot, name: 'New', controller: 'human' });
+    const events = runTicks(w, 120);
+    const death = events.find((e) => e.type === 'death' && e.tank === victim.id);
+    expect(death).toBeDefined();
+    expect(death!.type === 'death' && death!.killer).toBeNull();
+    expect(newcomer.kills).toBe(0);
+    expect(newcomer.level).toBe(0);
+  });
+});
+
 describe('aim and movement limits', () => {
   it('clamps angle and power, and ignores non-finite values', () => {
     const w = flatWorld(800);
@@ -108,17 +132,21 @@ describe('aim and movement limits', () => {
     expect(speed).toBeLessThanOrEqual(w.cfg.maxShellSpeed + 1e-6);
   });
 
-  it('movement does nothing before level 10, and is capped after', () => {
+  it('movement does nothing before level 4, is slow until 8, then faster, and always capped', () => {
     const w = flatWorld(800);
     const a = addPlaced(w, 'A', 900);
     w.setMove(a.id, 1);
     runTicks(w, 120);
     expect(a.x).toBe(900);
-    a.level = 10;
+    a.level = 4;
     w.setMove(a.id, 99);
     runTicks(w, 60);
     // One second at slow speed, whatever "dir" value was sent.
     expect(a.x - 900).toBeCloseTo(w.cfg.moveSpeedSlow, 0);
+    a.level = 8;
+    const x = a.x;
+    runTicks(w, 60);
+    expect(a.x - x).toBeCloseTo(w.cfg.moveSpeedFast, 0);
   });
 
   it('a drop request only works while on the helicopter, once', () => {
@@ -157,15 +185,24 @@ describe('protocol parsing', () => {
       '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"secret"}}',
       '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"private","code":7}}',
       '{"t":"nuke"}',
+      // Top-level game input is no longer accepted; it travels inside {"t":"g"}.
+      '{"t":"fire","angle":1,"power":2}',
+      '{"t":"g"}',
+      '{"t":"g","m":{"t":"nuke"}}',
+      '{"t":"g","m":{"t":"play","card":"1S"}}',
+      '{"t":"g","m":{"t":"play","card":"QSX"}}',
+      '{"t":"g","m":{"t":"pass","cards":["2C","3C"]}}',
+      '{"t":"g","m":{"t":"pass","cards":["2C","3C",4]}}',
+      '{"t":"pick","game":"chess"}',
       'x'.repeat(5000),
     ];
     for (const raw of bad) expect(parseClientMessage(raw), raw.slice(0, 60)).toBeNull();
   });
 
   it('strips unknown fields and never passes the client object through', () => {
-    const raw = '{"t":"fire","angle":45,"power":50,"__proto__":{"admin":true},"level":50,"extra":{"deep":[1,2,3]}}';
+    const raw = '{"t":"g","x":1,"m":{"t":"fire","angle":45,"power":50,"__proto__":{"admin":true},"level":50,"extra":{"deep":[1,2,3]}}}';
     const m = parseClientMessage(raw)!;
-    expect(m).toEqual({ t: 'fire', angle: 45, power: 50 });
+    expect(m).toEqual({ t: 'g', m: { t: 'fire', angle: 45, power: 50 } });
     expect(({} as Record<string, unknown>).admin).toBeUndefined();
     const hello = parseClientMessage(
       '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"public","code":"ZZZZZ","admin":1}}',
@@ -175,7 +212,7 @@ describe('protocol parsing', () => {
 
   it('survives random garbage (fuzz)', () => {
     const rng = new Rng(1234);
-    const pieces = ['{', '}', '[', ']', '"t"', ':', ',', '"fire"', '"hello"', '1e308', '-0', 'null', 'true', '"\\u0000"', '"angle"', '"power"', '"room"', '{"kind":"private"}'];
+    const pieces = ['{', '}', '[', ']', '"t"', ':', ',', '"fire"', '"hello"', '"g"', '"m"', '"play"', '"QS"', '1e308', '-0', 'null', 'true', '"\\u0000"', '"angle"', '"power"', '"room"', '{"kind":"private"}'];
     for (let i = 0; i < 20_000; i++) {
       let s = '';
       const n = rng.int(0, 12);
@@ -203,5 +240,29 @@ describe('text cleaning', () => {
     const out = cleanName(s);
     expect([...out].length).toBe(20);
     expect(out).toBe('🙂'.repeat(20));
+  });
+});
+
+describe('voice message parsing', () => {
+  const rtc = (data: unknown) => parseClientMessage(JSON.stringify({ t: 'rtc', to: 'abcd1234', data }));
+  it('accepts well-formed offers, answers and candidates', () => {
+    expect(rtc({ sdp: { type: 'offer', sdp: 'v=0' } })).not.toBeNull();
+    expect(rtc({ sdp: { type: 'answer', sdp: 'v=0' } })).not.toBeNull();
+    expect(rtc({ candidate: { candidate: 'candidate:1 1 udp 1 1.2.3.4 5 typ host', sdpMid: '0', sdpMLineIndex: 0 } })).not.toBeNull();
+    expect(parseClientMessage('{"t":"voice","join":true}')).toEqual({ t: 'voice', join: true });
+  });
+  it('rejects malformed or oversized ones', () => {
+    expect(rtc({ sdp: { type: 'pranswer', sdp: 'v=0' } })).toBeNull();
+    expect(rtc({ sdp: { type: 'offer', sdp: 'x'.repeat(12_001) } })).toBeNull();
+    expect(rtc({ candidate: { candidate: 5 } })).toBeNull();
+    expect(rtc({ candidate: { candidate: 'x', sdpMLineIndex: -1 } })).toBeNull();
+    expect(rtc({ candidate: { candidate: 'x'.repeat(1001) } })).toBeNull();
+    expect(rtc(null)).toBeNull();
+    expect(parseClientMessage('{"t":"voice","join":"yes"}')).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ t: 'rtc', to: 'x'.repeat(40), data: { sdp: { type: 'offer', sdp: 'v=0' } } }))).toBeNull();
+  });
+  it('strips extra fields from relayed signals', () => {
+    const m = rtc({ sdp: { type: 'offer', sdp: 'v=0', evil: 1 }, extra: { a: 1 } })!;
+    expect(m).toEqual({ t: 'rtc', to: 'abcd1234', data: { sdp: { type: 'offer', sdp: 'v=0' } } });
   });
 });

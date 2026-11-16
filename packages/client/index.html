@@ -4,10 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <title>Tank You For Being A Friend</title>
-    <meta name="description" content="A real-time artillery brawl. Drop in by helicopter, aim, fire, and climb to level 50." />
+    <meta name="description" content="Hang out with friends: real-time tank battles and Hearts, with chat and voice." />
     <meta property="og:title" content="Tank You For Being A Friend" />
     <meta property="og:description" content="Drop in by helicopter and blow up your friends. Tap to join." />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#1b2a6b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -25,6 +29,7 @@
       <div class="landing-card">
         <h1 class="logo">Tank You<br /><span>For Being A Friend</span></h1>
         <p class="tagline">Drop in. Dial in. Blow up your friends.</p>
+        <p class="hint landing-hint">Play jumps into a public tank battle. A private room is for friends: voice chat, and Tanks or Hearts.</p>
 
         <label class="field">
           <span>Your name</span>
@@ -57,6 +62,7 @@
     <!-- Game -->
     <div id="game" class="game" hidden>
       <div id="arena" class="arena">
+        <div id="tank-view" class="view tank-view" hidden>
         <canvas id="canvas"></canvas>
 
         <div class="hud-top-left">
@@ -78,16 +84,7 @@
         <div id="banner" class="banner" hidden></div>
         <div id="status" class="status" hidden></div>
         <div id="feed" class="feed" aria-live="polite"></div>
-        <div id="toasts" class="toasts" aria-live="polite"></div>
 
-        <div class="toolbar">
-          <button id="btn-share" class="tool-btn" type="button" hidden title="Invite friends">Invite</button>
-          <button id="btn-scores" class="tool-btn" type="button" title="Scoreboard (Tab)" aria-label="Scoreboard">🏆</button>
-          <button id="btn-zoom" class="tool-btn" type="button" title="Zoom (Z)" aria-label="Toggle zoom">🔍</button>
-          <button id="btn-fullscreen" class="tool-btn" type="button" title="Fullscreen (F)" aria-label="Fullscreen">⛶</button>
-          <button id="btn-chat" class="tool-btn chat-toggle" type="button" title="Chat (Enter)" aria-label="Chat">💬<span id="chat-unread" class="badge" hidden></span></button>
-          <button id="btn-menu" class="tool-btn" type="button" title="Menu" aria-label="Menu">☰</button>
-        </div>
 
         <!-- Touch controls -->
         <div id="touch" class="touch" hidden>
@@ -109,9 +106,24 @@
             <button id="fire-btn" class="tbtn fire" data-act="fire">FIRE</button>
           </div>
         </div>
-        <button id="drop-btn" class="drop-btn" type="button" hidden>DROP</button>
-
         <div id="scores" class="scores" hidden></div>
+        <div id="rotate" class="overlay rotate"><div class="overlay-card">Turn your phone sideways to play</div></div>
+        </div>
+
+        <div id="lobby-view" class="view lobby-view" hidden></div>
+        <div id="hearts-view" class="view hearts-view" hidden></div>
+        <div id="toasts" class="toasts" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <button id="btn-share" class="tool-btn" type="button" hidden title="Invite friends">Invite</button>
+          <button id="btn-sound" class="tool-btn" type="button" title="Sound (M)" aria-label="Sound on">🔊</button>
+          <button id="btn-voice" class="tool-btn" type="button" hidden title="Voice chat" aria-label="Voice chat">🎙️</button>
+          <button id="btn-fullscreen" class="tool-btn" type="button" title="Fullscreen (F)" aria-label="Fullscreen">⛶</button>
+          <button id="btn-chat" class="tool-btn chat-toggle" type="button" title="Chat (Enter)" aria-label="Chat">💬<span id="chat-unread" class="badge" hidden></span></button>
+          <button id="btn-menu" class="tool-btn" type="button" title="Menu" aria-label="Menu">☰</button>
+        </div>
+
+        <div id="voice-panel" class="voice-panel" hidden></div>
         <div id="menu" class="menu" hidden>
           <div class="menu-card">
             <h2>Menu</h2>
@@ -122,19 +134,24 @@
                 <button id="menu-name-save" class="btn btn-secondary" type="button">Save</button>
               </div>
             </label>
+            <label class="field">
+              <span>Volume</span>
+              <input id="menu-volume" type="range" min="0" max="100" step="5" value="80" aria-label="Volume" />
+            </label>
+            <div id="menu-muted" class="menu-muted" hidden></div>
             <p id="menu-room" class="hint"></p>
             <div class="help">
-              <p><b>Desktop:</b> ←/→ aim, ↑/↓ power, Space fire, A/D move (level 10), Enter chat, Tab scores, Z zoom, F fullscreen.</p>
-              <p><b>Drop:</b> any game key or button releases you from the helicopter.</p>
+              <div id="menu-help"></div>
+              <p><b>Anywhere:</b> Enter chat, M mute sound, F fullscreen, Esc menu.</p>
             </div>
             <div class="actions">
-              <button id="menu-close" class="btn btn-primary" type="button">Back to game</button>
+              <button id="menu-close" class="btn btn-primary" type="button">Close</button>
+              <button id="menu-lobby" class="btn btn-secondary" type="button" hidden>Back to lobby</button>
               <button id="menu-leave" class="btn btn-secondary" type="button">Leave room</button>
             </div>
           </div>
         </div>
         <div id="reconnect" class="overlay" hidden><div class="overlay-card">Reconnecting…</div></div>
-        <div id="rotate" class="overlay rotate"><div class="overlay-card">Turn your phone sideways to play</div></div>
       </div>
 
       <aside id="chat" class="chat">

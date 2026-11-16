@@ -76,6 +76,26 @@ describe('carving and collapse', () => {
     expect(t.cols[450]).toEqual([860, cfg.worldHeight]);
   });
 
+  it('optionally trims ledges that stick out too far for their thickness', () => {
+    const make = () => {
+      const t = terrainFrom((x) => (x < 400 ? 500 : 900));
+      // A 20-thick ledge sticking out 150 columns from the cliff at x=400.
+      for (let x = 400; x < 550; x++) t.cols[x] = [500, 520, 900, cfg.worldHeight];
+      return t;
+    };
+    const unlimited = make();
+    unlimited.collapse({ ...opts, maxOverhangRatio: 0 });
+    expect(unlimited.cols[540]).toEqual([500, 520, 900, cfg.worldHeight]);
+
+    const limited = make();
+    limited.collapse({ ...opts, maxOverhangRatio: 3 });
+    // Up to 3 x 20 = 60 columns of ledge survive; the rest crumbles.
+    expect(limited.cols[430]).toEqual([500, 520, 900, cfg.worldHeight]);
+    expect(limited.cols[459]).toEqual([500, 520, 900, cfg.worldHeight]);
+    expect(limited.cols[470]).toEqual([900, cfg.worldHeight]);
+    expect(limited.cols[540]).toEqual([900, cfg.worldHeight]);
+  });
+
   it('replays identically from the same crater list', () => {
     const a = generateTerrain(cfg, 31337);
     const b = Terrain.fromData(a.toData(), cfg.bedrock);

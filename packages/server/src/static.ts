@@ -12,6 +12,8 @@ const TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
   '.woff2': 'font/woff2',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
 };
 
 /** Headers sent with every page and asset. */
@@ -71,9 +73,23 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
   }
   const ext = path.extname(file);
   const immutable = file.includes(`${path.sep}assets${path.sep}`);
+  // Sounds and sprites keep their names between builds; a day of caching saves re-downloading ~1 MB.
+  const daily = file.includes(`${path.sep}sfx${path.sep}`) || file.includes(`${path.sep}sprites${path.sep}`);
+  if (path.basename(file) === 'index.html') {
+    // Link previews (iMessage and friends) need an absolute image URL; fill in our address.
+    const host = req.headers.host && /^[A-Za-z0-9.:[\]-]{1,255}$/.test(req.headers.host) ? req.headers.host : null;
+    let html = fs.readFileSync(file, 'utf8');
+    if (host) {
+      const local = /^(localhost|127\.|\[::1\])/.test(host);
+      html = html.replace('content="/og.png"', `content="${local ? 'http' : 'https'}://${host}/og.png"`);
+    }
+    res.writeHead(200, { 'content-type': TYPES['.html'], 'cache-control': 'no-cache', ...securityHeaders(req.headers.host) });
+    res.end(req.method === 'HEAD' ? undefined : html);
+    return;
+  }
   res.writeHead(200, {
     'content-type': TYPES[ext] ?? 'application/octet-stream',
-    'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'cache-control': immutable ? 'public, max-age=31536000, immutable' : daily ? 'public, max-age=86400' : 'no-cache',
     ...securityHeaders(req.headers.host),
   });
   if (req.method === 'HEAD') {

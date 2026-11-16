@@ -12,6 +12,18 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["cross-env", "NODE_ENV=production", "GAME_PORT=8788", "tsx", "packages/server/src/main.ts"],
       "port": 8788
+    },
+    {
+      "name": "nuke-test",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["cross-env", "NODE_ENV=production", "GAME_PORT=8789", "GAME_CONFIG={\"winLevel\":1,\"winCelebrationTicks\":240}", "tsx", "packages/server/src/main.ts"],
+      "port": 8789
+    },
+    {
+      "name": "sound-lab",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--config", "packages/client/vite.config.ts", "--port", "5175", "--strictPort"],
+      "port": 5175
     }
   ]
 }

@@ -9,3 +9,4 @@ export * from './bot';
 export * from './protocol';
 export * from './palette';
 export * from './names';
+export * from './hearts';

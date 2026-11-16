@@ -1,7 +1,7 @@
-import { barrelTip, hasMarker, spreadReady, TANK_COLORS, type GameConfig } from '@tank/shared';
+import { barrelTip, HELI_TANK_OFFSET, levelsForKill, spreadReady, spreadSize, TANK_COLORS, type GameConfig } from '@tank/shared';
 import type { Camera } from './camera';
 import type { Sprites } from './sprites';
-import { colorCss, type ClientTank, type GameState } from './state';
+import { colorCss, type ClientTank, type Effect, type GameState } from './state';
 
 const DEG = Math.PI / 180;
 
@@ -67,7 +67,18 @@ export class Renderer {
     ctx.fillRect(0, 0, vw, vh);
 
     // World transform
-    const world = () => ctx.setTransform(this.dpr * S, 0, 0, this.dpr * S, -cam.x * S * this.dpr, -cam.y * S * this.dpr);
+    // Screen shake while a nuke goes off.
+    const nuke = g.effects.find((e) => e.kind === 'nuke');
+    let shakeX = 0;
+    let shakeY = 0;
+    if (nuke) {
+      const t = (now - nuke.t0) / nuke.dur;
+      const amp = 14 * Math.max(0, 1 - t) * Math.min(1, t * 6);
+      shakeX = (Math.random() * 2 - 1) * amp;
+      shakeY = (Math.random() * 2 - 1) * amp;
+    }
+    const world = () =>
+      ctx.setTransform(this.dpr * S, 0, 0, this.dpr * S, (-cam.x * S + shakeX) * this.dpr, (-cam.y * S + shakeY) * this.dpr);
     world();
 
     // Clouds drift with the wind.
@@ -90,22 +101,24 @@ export class Renderer {
     // Terrain
     ctx.imageSmoothingEnabled = S < 1;
     ctx.drawImage(g.terrainView.canvas, 0, 0);
+    // Past the map edges (only seen when zoomed in near an edge) the ground simply carries on:
+    // the edge column of terrain stretched outward, dimmed so it reads as out of bounds.
+    if (cam.x < 0 || cam.x + this.viewW / S > cfg.worldWidth || cam.y + this.viewH / S > cfg.worldHeight) {
+      const W2 = cfg.worldWidth;
+      const H2 = cfg.worldHeight;
+      const tv = g.terrainView.canvas;
+      const lt = g.terrain.topAt(0);
+      const rt = g.terrain.topAt(W2 - 1);
+      ctx.drawImage(tv, 0, 0, 1, H2, -3000, 0, 3000, H2);
+      ctx.drawImage(tv, W2 - 1, 0, 1, H2, W2, 0, 3000, H2);
+      ctx.drawImage(tv, 0, H2 - 2, W2, 1, -3000, H2, W2 + 6000, 3000);
+      ctx.fillStyle = 'rgba(10, 6, 30, 0.35)';
+      ctx.fillRect(-3000, lt, 3000, H2 - lt + 3000);
+      ctx.fillRect(W2, rt, 3000, H2 - rt + 3000);
+      ctx.fillRect(0, H2, W2, 3000);
+    }
     ctx.imageSmoothingEnabled = true;
 
-    const me = g.me;
-    // Last shot marker (level 20 perk)
-    if (me && hasMarker(me.info.level) && me.info.lastImpact) {
-      const p = me.info.lastImpact;
-      ctx.strokeStyle = colorCss(me.info.color);
-      ctx.lineWidth = 2.5 / S;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-      ctx.moveTo(p.x - 11, p.y);
-      ctx.lineTo(p.x + 11, p.y);
-      ctx.moveTo(p.x, p.y - 11);
-      ctx.lineTo(p.x, p.y + 11);
-      ctx.stroke();
-    }
 
     // Helicopters
     for (const h of g.helis.values()) {
@@ -247,20 +260,51 @@ export class Renderer {
     ctx.font = `${labelSize}px 'Lilita One', system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
+    // Work out every label first, then nudge overlapping ones upward so tanks parked close
+    // together don't print their numbers on top of each other.
+    type Label = { t: ClientTank; x: number; y: number; label: string; tag: string; lw: number; tw: number };
+    const labels: Label[] = [];
     for (const t of g.tanks.values()) {
       if (t.phase === 'dead') continue;
-      const p = cam.toScreen({ x: t.x, y: t.y - (t.phase === 'chute' ? 78 : 34) });
+      // Carried tanks hang under the helicopter, so their label goes above it.
+      const labelOffset = t.phase === 'chute' ? 78 : t.phase === 'carried' ? HELI_TANK_OFFSET + 26 : 34;
+      const p = cam.toScreen({ x: t.x, y: t.y - labelOffset });
       const onScreen = p.x > -20 && p.x < vw + 20 && p.y > -20 && p.y < vh + 20;
       if (!onScreen) {
         this.drawOffscreen(t, p, vw, vh);
         continue;
       }
-      const label = `${t.info.level}${t.info.away ? ' 💤' : ''}`;
+      const label = `${g.speaking.has(t.info.id) ? '🔊 ' : ''}${t.info.level}${t.info.away ? ' 💤' : ''}`;
+      // Bounty: a gold "+N" when killing this tank is worth more than one level.
+      const bounty = levelsForKill(cfg, t.info.kills);
+      const tag = bounty > 1 ? ` +${bounty}` : '';
+      labels.push({ t, x: p.x, y: p.y, label, tag, lw: ctx.measureText(label).width, tw: tag ? ctx.measureText(tag).width : 0 });
+    }
+    labels.sort((a, b) => b.y - a.y || a.x - b.x);
+    const placed: Label[] = [];
+    for (const l of labels) {
+      for (let guard = 0; guard < 8; guard++) {
+        const hit = placed.find((o) => Math.abs(o.x - l.x) < (o.lw + o.tw + l.lw + l.tw) / 2 + 4 && Math.abs(o.y - l.y) < labelSize + 2);
+        if (!hit) break;
+        l.y = hit.y - labelSize - 3;
+      }
+      placed.push(l);
+    }
+    for (const { t, x, y, label, tag, lw, tw } of placed) {
+      const p = { x, y };
+      const lx = p.x - tw / 2;
       ctx.lineWidth = 3.5;
       ctx.strokeStyle = 'rgba(20, 16, 50, 0.85)';
-      ctx.strokeText(label, p.x, p.y);
+      ctx.strokeText(label, lx, p.y);
       ctx.fillStyle = '#fff';
-      ctx.fillText(label, p.x, p.y);
+      ctx.fillText(label, lx, p.y);
+      if (tag) {
+        ctx.textAlign = 'left';
+        ctx.strokeText(tag, lx + lw / 2, p.y);
+        ctx.fillStyle = '#ffd23a';
+        ctx.fillText(tag, lx + lw / 2, p.y);
+        ctx.textAlign = 'center';
+      }
       if (t.info.id === g.myTankId) {
         // Local tank marker: a chevron that does not rely on colour.
         const cy = p.y - labelSize - 4 + Math.sin(now / 220) * 2;
@@ -278,6 +322,24 @@ export class Renderer {
         ctx.stroke();
       }
     }
+
+    // Shells lobbed above the top of the screen: a small marker at the top edge where they are.
+    for (const sh of g.shells.values()) {
+      const p = cam.toScreen(g.shellRenderPos(sh));
+      if (p.y >= -4 || p.x < 0 || p.x > vw) continue;
+      const owner = g.tanks.get(sh.owner);
+      ctx.fillStyle = owner ? colorCss(owner.info.color) : '#ffb347';
+      ctx.strokeStyle = 'rgba(20, 16, 50, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, 16);
+      ctx.lineTo(p.x - 6, 5);
+      ctx.lineTo(p.x + 6, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
     for (const e of g.effects) {
       if (e.kind !== 'float') continue;
       const t = (now - e.t0) / e.dur;
@@ -295,6 +357,36 @@ export class Renderer {
       if (e.kind !== 'flash') continue;
       const t = (now - e.t0) / e.dur;
       ctx.fillStyle = `rgba(255, 250, 230, ${1 - t})`;
+      ctx.fillRect(0, 0, vw, vh);
+    }
+    if (nuke) this.drawNuke(nuke, now, vw, vh);
+  }
+
+  /** The whole screen explodes, then whites out while the new battlefield swaps in. */
+  private drawNuke(e: Extract<Effect, { kind: 'nuke' }>, now: number, vw: number, vh: number) {
+    const ctx = this.ctx;
+    const t = (now - e.t0) / e.dur;
+    const img = this.sprites.img.explosion;
+    const span = Math.max(vw, vh);
+    // Orange glow building up behind the blasts.
+    ctx.fillStyle = `rgba(255, 120, 30, ${0.35 * Math.min(1, t / 0.3) * Math.max(0, 1 - t)})`;
+    ctx.fillRect(0, 0, vw, vh);
+    for (const b of e.blasts) {
+      const bt = (t - b.delay) / 0.2;
+      if (bt < 0 || bt > 1) continue;
+      const size = span * b.size * (0.4 + bt * 0.9);
+      ctx.globalAlpha = Math.min(1, (1 - bt) * 1.6);
+      ctx.save();
+      ctx.translate(b.x * vw, b.y * vh);
+      ctx.rotate(b.delay * 20 + bt);
+      ctx.drawImage(img, -size / 2, -size / 2, size, size);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    // White-out peaks as the server swaps in the new terrain (about 45% through), then fades.
+    const white = t < 0.3 ? 0 : t < 0.45 ? (t - 0.3) / 0.15 : Math.max(0, 1 - (t - 0.45) / 0.55);
+    if (white > 0) {
+      ctx.fillStyle = `rgba(255, 250, 235, ${white})`;
       ctx.fillRect(0, 0, vw, vh);
     }
   }
@@ -341,9 +433,9 @@ export class Renderer {
         ctx.strokeStyle = 'rgba(30, 30, 50, 0.8)';
         ctx.lineWidth = 1.5 / S;
         ctx.beginPath();
-        ctx.moveTo(h.x - 6, h.y + 10);
+        ctx.moveTo(h.x - 6, h.y + 14);
         ctx.lineTo(t.x - 10, t.y - bodyH);
-        ctx.moveTo(h.x + 6, h.y + 10);
+        ctx.moveTo(h.x + 6, h.y + 14);
         ctx.lineTo(t.x + 10, t.y - bodyH);
         ctx.stroke();
       }
@@ -402,10 +494,12 @@ export class Renderer {
       ctx.stroke();
     }
 
-    // Spread ready: three glowing pips at the barrel tip.
+    // Spread ready: a glowing pip per shell (3 or 5) fanned at the barrel tip.
     if (spreadReady(t.info) && (t.phase === 'ground' || t.phase === 'slide')) {
       const tip = barrelTip(cfg, t.x, t.y, angle);
-      for (let i = -1; i <= 1; i++) {
+      const n = spreadSize(t.info.level);
+      for (let k = 0; k < n; k++) {
+        const i = k - (n - 1) / 2;
         const a = (angle + i * 14) * DEG;
         ctx.fillStyle = `rgba(255, 200, 40, ${0.7 + 0.3 * Math.sin(now / 120 + i)})`;
         ctx.beginPath();
@@ -417,7 +511,8 @@ export class Renderer {
     // Aim guide for your own tank.
     if (aim && (t.phase === 'ground' || t.phase === 'slide') && t.info.shellsInFlight === 0) {
       const tip = barrelTip(cfg, t.x, t.y, angle);
-      const len = 14 + aim.power * 0.9;
+      // Sized in screen pixels (about 40-110 px) so it stays readable when zoomed out.
+      const len = (40 + aim.power * 0.7) / S;
       const dx = Math.cos(angle * DEG);
       const dy = -Math.sin(angle * DEG);
       ctx.setLineDash([4 / S, 5 / S]);

@@ -24,6 +24,7 @@
 
 html,
 body {
+  -webkit-text-size-adjust: 100%;
   margin: 0;
   height: 100%;
   background: var(--navy);
@@ -237,6 +238,8 @@ input:focus {
 }
 
 .arena {
+  /* No iOS long-press menus, text selection or double-tap zoom on the battlefield. */
+  -webkit-touch-callout: none;
   position: relative;
   flex: 1;
   min-width: 0;
@@ -575,7 +578,7 @@ input:focus {
   height: 52px;
   border-radius: 16px;
   border: 2px solid rgba(255, 255, 255, 0.2);
-  background: rgba(20, 26, 74, 0.6);
+  background: rgba(20, 26, 74, 0.45);
   font-size: 26px;
   font-weight: 800;
   touch-action: none;
@@ -604,19 +607,11 @@ input:focus {
   opacity: 0.45;
 }
 
-.drop-btn {
-  position: absolute;
-  left: 50%;
-  bottom: calc(70px + var(--safe-b));
-  transform: translateX(-50%);
-  font-family: var(--display);
-  font-size: 36px;
-  padding: 14px 48px;
-  border-radius: 20px;
-  border: 3px solid rgba(255, 255, 255, 0.7);
+.tbtn.fire.drop {
   background: var(--accent);
   color: #3a1d00;
-  box-shadow: 0 6px 0 #c4851a;
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 5px 0 #c4851a;
   animation: pulse 0.7s ease-in-out infinite alternate;
 }
 
@@ -793,8 +788,11 @@ input:focus {
   bottom: calc(100px + var(--safe-b));
 }
 
+/* Phones: the wind sits under the hearts, clear of the toolbar (which grows an Invite button). */
 .game.phone .wind {
-  left: 40%;
+  left: calc(12px + var(--safe-l));
+  top: calc(58px + var(--safe-t));
+  transform: none;
 }
 
 @media (max-height: 420px) {
@@ -807,4 +805,179 @@ input:focus {
     width: 100px;
     height: 72px;
   }
+}
+
+/* Landscape phones: fit the landing card without scrolling. */
+@media (max-height: 500px) {
+  .landing {
+    padding: 8px;
+  }
+  .landing-card {
+    padding: 12px 16px 10px;
+    width: min(460px, 100%);
+  }
+  .logo {
+    font-size: 28px;
+    margin-bottom: 2px;
+  }
+  .logo span {
+    font-size: 17px;
+  }
+  .tagline {
+    display: none;
+  }
+  .field {
+    margin-bottom: 8px;
+  }
+  .field > span {
+    margin-bottom: 3px;
+  }
+  input {
+    padding: 7px 10px;
+    font-size: 16px;
+  }
+  .actions {
+    gap: 6px;
+    margin: 4px 0 8px;
+  }
+  .btn {
+    padding: 8px 14px;
+  }
+  .btn-big {
+    font-size: 20px;
+    padding: 7px;
+  }
+  .fineprint {
+    margin-top: 6px;
+  }
+}
+
+/* ------------------------------------------------------------------ chat actions */
+
+.chat-log li.reportable {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 2px 4px;
+  margin-left: -4px;
+}
+
+.chat-log li.reportable:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chat-actions button {
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--navy-3);
+}
+
+.chat-actions button:disabled {
+  opacity: 0.6;
+}
+
+.menu-muted {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0 10px;
+}
+
+.menu-muted > span {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.menu-muted .btn {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+/* ------------------------------------------------------------------ voice */
+
+.tool-btn.active {
+  background: rgba(123, 224, 90, 0.35);
+}
+
+.voice-panel {
+  position: absolute;
+  top: calc(60px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(340px, 92%);
+  background: var(--navy);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 12px 14px;
+  z-index: 15;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.voice-panel h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  margin: 0 0 6px;
+}
+
+.voice-panel p {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 6px 0;
+}
+
+.voice-actions {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.voice-actions .btn {
+  flex: 1;
+  padding: 8px 10px;
+}
+
+.voice-peers {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.voice-peers li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-weight: 800;
+}
+
+.voice-peers li .btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.speak-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  flex: none;
+}
+
+.speak-dot.on {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
 }

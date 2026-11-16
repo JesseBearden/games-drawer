@@ -3,6 +3,7 @@
  * and HTTP requests.
  */
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -78,7 +79,20 @@ async function joined(port: number, room: RoomRequest = { kind: 'public' }, sess
   await c.opened;
   hello(c, room, session);
   const w = (await c.waitFor('welcome')) as Welcome;
-  return { c, w };
+  // Public rooms play tanks straight away; the tank game's start-up message follows the welcome.
+  let tankId = -1;
+  if (w.game === 'tanks') {
+    const start = Date.now();
+    while (Date.now() - start < 3000) {
+      const init = c.messages.find((m) => m.t === 'g' && m.m.t === 'init');
+      if (init && init.t === 'g' && init.m.t === 'init') {
+        tankId = init.m.tankId;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
+  return { c, w, tankId };
 }
 
 async function startWith(limits: Partial<Limits> = {}, over: Partial<ServerOptions> = {}) {
@@ -105,7 +119,8 @@ describe('live server: sessions and joining', () => {
     await first.c.closed;
     await new Promise((r) => setTimeout(r, 50));
     const again = await joined(s.port, { kind: 'public' }, first.w.session);
-    expect(again.w.tankId).toBe(first.w.tankId);
+    expect(again.tankId).toBeGreaterThanOrEqual(0);
+    expect(again.tankId).toBe(first.tankId);
     expect(again.w.reclaimed).toBe(true);
     again.c.ws.close();
   });
@@ -122,27 +137,28 @@ describe('live server: sessions and joining', () => {
   it('ignores game messages sent before hello', async () => {
     const c = connect(s.port);
     await c.opened;
-    c.send({ t: 'fire', angle: 45, power: 50 });
+    c.send({ t: 'g', m: { t: 'fire', angle: 45, power: 50 } });
     c.send({ t: 'chat', text: 'hi' });
     hello(c);
     const w = await c.waitFor('welcome');
-    expect(w.tankId).toBeGreaterThanOrEqual(0);
+    expect(w.game).toBe('tanks');
+    expect(w.chat.some((m) => m.text === 'hi')).toBe(false);
     c.ws.close();
   });
 
   it('one shot at a time, even when fire is spammed over the wire', async () => {
-    const { c, w } = await joined(s.port);
-    const room = [...s.manager.rooms.values()].find((r) => r.world.tanks.has(w.tankId) && r.code === w.room.code)!;
-    const tank = room.world.tanks.get(w.tankId)!;
+    const { c, w, tankId } = await joined(s.port);
+    const world = s.manager.rooms.get(w.room.code)!.tanks!.world;
+    const tank = world.tanks.get(tankId)!;
     // Put the tank on the ground so it is allowed to fire.
-    room.world.helis = room.world.helis.filter((h) => h.tankId !== tank.id);
+    world.helis = world.helis.filter((h) => h.tankId !== tank.id);
     tank.phase = 'ground';
     tank.x = 300;
-    tank.y = room.world.terrain.groundBelow(300, 0);
+    tank.y = world.terrain.groundBelow(300, 0);
     tank.awaitingProtection = false;
-    for (let i = 0; i < 50; i++) c.send({ t: 'fire', angle: 80, power: 100 });
+    for (let i = 0; i < 50; i++) c.send({ t: 'g', m: { t: 'fire', angle: 80, power: 100 } });
     await new Promise((r) => setTimeout(r, 150));
-    expect(room.world.shells.filter((sh) => sh.owner === tank.id).length).toBeLessThanOrEqual(1);
+    expect(world.shells.filter((sh) => sh.owner === tank.id).length).toBeLessThanOrEqual(1);
     expect(tank.shotsFired).toBe(1);
     c.ws.close();
   });
@@ -294,8 +310,10 @@ describe('live server: HTTP in production mode', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tank-http-'));
     dist = path.join(tmp, 'dist');
     fs.mkdirSync(path.join(dist, 'assets'), { recursive: true });
-    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><title>game</title>');
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><title>game</title><meta property="og:image" content="/og.png" />');
     fs.writeFileSync(path.join(dist, 'assets', 'app.js'), 'console.log(1)');
+    fs.mkdirSync(path.join(dist, 'sfx'), { recursive: true });
+    fs.writeFileSync(path.join(dist, 'sfx', 'boom.wav'), 'RIFF');
     fs.writeFileSync(path.join(tmp, 'secret.txt'), 'TOP SECRET');
     s = await startGameServer(baseOptions({ production: true, clientDist: dist, statsToken: 'stats-token' }));
     base = `http://127.0.0.1:${s.port}`;
@@ -311,9 +329,34 @@ describe('live server: HTTP in production mode', () => {
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
+  it('serves sounds as audio, cached for a day', async () => {
+    const res = await fetch(`${base}/sfx/boom.wav`);
+    expect(res.headers.get('content-type')).toBe('audio/wav');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=86400');
+  });
+
   it('invite links fall back to the game page', async () => {
     const res = await fetch(`${base}/r/BCDFG`);
     expect(await res.text()).toContain('<title>game</title>');
+  });
+
+  it('fills in an absolute link-preview image address', async () => {
+    const html = await (await fetch(`${base}/r/BCDFG`)).text();
+    expect(html).toContain(`content="http://127.0.0.1:${s.port}/og.png"`);
+  });
+
+  it('never echoes a hostile Host header into the page', async () => {
+    const html = await new Promise<string>((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port: s.port, path: '/', headers: { host: 'evil.example"><script>alert(1)</script>' } }, (res) => {
+        let body = '';
+        res.on('data', (d) => (body += d));
+        res.on('end', () => resolve(body));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('content="/og.png"');
   });
 
   it('never serves files outside the client folder', async () => {

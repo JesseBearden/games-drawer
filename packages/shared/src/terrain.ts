@@ -23,6 +23,13 @@ export interface TerrainData {
 export interface CollapseOptions {
   minSliverThickness: number;
   detachedDirtFalls: boolean;
+  /** A ledge may reach at most this many times its thickness past its support; 0 = no limit. */
+  maxOverhangRatio?: number;
+}
+
+/** The collapse rules for a config. Server, client and terrain generation must all use this. */
+export function collapseOptionsFor(cfg: Pick<GameConfig, 'minSliverThickness' | 'detachedDirtFalls' | 'maxOverhangRatio'>): CollapseOptions {
+  return { minSliverThickness: cfg.minSliverThickness, detachedDirtFalls: cfg.detachedDirtFalls, maxOverhangRatio: cfg.maxOverhangRatio };
 }
 
 export interface DirtyRange {
@@ -169,6 +176,14 @@ export class Terrain {
           }
         }
       }
+      if (opts.maxOverhangRatio && opts.maxOverhangRatio > 0) {
+        const trimmed = this.trimOverhangs(opts.maxOverhangRatio);
+        if (trimmed) {
+          changedThisPass = true;
+          if (trimmed.x0 < dx0) dx0 = trimmed.x0;
+          if (trimmed.x1 > dx1) dx1 = trimmed.x1;
+        }
+      }
       if (opts.detachedDirtFalls) {
         const floating = this.findFloating();
         if (floating) {
@@ -186,6 +201,54 @@ export class Terrain {
       if (!changedThisPass) break;
     }
     return dx0 <= dx1 ? { x0: dx0, x1: dx1 } : null;
+  }
+
+  /**
+   * Crumble ledge cells that stick out too far. A non-bottom span (air below it) is part of a
+   * ledge; walk sideways through overlapping spans to the nearest column where that dirt is
+   * solid down to bedrock. If that support is more than `ratio` x the ledge's thickness away,
+   * the span crumbles. Long thin ledges get trimmed back; thick ones can reach further.
+   */
+  private trimOverhangs(ratio: number): DirtyRange | null {
+    const W = this.width;
+    const doomed: [number, number][] = [];
+    for (let x = 0; x < W; x++) {
+      const c = this.cols[x];
+      for (let i = 0; i + 2 < c.length; i += 2) {
+        const thickness = c[i + 1] - c[i];
+        const limit = Math.ceil(ratio * thickness);
+        const reach = Math.min(this.supportDistance(x, c[i], c[i + 1], -1, limit), this.supportDistance(x, c[i], c[i + 1], 1, limit));
+        if (reach > limit) doomed.push([x, i]);
+      }
+    }
+    if (!doomed.length) return null;
+    // Remove from the end of each column first so indices stay valid.
+    doomed.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+    for (const [x, i] of doomed) this.cols[x].splice(i, 2);
+    return { x0: doomed[0][0], x1: doomed[doomed.length - 1][0] };
+  }
+
+  /** Columns from x to where [top, bottom) continues as dirt solid to bedrock (Infinity if none within limit). */
+  private supportDistance(x: number, top: number, bottom: number, dir: -1 | 1, limit: number): number {
+    let t = top;
+    let b = bottom;
+    for (let step = 1; step <= limit + 1; step++) {
+      const nx = x + dir * step;
+      if (nx < 0 || nx >= this.width) return Infinity;
+      const c = this.cols[nx];
+      let found = -1;
+      for (let j = 0; j < c.length; j += 2) {
+        if (c[j] < b && c[j + 1] > t) {
+          found = j;
+          break;
+        }
+      }
+      if (found < 0) return Infinity; // the ledge ends this way
+      if (found === c.length - 2) return step; // this column is solid to bedrock
+      t = c[found];
+      b = c[found + 1];
+    }
+    return Infinity;
   }
 
   /** Marks spans not connected to bedrock. Returns null when nothing floats. */
@@ -359,7 +422,7 @@ export function generateTerrain(cfg: GameConfig, seed: number): Terrain {
   const terrain = new Terrain(W, H, cfg.bedrock, cols, surface);
 
   // Notch a few overhangs into steep risers so ledges exist from the start.
-  const opts: CollapseOptions = { minSliverThickness: cfg.minSliverThickness, detachedDirtFalls: cfg.detachedDirtFalls };
+  const opts = collapseOptionsFor(cfg);
   let notches = 0;
   for (let x = 40; x < W - 40 && notches < 3; x += 7) {
     const drop = surface[x + 6] - surface[x - 6];

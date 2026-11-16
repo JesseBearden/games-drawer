@@ -1,11 +1,17 @@
 import { defineConfig } from 'vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+// HTTPS=1 (npm run dev:https) serves over https with a self-signed certificate, because
+// phones only allow microphone access (voice chat) on secure pages.
+const https = process.env.HTTPS === '1';
+
 export default defineConfig({
   root: here,
+  plugins: https ? [basicSsl({ name: 'tank-you-dev' })] : [],
   server: {
     // Listen on the LAN so a phone on the same Wi-Fi can join.
     host: true,

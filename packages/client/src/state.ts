@@ -1,24 +1,30 @@
 import {
   advanceShell,
+  collapseOptionsFor,
   generateTerrain,
+  perks,
   PHASES,
   TANK_COLORS,
   Terrain,
-  type ChatMessage,
   type GameConfig,
   type GameEvent,
   type MovingPoint,
   type Point,
-  type ServerMessage,
+  type TankServerMessage,
   type TankInfo,
   type TankPhase,
 } from '@tank/shared';
+import type { PlayOptions, SoundName } from './audio';
 import { TerrainRenderer } from './terrainRenderer';
 
-type Welcome = Extract<ServerMessage, { t: 'welcome' }>;
+/** The tank game's start-up message: config plus a full snapshot. */
+export type TankInit = Extract<TankServerMessage, { t: 'init' }>;
 
 /** Render this many ticks behind the newest server state, to interpolate smoothly. */
 const INTERP_DELAY = 7;
+/** The nuke effect starts this long before the new terrain arrives, and lasts this long. */
+const NUKE_LEAD_TICKS = 75;
+export const NUKE_DURATION_MS = 2800;
 
 interface Sample {
   tick: number;
@@ -67,21 +73,23 @@ export type Effect =
   | { kind: 'float'; x: number; y: number; text: string; color: string; t0: number; dur: number }
   | { kind: 'heliWreck'; x: number; y: number; vx: number; vy: number; dir: number; t0: number; dur: number }
   | { kind: 'flash'; t0: number; dur: number }
+  /** Full-screen nuke: blasts across the screen (positions as 0..1 of the view), shake, white-out. */
+  | { kind: 'nuke'; t0: number; dur: number; blasts: { x: number; y: number; delay: number; size: number }[] }
   | { kind: 'muzzle'; x: number; y: number; angle: number; t0: number; dur: number };
 
 export interface UiHooks {
   feed(html: string): void;
   toast(text: string): void;
   banner(html: string | null): void;
-  chat(msg: ChatMessage): void;
   resync(reason: string): void;
   infoChanged(): void;
+  /** Play a sound, positioned at a world point (for stereo and distance) or centred. */
+  sound(name: SoundName, at?: Point, opts?: PlayOptions): void;
 }
 
 export class GameState {
   cfg: GameConfig;
   myTankId: number;
-  room: Welcome['room'];
   terrain: Terrain;
   terrainRev: number;
   terrainView: TerrainRenderer;
@@ -91,7 +99,7 @@ export class GameState {
   shells = new Map<number, ClientShell>();
   effects: Effect[] = [];
   blastWarnings: { tank: number; x: number; y: number; at: number; from: number }[] = [];
-  match: Welcome['snapshot']['match'];
+  match: TankInit['snapshot']['match'];
   /** Latest server tick seen. */
   serverTick: number;
   renderTick: number;
@@ -100,11 +108,15 @@ export class GameState {
   private queue: GameEvent[] = [];
   private snapshotTick: number;
   latencyMs = 0;
+  private nukeStarted = false;
+  /** Tanks whose players are talking in voice chat right now (set by the voice module). */
+  speaking = new Set<number>();
+  /** Touch-screen player (set by the app); changes control hints. */
+  touch = false;
 
-  constructor(w: Welcome, private ui: UiHooks) {
+  constructor(w: TankInit, private ui: UiHooks) {
     this.cfg = w.config;
     this.myTankId = w.tankId;
-    this.room = w.room;
     this.tickMs = 1000 / this.cfg.tickRate;
     const snap = w.snapshot;
     this.snapshotTick = snap.tick;
@@ -122,7 +134,6 @@ export class GameState {
     for (const s of snap.shells) {
       this.shells.set(s.id, { id: s.id, owner: s.owner, s: { x: s.x, y: s.y, vx: s.vx, vy: s.vy }, prev: { x: s.x, y: s.y }, simTick: snap.tick, trail: [] });
     }
-    for (const m of snap.chat) ui.chat(m);
   }
 
   get me(): ClientTank | undefined {
@@ -131,7 +142,11 @@ export class GameState {
 
   // ------------------------------------------------------------------ messages
 
-  onMessage(msg: ServerMessage) {
+  onPong(at: number) {
+    this.latencyMs = performance.now() - at;
+  }
+
+  onMessage(msg: TankServerMessage) {
     switch (msg.t) {
       case 'state':
         this.observeTick(msg.tick);
@@ -153,12 +168,6 @@ export class GameState {
         for (const id of msg.tanks) this.tanks.delete(id);
         this.ui.infoChanged();
         return;
-      case 'chat':
-        this.ui.chat(msg.msg);
-        return;
-      case 'pong':
-        this.latencyMs = performance.now() - msg.at;
-        return;
       default:
         return;
     }
@@ -173,7 +182,7 @@ export class GameState {
     else this.offset += diff * 0.02;
   }
 
-  private applyDyn(tick: number, dyn: Welcome['snapshot']['dyn']) {
+  private applyDyn(tick: number, dyn: TankInit['snapshot']['dyn']) {
     for (const [id, x, y, angle, phase, tilt] of dyn) {
       const t = this.tanks.get(id);
       if (!t) continue;
@@ -182,7 +191,7 @@ export class GameState {
     }
   }
 
-  private applyHelis(tick: number, helis: Welcome['snapshot']['helis']) {
+  private applyHelis(tick: number, helis: TankInit['snapshot']['helis']) {
     for (const [id, tankId, x, y, dir, carrying] of helis) {
       let h = this.helis.get(id);
       if (!h) {
@@ -217,7 +226,7 @@ export class GameState {
         advanceShell(this.cfg, sh.s, this.wind);
         sh.simTick++;
         sh.trail.push({ x: sh.s.x, y: sh.s.y });
-        if (sh.trail.length > 14) sh.trail.shift();
+        if (sh.trail.length > 24) sh.trail.shift();
         // Safety: the explode event normally removes the shell first.
         if (sh.simTick - rt > 600 || sh.s.y > this.cfg.worldHeight + 200) this.shells.delete(sh.id);
       }
@@ -228,6 +237,9 @@ export class GameState {
       interpolateHeli(h, rt);
       if (rt > h.lastSeen + 2) this.helis.delete(h.id);
     }
+
+    // The screen starts exploding a moment before the server swaps in the new battlefield.
+    if (this.match.state === 'won' && !this.nukeStarted && rt >= this.match.nukeAt - NUKE_LEAD_TICKS) this.startNuke(now);
 
     this.effects = this.effects.filter((e) => now - e.t0 < e.dur);
     this.blastWarnings = this.blastWarnings.filter((b) => b.at > rt);
@@ -260,10 +272,7 @@ export class GameState {
       this.ui.resync(`terrain rev ${this.terrainRev} -> ${rev}`);
       return;
     }
-    const dirty = this.terrain.carve(x, y, r, {
-      minSliverThickness: this.cfg.minSliverThickness,
-      detachedDirtFalls: this.cfg.detachedDirtFalls,
-    });
+    const dirty = this.terrain.carve(x, y, r, collapseOptionsFor(this.cfg));
     this.terrainRev = rev;
     if (dirty) this.terrainView.redraw(dirty.x0, dirty.x1);
   }
@@ -277,6 +286,7 @@ export class GameState {
         }
         const l = e.shells[Math.floor(e.shells.length / 2)];
         this.effects.push({ kind: 'muzzle', x: l.x, y: l.y, angle: Math.atan2(l.vy, l.vx), t0: now, dur: 160 });
+        this.ui.sound('fire', l);
         return;
       }
       case 'explode': {
@@ -285,7 +295,12 @@ export class GameState {
         this.effects.push({ kind: 'explosion', x: e.x, y: e.y, r: e.r, t0: now, dur: 420 });
         this.effects.push({ kind: 'smoke', x: e.x, y: e.y - 6, t0: now, dur: 1400, drift: this.wind * 0.6 });
         this.spawnDebris(e.x, e.y, 10, now);
-        if (e.shielded && e.hitTank !== null) this.effects.push({ kind: 'shield', tank: e.hitTank, t0: now, dur: 600 });
+        if (e.shielded && e.hitTank !== null) {
+          this.effects.push({ kind: 'shield', tank: e.hitTank, t0: now, dur: 600 });
+          this.ui.sound('shield', e);
+        }
+        // A direct hit also gets the bigger death sound from the death event.
+        this.ui.sound('explosion', e, { size: Math.max(0.35, e.r / 45) });
         return;
       }
       case 'shellGone':
@@ -295,6 +310,8 @@ export class GameState {
         this.effects.push({ kind: 'explosion', x: e.x, y: e.y - 8, r: 34, t0: now, dur: 650, big: true });
         this.effects.push({ kind: 'smoke', x: e.x, y: e.y - 10, t0: now, dur: 2600, drift: this.wind });
         this.spawnDebris(e.x, e.y - 8, 16, now, this.tanks.get(e.tank)?.info.color);
+        this.ui.sound('bigExplosion', e);
+        if (e.tank === me) this.ui.sound('myDeath', undefined, { delay: 0.35 });
         const victim = this.nameSpan(e.tank);
         const killer = e.killer !== null ? this.nameSpan(e.killer) : '';
         const how = { direct: '💥', fall: '⬇️', blast: '☢️', environment: '' }[e.cause];
@@ -313,15 +330,15 @@ export class GameState {
           const label = e.levelsAwarded > 1 ? `+${e.levelsAwarded} LV` : '+1 LV';
           this.effects.push({ kind: 'float', x: k.x, y: k.y - 46, text: label, color: '#ffd23a', t0: now, dur: 1400 });
         }
-        if (e.heli && e.victim === null) {
-          /* reported by heliDown */
-        }
+        if (e.killer === me && e.levelsAwarded > 1) this.ui.toast(`Bounty! +${e.levelsAwarded} levels`);
+        if (e.killer === me) this.ui.sound(e.levelsAwarded > 1 ? 'bounty' : 'levelUp', undefined, { delay: 0.15 });
         return;
       }
       case 'heliDown': {
         this.helis.delete(e.heli);
         this.effects.push({ kind: 'explosion', x: e.x, y: e.y, r: 36, t0: now, dur: 600, big: true });
         this.effects.push({ kind: 'heliWreck', x: e.x, y: e.y, vx: 60, vy: -80, dir: 1, t0: now, dur: 2200 });
+        this.ui.sound('heliDown', e);
         this.ui.feed(`${this.nameSpan(e.by)} 🚁 shot down ${this.nameSpan(e.tank)}'s ride`);
         if (e.tank === me) this.ui.toast('Your helicopter was shot down!');
         if (e.by === me) this.ui.toast('Helicopter down! +1 LV');
@@ -330,37 +347,41 @@ export class GameState {
       case 'drop': {
         const h = [...this.helis.values()].find((x) => x.tankId === e.tank);
         if (h) h.carrying = false;
+        this.ui.sound('drop', e, { volume: e.tank === me ? 1 : 0.5 });
+        this.ui.sound('chute', e, { delay: 0.3, volume: e.tank === me ? 1 : 0.5 });
         return;
       }
-      case 'settled':
+      case 'settled': {
+        const t = this.tanks.get(e.tank);
+        if (t) this.ui.sound('land', t, { volume: e.tank === me ? 1 : 0.5 });
         return;
+      }
       case 'milestone': {
-        if (e.tank === me) {
-          const text: Record<number, string> = {
-            5: 'Level 5: shells fly 10% faster',
-            10: 'Level 10: movement unlocked (A / D)',
-            15: 'Level 15: every 10th shot is a spread',
-            20: 'Level 20: your last shot is marked',
-            25: 'Level 25: extra life!',
-            30: 'Level 30: you explode when destroyed',
-            40: 'Level 40: faster movement',
-            45: 'Level 45: every 5th shot is a spread',
-          };
-          if (text[e.level]) this.ui.toast(text[e.level]);
+        if (e.tank === me && e.level < this.cfg.winLevel) {
+          const perk = perks(this.cfg).find((p) => p.level === e.level);
+          if (perk) {
+            // Movement controls differ: keys on desktop, on-screen arrows on touch screens.
+            const hint = perk.key === 'move' ? (this.touch ? ' (◀ ▶ buttons)' : ' (A / D)') : '';
+            this.ui.toast(`Level ${e.level}: ${perk.label}${hint}`);
+          }
+          this.ui.sound('perk', undefined, { delay: 0.35 });
         }
         return;
       }
       case 'blastWarn':
         this.blastWarnings.push({ tank: e.tank, x: e.x, y: e.y, at: e.at, from: e.tick });
+        this.ui.sound('blastWarn', e);
         return;
       case 'blast':
         this.carve(e.x, e.y, e.r, e.rev);
         this.effects.push({ kind: 'explosion', x: e.x, y: e.y, r: this.cfg.deathBlastRadius, t0: now, dur: 800, big: true });
         this.spawnDebris(e.x, e.y, 24, now);
+        this.ui.sound('bigExplosion', e, { size: 1.5 });
         return;
       case 'win': {
         this.match = { state: 'won', winner: e.tank, nukeAt: e.nukeAt };
-        this.ui.banner(`${escapeHtml(e.name)} wins!<small>Nuke incoming…</small>`);
+        this.ui.banner(`${escapeHtml(e.name)} wins!`);
+        this.ui.sound('win');
         return;
       }
       case 'nuke': {
@@ -371,7 +392,9 @@ export class GameState {
         this.wind = e.wind;
         this.shells.clear();
         this.helis.clear();
-        this.effects.push({ kind: 'flash', t0: now, dur: 1600 });
+        // Normally already running (it starts just before the nuke); covers late joiners.
+        if (!this.effects.some((fx) => fx.kind === 'nuke')) this.startNuke(now);
+        this.nukeStarted = false;
         this.ui.banner(null);
         this.ui.toast('New battlefield! Everyone back to level 0.');
         return;
@@ -387,6 +410,16 @@ export class GameState {
     const t = this.tanks.get(id);
     const css = t ? colorCss(t.info.color) : '#fff';
     return `<span style="color:${css}">${escapeHtml(this.nameOf(id))}</span>`;
+  }
+
+  private startNuke(now: number) {
+    this.nukeStarted = true;
+    this.ui.sound('nuke');
+    const blasts = [];
+    for (let i = 0; i < 46; i++) {
+      blasts.push({ x: Math.random(), y: Math.random() * 0.95, delay: Math.random() * 0.42, size: 0.12 + Math.random() * 0.22 });
+    }
+    this.effects.push({ kind: 'nuke', t0: now, dur: NUKE_DURATION_MS, blasts });
   }
 
   private spawnDebris(x: number, y: number, n: number, now: number, color?: number) {

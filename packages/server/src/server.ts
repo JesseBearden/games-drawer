@@ -10,13 +10,15 @@ import {
   PROTOCOL_VERSION,
   randomName,
   type ErrorCode,
+  type GameConfig,
+  type VoiceSettings,
   type ServerMessage,
 } from '@tank/shared';
 import { ChatModerator } from './chat';
 import type { LogSink } from './eventlog';
 import { clientIp, originAllowed, SessionSigner, TokenBucket, WindowCounter } from './guard';
 import { RoomManager } from './manager';
-import type { Conn, Room } from './room';
+import type { Conn, Room, TurnSettings } from './room';
 import { serveStatic } from './static';
 
 export interface Limits {
@@ -71,7 +73,13 @@ export interface ServerOptions {
   trustProxy: boolean;
   /** /stats requires ?token=<statsToken> in production; without a token it is disabled there. */
   statsToken?: string;
+  /** STUN/TURN servers for voice chat. Defaults to a public STUN server. */
+  iceServers?: VoiceSettings['iceServers'];
+  /** Our own TURN relay (coturn with a shared secret), for players who can't connect directly. */
+  turn?: TurnSettings;
   limits?: Partial<Limits>;
+  /** Gameplay overrides for every room (playtesting), e.g. { winLevel: 3 }. */
+  gameConfig?: Partial<GameConfig>;
   /** Run the tick loop (tests can drive ticks by hand). */
   autoTick?: boolean;
 }
@@ -95,6 +103,9 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     maxPublicRooms: o.maxPublicRooms,
     maxPrivateRooms: o.maxPrivateRooms,
     chatHistorySize: 10,
+    iceServers: o.iceServers ?? DEFAULT_ICE_SERVERS,
+    turn: o.turn,
+    cfg: o.gameConfig,
   });
   const counters = {
     connections: 0,
@@ -155,13 +166,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       rejectedAtCapacity: manager.rejectedAtCapacity,
       roomErrors: manager.roomErrors,
       memoryMb: Math.round(process.memoryUsage().rss / 1e6),
-      rooms: [...manager.rooms.values()].map((r) => ({
-        kind: r.kind,
-        humans: r.humansConnected(),
-        tanks: r.world.tanks.size,
-        bots: [...r.world.tanks.values()].filter((t) => t.controller === 'bot').length,
-        emptyForS: r.emptySince ? Math.round((Date.now() - r.emptySince) / 1000) : null,
-      })),
+      rooms: [...manager.rooms.values()].map((r) => r.stats()),
     };
   }
 
@@ -169,7 +174,8 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
 
   const wss = new WebSocketServer({
     noServer: true,
-    maxPayload: 8 * 1024,
+    // Voice set-up messages (WebRTC session descriptions) are a few KB.
+    maxPayload: 16 * 1024,
     perMessageDeflate: false,
   });
 
@@ -288,7 +294,8 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           if (!result.ok) return fail(result.code, result.message);
           room = lookup.room;
           clearTimeout(helloTimer);
-          conn.send(JSON.stringify(room.welcome(session, result)));
+          // Welcome, who's in voice, then the game's own start-up message.
+          room.sendWelcome(session, result);
           return;
         }
         if (room.closed) return;
@@ -351,7 +358,19 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     );
   }
 
-  await new Promise<void>((resolve) => server.listen(o.port, o.host, resolve));
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(o.port, o.host, () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+  } catch (err) {
+    for (const t of timers) clearInterval(t);
+    wss.close();
+    throw err;
+  }
   const port = (server.address() as AddressInfo).port;
 
   return {
@@ -374,3 +393,11 @@ const IP_SALT = randomBytes(16);
 function hashIp(ip: string) {
   return createHash('sha256').update(IP_SALT).update(ip).digest('hex').slice(0, 12);
 }
+
+/**
+ * STUN lets two phones on different networks find a direct path to each other. This public
+ * server only sees connection set-up traffic (and players' IP addresses), never audio. Some
+ * networks (strict routers, some mobile carriers) also need a TURN relay: see TURN_URLS and
+ * deploy/turnserver.conf.
+ */
+export const DEFAULT_ICE_SERVERS: VoiceSettings['iceServers'] = [{ urls: 'stun:stun.l.google.com:19302' }];

@@ -1,6 +1,6 @@
 import { DEFAULT_CONFIG, lethalFallDistance, type GameConfig } from './config';
 import { Rng } from './rng';
-import { generateTerrain, Terrain, type CollapseOptions } from './terrain';
+import { collapseOptionsFor, generateTerrain, Terrain, type CollapseOptions } from './terrain';
 import {
   advanceShell,
   barrelTip,
@@ -12,10 +12,13 @@ import {
 } from './physics';
 import {
   deathsAllowed,
+  hasDeathBlast,
   levelsForKill,
-  MILESTONE_LEVELS,
+  milestoneLevels,
   moveSpeed,
+  PERK_LEVEL,
   spreadCadence,
+  spreadSize,
 } from './progression';
 import type { ControllerKind, DeathCause, GameEvent, Helicopter, Shell, ShellLaunch, Tank } from './types';
 import { botThink, createBotBrain, type BotBrain } from './bot';
@@ -89,7 +92,7 @@ export class World {
   }
 
   get collapseOptions(): CollapseOptions {
-    return { minSliverThickness: this.cfg.minSliverThickness, detachedDirtFalls: this.cfg.detachedDirtFalls };
+    return collapseOptionsFor(this.cfg);
   }
 
   // ------------------------------------------------------------------ tanks
@@ -131,7 +134,7 @@ export class World {
     };
     this.tanks.set(id, t);
     this.startRun(t);
-    if (o.controller === 'bot') this.bots.set(id, createBotBrain(this.rng));
+    if (o.controller === 'bot') this.bots.set(id, createBotBrain(this.rng, this.cfg.botAimErrorStart));
     return t;
   }
 
@@ -139,6 +142,10 @@ export class World {
     this.tanks.delete(id);
     this.bots.delete(id);
     this.helis = this.helis.filter((h) => h.tankId !== id);
+    // The slot id may be reused by a newcomer right away. Shells still in the air and falls
+    // this tank caused must not be credited to whoever takes the slot.
+    for (const s of this.shells) if (s.owner === id) s.owner = -1;
+    for (const t of this.tanks.values()) if (t.fallCause === id) t.fallCause = null;
   }
 
   setController(id: number, controller: ControllerKind) {
@@ -148,7 +155,7 @@ export class World {
     t.move = 0;
     t.infoDirty = true;
     if (controller === 'bot') {
-      const brain = createBotBrain(this.rng);
+      const brain = createBotBrain(this.rng, this.cfg.botAimErrorStart);
       this.bots.set(id, brain);
       // A bot inheriting a tank on a helicopter picks a drop spot right away.
       const heli = this.helis.find((h) => h.tankId === id && h.carrying);
@@ -216,9 +223,10 @@ export class World {
         t.shotsUntilSpread--;
       }
     }
-    const angles = spread
-      ? [t.angle - this.cfg.spreadAngleDeg, t.angle, t.angle + this.cfg.spreadAngleDeg]
-      : [t.angle];
+    // A spread fans 3 (or 5) shells evenly around the aim angle.
+    const count = spread ? spreadSize(t.level) : 1;
+    const angles: number[] = [];
+    for (let i = 0; i < count; i++) angles.push(t.angle + (i - (count - 1) / 2) * this.cfg.spreadAngleDeg);
     const volley = this.nextVolley++;
     const launches: ShellLaunch[] = [];
     for (const a of angles) {
@@ -317,7 +325,7 @@ export class World {
       id: this.nextHeliId++,
       tankId: t.id,
       x: dir > 0 ? -90 : this.cfg.worldWidth + 90,
-      y: this.cfg.heliAltitude,
+      y: Math.round(this.cfg.heliAltitude + this.rng.range(-this.cfg.heliAltitudeJitter, this.cfg.heliAltitudeJitter)),
       dir,
       carrying: true,
       dropX: t.controller === 'bot' ? this.pickDropX(dir) : null,
@@ -337,18 +345,20 @@ export class World {
     this.emit({ type: 'heliSpawn', tick: this.tick, heli: heli.id, tank: t.id });
   }
 
-  /** Bots drop over reasonably flat ground. */
+  /** Bots drop over reasonably flat ground, away from other tanks. */
   pickDropX(dir: 1 | -1): number {
     const W = this.cfg.worldWidth;
+    const others = [...this.tanks.values()].filter((o) => o.phase !== 'dead' && o.phase !== 'carried').map((o) => o.x);
     let best = W / 2;
     let bestScore = Infinity;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 16; i++) {
       const x = this.rng.range(W * 0.08, W * 0.85);
       const xx = dir > 0 ? x : W - x;
       const a = this.terrain.topAt(xx - 14);
       const b = this.terrain.topAt(xx + 14);
       const c = this.terrain.topAt(xx);
-      const score = Math.abs(a - b) + Math.abs(2 * c - a - b) + this.rng.range(0, 6);
+      const crowded = others.some((ox) => Math.abs(ox - xx) < this.cfg.dropSpacing) ? 1000 : 0;
+      const score = Math.abs(a - b) + Math.abs(2 * c - a - b) + this.rng.range(0, 6) + crowded;
       if (score < bestScore) {
         bestScore = score;
         best = xx;
@@ -450,7 +460,35 @@ export class World {
   }
 
   private maxSlope() {
-    return Math.tan((this.cfg.maxSettleSlopeDeg * Math.PI) / 180);
+    return this.slopeLimit(this.cfg.maxSettleSlopeDeg);
+  }
+
+  private slopeLimit(deg: number) {
+    return Math.tan((deg * Math.PI) / 180);
+  }
+
+  /**
+   * Parachutes steer away from the nearest tank (horizontally) so nobody lands right next to
+   * someone else. Returns a horizontal speed, or 0 once there's enough room.
+   */
+  private chuteDrift(t: Tank): number {
+    const cfg = this.cfg;
+    let nearest: Tank | null = null;
+    let best = Infinity;
+    for (const o of this.tanks.values()) {
+      if (o === t || o.phase === 'dead' || o.phase === 'carried') continue;
+      const d = Math.abs(o.x - t.x);
+      if (d < best) {
+        best = d;
+        nearest = o;
+      }
+    }
+    if (!nearest || best >= cfg.dropSpacing) return 0;
+    let dir = t.x > nearest.x ? 1 : t.x < nearest.x ? -1 : t.id % 2 ? 1 : -1;
+    // Boxed in against a map edge: go the other way.
+    const margin = cfg.tankWidth / 2 + 40;
+    if ((dir < 0 && t.x < margin) || (dir > 0 && t.x > cfg.worldWidth - margin)) dir = -dir;
+    return dir * cfg.chuteDriftSpeed;
   }
 
   private updateTank(t: Tank) {
@@ -460,6 +498,8 @@ export class World {
       case 'carried':
         return;
       case 'chute': {
+        const drift = this.chuteDrift(t);
+        if (drift) t.x = clamp(t.x + drift * dt, cfg.tankWidth / 2 + 1, cfg.worldWidth - cfg.tankWidth / 2 - 1);
         const prevY = t.y;
         const ny = t.y + cfg.parachuteSpeed * dt;
         const g = this.centerGround(t.x, prevY);
@@ -557,7 +597,9 @@ export class World {
     t.y = p.top;
     t.tilt = Math.atan(clamp(p.slope, -1.2, 1.2)) * 0.8;
 
-    const steep = Math.abs(p.slope) > this.maxSlope();
+    // While you drive, the tracks grip steeper ground; parked, you slide past the settle slope.
+    const driving = t.move !== 0 && moveSpeed(cfg, t.level) > 0;
+    const steep = Math.abs(p.slope) > (driving ? this.slopeLimit(cfg.maxClimbSlopeDeg) : this.maxSlope());
     if (t.phase === 'ground') {
       if (steep) {
         this.beginFall(t, null);
@@ -735,6 +777,7 @@ export class World {
     if (t.phase === 'dead') return;
     const killer = killerId !== null ? this.tanks.get(killerId) : undefined;
     const levelBefore = t.level;
+    const killsBefore = t.kills;
     t.deaths++;
     const deathNumber = t.deaths;
     const reset = t.deaths >= deathsAllowed(this.cfg, t);
@@ -763,7 +806,7 @@ export class World {
       killerController: killer ? killer.controller : null,
       fallDistance,
     });
-    if (this.cfg.deathBlastEnabled && levelBefore >= 30) {
+    if (this.cfg.deathBlastEnabled && hasDeathBlast(levelBefore)) {
       t.blastAt = this.tick + this.cfg.deathBlastDelayTicks;
       t.blastPos = { x, y };
       this.emit({ type: 'blastWarn', tick: this.tick, tank: t.id, x, y, at: t.blastAt });
@@ -781,7 +824,7 @@ export class World {
       });
       this.startRun(t);
     }
-    if (killer && killer.id !== t.id) this.awardKill(killer, levelBefore, cause, t);
+    if (killer && killer.id !== t.id) this.awardKill(killer, killsBefore, cause, t);
   }
 
   private startRun(t: Tank) {
@@ -797,15 +840,16 @@ export class World {
     this.emit({ type: 'runStart', tick: this.tick, tank: t.id, runId: t.runId, controller: t.controller });
   }
 
-  private awardKill(k: Tank, victimLevel: number | null, cause: DeathCause | 'heli', victim: Tank | null) {
+  /** victimKills: the victim's kills this run (drives the bounty); null for helicopters. */
+  private awardKill(k: Tank, victimKills: number | null, cause: DeathCause | 'heli', victim: Tank | null) {
     const levelBefore = k.level;
-    const gained = levelsForKill(this.cfg, victimLevel);
+    const gained = levelsForKill(this.cfg, victimKills);
     k.kills++;
     k.level = Math.min(this.cfg.winLevel, k.level + gained);
     const after = k.level;
-    if (levelBefore < 15 && after >= 15) k.shotsUntilSpread = 9;
-    if (levelBefore < 45 && after >= 45) k.shotsUntilSpread = Math.min(k.shotsUntilSpread, 4);
-    if (levelBefore < 25 && after >= 25) k.extraLife = true;
+    // Spreads start on the 3rd shot after unlocking; the quintuple keeps the same rhythm.
+    if (levelBefore < PERK_LEVEL.triple && after >= PERK_LEVEL.triple) k.shotsUntilSpread = spreadCadence(after) - 1;
+    if (levelBefore < PERK_LEVEL.extraLife && after >= PERK_LEVEL.extraLife) k.extraLife = true;
     k.infoDirty = true;
     this.emit({
       type: 'kill',
@@ -819,7 +863,7 @@ export class World {
       levelAfter: after,
       killerController: k.controller,
     });
-    for (const m of MILESTONE_LEVELS) {
+    for (const m of milestoneLevels(this.cfg)) {
       if (levelBefore < m && after >= m) {
         this.emit({
           type: 'milestone',

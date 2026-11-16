@@ -1,4 +1,5 @@
 import type { GameConfig } from './config';
+import { PERK_LEVEL } from './progression';
 import type { Point, Tank } from './types';
 
 const DEG = Math.PI / 180;
@@ -7,9 +8,9 @@ export function clamp(v: number, lo: number, hi: number) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-/** Shell speed multiplier from perks (level 5: shells launch 10% faster). */
+/** Shell speed multiplier from perks (faster shells: 10% more launch speed). */
 export function shellSpeedMultiplier(level: number) {
-  return level >= 5 ? 1.1 : 1;
+  return level >= PERK_LEVEL.fastShells ? 1.1 : 1;
 }
 
 export function turretPivot(cfg: GameConfig, x: number, y: number): Point {
@@ -57,7 +58,7 @@ export function advanceShell(
   const ax = windAccel(cfg, wind);
   for (let i = 0; i < n; i++) {
     s.vx += ax * h;
-    s.vy += cfg.gravity * h;
+    s.vy += cfg.shellGravity * h;
     s.x += s.vx * h;
     s.y += s.vy * h;
     if (onSubstep && onSubstep(s)) return true;
@@ -82,5 +83,5 @@ export function inBox(b: Box, x: number, y: number) {
   return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
 }
 
-/** Offset from helicopter centre to the hanging tank's ground point. */
-export const HELI_TANK_OFFSET = 34;
+/** Offset from helicopter centre to the hanging tank's ground point (rope length plus tank height). */
+export const HELI_TANK_OFFSET = 58;

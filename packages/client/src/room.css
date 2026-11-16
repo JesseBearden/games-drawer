@@ -1,0 +1,714 @@
+/* ------------------------------------------------------------------ room shell: views */
+
+.view {
+  position: absolute;
+  inset: 0;
+}
+
+.landing-hint {
+  margin-top: -4px;
+}
+
+.lobby-view .dot,
+.hearts-view .dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.4);
+}
+
+/* Outside the battlefield the toolbar moves to the top right, out of the way of cards. */
+.game[data-view='lobby'] .toolbar,
+.game[data-view='hearts'] .toolbar {
+  top: calc(8px + var(--safe-t));
+  bottom: auto;
+  left: auto;
+  right: calc(8px + var(--safe-r));
+  transform: none;
+}
+
+.game[data-view='hearts'] .toasts {
+  bottom: auto;
+  top: 34%;
+}
+
+.game[data-view='lobby'] .arena,
+.game[data-view='hearts'] .arena {
+  background: radial-gradient(ellipse at 50% 40%, #233089 0%, var(--navy) 70%);
+}
+
+/* ------------------------------------------------------------------ lobby */
+
+.lobby-view {
+  overflow-y: auto;
+  touch-action: pan-y;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: calc(64px + var(--safe-t)) 16px calc(24px + var(--safe-b));
+}
+
+.lobby-card {
+  width: min(560px, 100%);
+  background: var(--panel);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  padding: 20px 20px 14px;
+  box-shadow: 0 20px 60px rgba(10, 10, 40, 0.5);
+}
+
+.lobby-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lobby-head h2,
+.lobby-card h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  margin: 0;
+}
+
+.lobby-head h2 {
+  font-size: 30px;
+}
+
+.lobby-card h3 {
+  font-size: 22px;
+  margin-top: 16px;
+}
+
+.room-code {
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.lobby-members {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lobby-members li {
+  background: var(--navy);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.15s;
+}
+
+.lobby-members li.speaking {
+  border-color: #6dff9a;
+}
+
+.lobby-members small {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.voice-cta {
+  margin: 4px 0;
+}
+
+.game-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.game-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'icon name'
+    'icon blurb'
+    'icon players';
+  column-gap: 12px;
+  text-align: left;
+  background: var(--navy);
+  color: var(--text);
+  border: 2px solid var(--navy-3);
+  border-radius: 16px;
+  padding: 14px;
+  transition:
+    transform 0.08s ease,
+    border-color 0.15s;
+}
+
+.game-card:hover,
+.game-card:focus-visible {
+  border-color: var(--accent);
+}
+
+.game-card:active {
+  transform: scale(0.98);
+}
+
+.game-icon {
+  grid-area: icon;
+  font-size: 34px;
+  align-self: center;
+}
+
+.game-name {
+  grid-area: name;
+  font-family: var(--display);
+  font-size: 24px;
+}
+
+.game-blurb {
+  grid-area: blurb;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.game-players {
+  grid-area: players;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+/* ------------------------------------------------------------------ hearts */
+
+.hearts-view {
+  /* --cw: cards in your hand. --tw: cards in the trick (phones make these bigger). */
+  --cw: clamp(44px, min(8.5vw, 13vh), 92px);
+  --ch: calc(var(--cw) * 1.4);
+  --tw: var(--cw);
+  overflow: hidden;
+}
+
+.ht {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(0, 2.4fr) minmax(80px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto calc(var(--ch) + 26px);
+  grid-template-areas:
+    '. top .'
+    'left center right'
+    'mine mine mine'
+    'hand hand hand';
+  padding: calc(56px + var(--safe-t)) calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l));
+  gap: 6px;
+}
+
+.ht-pos-2 {
+  grid-area: top;
+  justify-self: center;
+}
+
+.ht-pos-1 {
+  grid-area: left;
+  align-self: center;
+}
+
+.ht-pos-3 {
+  grid-area: right;
+  align-self: center;
+  justify-self: end;
+}
+
+.ht-seat {
+  background: rgba(10, 14, 50, 0.55);
+  border: 2px solid transparent;
+  border-radius: 14px;
+  padding: 6px 10px;
+  min-width: 0;
+  max-width: 100%;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.ht-seat.turn {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px rgba(255, 204, 51, 0.45);
+}
+
+.ht-seat.speaking .dot {
+  box-shadow: 0 0 0 3px #6dff9a;
+}
+
+.ht-name {
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ht-nm {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.ht-tag {
+  font-size: 0.85em;
+  flex-shrink: 0;
+}
+
+.ht-score {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ht-taken {
+  color: #ff7a8a;
+}
+
+.ht-badge {
+  color: #6dff9a;
+  margin-left: 4px;
+}
+
+.ht-backs {
+  display: flex;
+  margin-top: 4px;
+  height: 18px;
+}
+
+.ht-backs i {
+  width: 12px;
+  height: 18px;
+  margin-right: -6px;
+  border-radius: 3px;
+  background: linear-gradient(135deg, #c43a5a, #7b1f4f);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.ht-center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 0;
+}
+
+.ht-trick {
+  position: relative;
+  width: calc(var(--tw) * 3.1);
+  height: calc(var(--tw) * 1.4 * 2.1);
+  max-height: 100%;
+  flex-shrink: 1;
+}
+
+/* Nothing is in the middle while passing, so the status and Pass button get the space. */
+.ht[data-phase='passing'] .ht-trick {
+  display: none;
+}
+
+.ht-slot {
+  --cw: var(--tw);
+  --ch: calc(var(--tw) * 1.4);
+  position: absolute;
+  width: var(--cw);
+  height: var(--ch);
+  transition: transform 0.4s ease;
+}
+
+.ht-slot-0 {
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+}
+
+.ht-slot-1 {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ht-slot-2 {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.ht-slot-3 {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* A taken trick slides toward whoever won it. */
+.ht-trick[data-taker='0'] .ht-slot {
+  transform: translate(-50%, 30%) scale(0.9);
+}
+
+.ht-trick[data-taker='1'] .ht-slot {
+  transform: translate(-40%, -50%) scale(0.9);
+}
+
+.ht-trick[data-taker='2'] .ht-slot {
+  transform: translate(-50%, -30%) scale(0.9);
+}
+
+.ht-trick[data-taker='3'] .ht-slot {
+  transform: translate(40%, -50%) scale(0.9);
+}
+
+.ht-status {
+  font-weight: 800;
+  text-align: center;
+  min-height: 1.4em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.ht-broken {
+  color: #ff7a8a;
+  margin-left: 6px;
+  font-size: 13px;
+}
+
+.ht-mine {
+  grid-area: mine;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.ht-scores-btn {
+  background: var(--panel);
+  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-weight: 800;
+}
+
+.ht-hand {
+  grid-area: hand;
+  position: relative;
+  min-width: 0;
+}
+
+.card {
+  position: absolute;
+  top: 12px;
+  width: var(--cw);
+  height: var(--ch);
+  border-radius: calc(var(--cw) * 0.12);
+  background: #fffdf6;
+  color: #1b1b28;
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.25),
+    0 6px 14px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease,
+    left 0.2s ease;
+}
+
+.ht-slot .card {
+  top: 0;
+  left: 0;
+}
+
+.card.s-H,
+.card.s-D {
+  color: #d3243b;
+}
+
+.c-corner {
+  position: absolute;
+  top: 4%;
+  left: 8%;
+  font-weight: 800;
+  font-size: calc(var(--cw) * 0.26);
+  line-height: 1;
+  text-align: center;
+}
+
+.c-big {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-top: 18%;
+  font-size: calc(var(--cw) * 0.62);
+}
+
+.ht-hand .card {
+  cursor: pointer;
+}
+
+.ht-hand .card.raised {
+  transform: translateY(-14px);
+  box-shadow:
+    0 0 0 3px var(--accent),
+    0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.ht-hand .card.passing {
+  transform: translateY(-8px);
+  filter: brightness(0.55);
+}
+
+.ht-hand.my-turn .card.illegal {
+  filter: brightness(0.6) saturate(0.6);
+}
+
+.ht-hand.my-turn .card.legal:hover {
+  transform: translateY(-10px);
+}
+
+.card.new::after {
+  content: 'new';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #1b1b28;
+  border-radius: 6px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.card.played.winner {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    0 6px 18px rgba(255, 204, 51, 0.5);
+}
+
+.ht-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 36, 0.55);
+  z-index: 10;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.ht-panel {
+  background: var(--navy);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 16px 18px;
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow: auto;
+}
+
+.ht-panel h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 30px;
+}
+
+.ht-moon {
+  text-align: center;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.ht-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.ht-table th,
+.ht-table td {
+  padding: 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ht-table th {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ht-table td:first-child {
+  text-align: left;
+  color: var(--muted);
+}
+
+.ht-table .ht-last td {
+  color: #ff7a8a;
+}
+
+.ht-table .ht-total td {
+  border-top: 2px solid rgba(255, 255, 255, 0.15);
+  font-size: 16px;
+}
+
+.ht-panel .actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* Phones held upright: the other three players sit in a row along the top, so the trick gets
+   the full width, and the cards get bigger. */
+@media (max-width: 600px) {
+  .hearts-view {
+    --cw: clamp(44px, 14.5vw, 64px);
+    --tw: clamp(48px, 16vw, 76px);
+  }
+
+  .ht {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto minmax(0, 1fr) auto calc(var(--ch) + 26px);
+    grid-template-areas:
+      'left top right'
+      'center center center'
+      'mine mine mine'
+      'hand hand hand';
+    padding-top: calc(52px + var(--safe-t));
+  }
+
+  .ht-pos-1,
+  .ht-pos-2,
+  .ht-pos-3 {
+    align-self: start;
+  }
+
+  .ht-pos-1 {
+    justify-self: start;
+  }
+
+  .ht-seat {
+    padding: 4px 8px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+
+  .ht-score {
+    font-size: 12px;
+  }
+
+  /* Long names wrap rather than get cut off. */
+  .ht-name {
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .ht-name .dot {
+    margin-top: 2px;
+  }
+
+  .ht-nm {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .ht-long,
+  .ht-backs {
+    display: none;
+  }
+
+  .lobby-head h2 {
+    font-size: 24px;
+  }
+}
+
+/* Phones held sideways: very little height. Seats shrink to small chips, your own seat moves
+   beside your hand, and the cards size themselves from the height. */
+@media (max-height: 460px) {
+  .hearts-view {
+    --cw: clamp(38px, 14vh, 64px);
+    --tw: clamp(38px, 14vh, 64px);
+  }
+
+  .ht {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) calc(var(--ch) + 20px);
+    grid-template-areas:
+      '. top .'
+      'left center right'
+      'mine hand hand';
+    padding-top: calc(8px + var(--safe-t));
+    padding-bottom: calc(4px + var(--safe-b));
+    gap: 2px 8px;
+  }
+
+  .ht-pos-1,
+  .ht-pos-3 {
+    align-self: center;
+  }
+
+  .ht-pos-1 {
+    justify-self: start;
+  }
+
+  /* The player across shares the top edge with the toolbar; long names get cut short rather
+     than slide under it on narrow phones. */
+  .ht-pos-2 {
+    max-width: max(96px, calc(100vw - 564px - 2 * var(--safe-r)));
+  }
+
+  .ht-mine {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .ht-mine .ht-seat {
+    max-width: 100%;
+  }
+
+  .ht-seat {
+    padding: 3px 8px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+
+  .ht-score {
+    font-size: 12px;
+  }
+
+  .ht-scores-btn {
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+
+  .ht-long,
+  .ht-backs {
+    display: none;
+  }
+
+  .ht-center {
+    gap: 4px;
+  }
+
+  .ht-status {
+    font-size: 14px;
+  }
+}

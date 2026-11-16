@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { lethalFallDistance } from '../src/config';
-import { spreadReady } from '../src/progression';
+import { PERK_LEVEL, spreadReady } from '../src/progression';
 import type { GameEvent } from '../src/types';
 import { World } from '../src/world';
 import { addPlaced, cfg, dropShellAt, flatWorld, runTicks, terrainFrom } from './helpers';
@@ -91,22 +91,27 @@ describe('combat', () => {
     const a = addPlaced(w, 'A', 300);
     expect(w.fire(a.id, 60, 50)).toBe(true);
     expect(w.fire(a.id, 60, 50)).toBe(false);
-    const events = runTicks(w, 60 * 4);
+    const events = runTicks(w, 60 * 6);
     expect(ofType(events, 'explode')).toHaveLength(1);
     expect(w.canFire(a)).toBe(true);
   });
 
-  it('typical flight time is around a second', () => {
+  it('a mid-range shot takes about two seconds', () => {
     const w = flatWorld(800);
     const a = addPlaced(w, 'A', 300);
-    w.fire(a.id, 45, 55);
+    w.fire(a.id, 45, 40);
+    const startX = w.shells[0].x;
     let ticks = 0;
-    while (a.shellsInFlight > 0 && ticks < 600) {
-      w.step();
+    let landedX = 0;
+    while (a.shellsInFlight > 0 && ticks < 900) {
+      for (const e of w.step()) if (e.type === 'explode') landedX = e.x;
       ticks++;
     }
-    expect(ticks / 60).toBeGreaterThan(0.6);
-    expect(ticks / 60).toBeLessThan(1.6);
+    // About 500 units away, landing after roughly two seconds.
+    expect(landedX - startX).toBeGreaterThan(400);
+    expect(landedX - startX).toBeLessThan(650);
+    expect(ticks / 60).toBeGreaterThan(1.6);
+    expect(ticks / 60).toBeLessThan(2.6);
   });
 });
 
@@ -146,7 +151,7 @@ describe('falls', () => {
     const w = new World({ cfg, seed: 1, wind: 0, terrain });
     const b = addPlaced(w, 'B', 590);
     // Walk off two 70-unit steps (each under 6 body heights) with time to settle between.
-    b.level = 10;
+    b.level = 4;
     w.setMove(b.id, 1);
     const events = runTicks(w, 60 * 14);
     expect(ofType(events, 'death')).toHaveLength(0);
@@ -157,7 +162,7 @@ describe('falls', () => {
     const terrain = terrainFrom((x) => (x < 600 ? 500 : 900));
     const w = new World({ cfg, seed: 1, wind: 0, terrain });
     const b = addPlaced(w, 'B', 585);
-    b.level = 10;
+    b.level = 4;
     w.setMove(b.id, 1);
     const events = runTicks(w, 60 * 4);
     const death = ofType(events, 'death')[0];
@@ -190,13 +195,57 @@ describe('falls', () => {
   });
 });
 
+describe('driving and dropping', () => {
+  it('drives up a 40 degree hill, and slides back once parked on it', () => {
+    // 40 degrees up to the left: surface rises as x decreases.
+    const terrain = terrainFrom((x) => Math.round(Math.min(800, Math.max(300, 800 - (900 - x) * Math.tan((40 * Math.PI) / 180)))));
+    const w = new World({ cfg, seed: 1, wind: 0, terrain });
+    const t = addPlaced(w, 'T', 920);
+    t.level = 4;
+    const startY = t.y;
+    w.setMove(t.id, -1);
+    runTicks(w, 60 * 4);
+    expect(t.phase).toBe('ground');
+    expect(t.x).toBeLessThan(800);
+    expect(t.y).toBeLessThan(startY - 50);
+    w.setMove(t.id, 0);
+    runTicks(w, 3);
+    expect(t.phase).toBe('slide');
+  });
+
+  it('a 50 degree hill is still too steep to drive up', () => {
+    const terrain = terrainFrom((x) => Math.round(Math.min(800, Math.max(300, 800 - (900 - x) * Math.tan((50 * Math.PI) / 180)))));
+    const w = new World({ cfg, seed: 1, wind: 0, terrain });
+    const t = addPlaced(w, 'T', 920);
+    t.level = 4;
+    w.setMove(t.id, -1);
+    runTicks(w, 60 * 4);
+    expect(t.x).toBeGreaterThan(880);
+  });
+
+  it('a parachute dropped right over another tank drifts away before landing', () => {
+    const w = flatWorld(800);
+    const sitter = addPlaced(w, 'Sitter', 900);
+    const t = w.addTank({ name: 'Dropper', controller: 'human' });
+    w.step();
+    // Fly the helicopter to just above the sitter, then drop.
+    const heli = w.helis.find((h) => h.tankId === t.id)!;
+    heli.x = 900;
+    t.x = 900;
+    expect(w.requestDrop(t.id)).toBe(true);
+    runTicks(w, 60 * 6);
+    expect(t.phase).toBe('ground');
+    expect(Math.abs(t.x - sitter.x)).toBeGreaterThanOrEqual(cfg.dropSpacing - 2);
+  });
+});
+
 describe('progression', () => {
   it('three deaths reset the run and its perks', () => {
     const w = flatWorld(800);
     const a = addPlaced(w, 'A', 300);
     const b = addPlaced(w, 'B', 900);
-    b.level = 12;
-    b.kills = 12;
+    b.level = 6;
+    b.kills = 2;
     for (let i = 0; i < 3; i++) {
       w.killTank(b, 'direct', a.id, null);
       if (i < 2) {
@@ -209,20 +258,19 @@ describe('progression', () => {
     expect(a.kills).toBe(3);
   });
 
-  it('reaching level 25 grants a fourth life even with two deaths', () => {
+  it('reaching the extra-life level grants a fourth life even with two deaths', () => {
     const w = flatWorld(800);
     const a = addPlaced(w, 'A', 300);
     const b = addPlaced(w, 'B', 900);
-    a.level = 24;
+    a.level = PERK_LEVEL.extraLife - 1;
     a.deaths = 2;
     w.killTank(b, 'direct', a.id, null);
-    expect(a.level).toBe(25);
+    expect(a.level).toBe(PERK_LEVEL.extraLife);
     expect(a.extraLife).toBe(true);
-    const events: GameEvent[] = [];
     w.killTank(a, 'direct', b.id, null);
-    events.push(...runTicks(w, 1));
+    runTicks(w, 1);
     expect(a.deaths).toBe(3);
-    expect(a.level).toBe(25);
+    expect(a.level).toBe(PERK_LEVEL.extraLife);
     a.phase = 'ground';
     w.killTank(a, 'direct', b.id, null);
     expect(a.deaths).toBe(0);
@@ -230,43 +278,79 @@ describe('progression', () => {
     expect(a.extraLife).toBe(false);
   });
 
-  it('every tenth shot at level 15 is a spread that counts as one shot', () => {
+  it('every 3rd shot is a triple, then a quintuple at the next perk, each counting as one shot', () => {
     const w = flatWorld(800);
     const a = addPlaced(w, 'A', 300);
     const victim = addPlaced(w, 'V', 1500);
-    a.level = 14;
+    a.level = PERK_LEVEL.triple - 1;
     w.killTank(victim, 'direct', a.id, null);
-    expect(a.level).toBe(15);
-    const spreads: boolean[] = [];
-    for (let i = 0; i < 20; i++) {
+    expect(a.level).toBe(PERK_LEVEL.triple);
+    const fireOnce = () => {
       w.step();
       const ready = spreadReady(a);
       const before = w.shells.length;
       expect(w.fire(a.id, 80, 30)).toBe(true);
-      spreads.push(w.shells.length - before === 3);
-      expect(ready).toBe(w.shells.length - before === 3);
-      runTicks(w, 200);
+      const n = w.shells.length - before;
+      expect(ready).toBe(n > 1);
+      runTicks(w, 260);
+      return n;
+    };
+    const triples = Array.from({ length: 6 }, fireOnce);
+    expect(triples).toEqual([1, 1, 3, 1, 1, 3]);
+    a.level = PERK_LEVEL.quintuple - 1;
+    victim.phase = 'ground';
+    w.killTank(victim, 'direct', a.id, null);
+    expect(a.level).toBe(PERK_LEVEL.quintuple);
+    const quints = Array.from({ length: 6 }, fireOnce);
+    expect(quints).toEqual([1, 1, 5, 1, 1, 5]);
+    expect(a.shotsFired).toBe(12);
+  });
+
+  it('bounty: kills over 3, 6 and 9 are worth 2, 3 and 4 levels', () => {
+    const cases: [number, number][] = [
+      [0, 1],
+      [3, 1],
+      [4, 2],
+      [6, 2],
+      [7, 3],
+      [9, 3],
+      [10, 4],
+      [25, 4],
+    ];
+    for (const [victimKills, expected] of cases) {
+      const w = flatWorld(800);
+      const a = addPlaced(w, 'A', 300);
+      const b = addPlaced(w, 'B', 900);
+      b.kills = victimKills;
+      w.killTank(b, 'direct', a.id, null);
+      expect(a.level, `victim with ${victimKills} kills`).toBe(expected);
+      expect(a.kills).toBe(1);
     }
-    expect(spreads.map((s, i) => (s ? i : -1)).filter((i) => i >= 0)).toEqual([9, 19]);
-    expect(a.shotsFired).toBe(20);
   });
 
-  it('bounty mode awards levels by victim tier', () => {
-    const w = flatWorld(800, { bountyMode: true });
+  it('a bounty that jumps several levels grants every perk crossed', () => {
+    const w = flatWorld(800);
     const a = addPlaced(w, 'A', 300);
     const b = addPlaced(w, 'B', 900);
-    b.level = 25;
+    a.level = 3;
+    b.kills = 10;
     w.killTank(b, 'direct', a.id, null);
-    expect(a.level).toBe(5);
-    expect(a.kills).toBe(1);
+    const events = runTicks(w, 1);
+    expect(a.level).toBe(7);
+    expect(a.extraLife).toBe(true);
+    expect(a.shotsUntilSpread).toBe(2);
+    expect(ofType(events, 'milestone').map((m) => m.level)).toEqual([4, 5, 6, 7]);
   });
 
-  it('level 50 wins, then a nuke resets terrain and everyone', () => {
+  it('the win level ends the round (bounties cap there), then a nuke resets terrain and everyone', () => {
     const w = flatWorld(800, { winCelebrationTicks: 30 });
+    expect(w.cfg.winLevel).toBe(10);
     const a = addPlaced(w, 'A', 300);
     const b = addPlaced(w, 'B', 900);
-    a.level = 49;
+    a.level = w.cfg.winLevel - 1;
+    b.kills = 10;
     w.killTank(b, 'direct', a.id, null);
+    expect(a.level).toBe(w.cfg.winLevel);
     expect(w.match.state).toBe('won');
     expect(w.fire(a.id, 60, 50)).toBe(false);
     const events = runTicks(w, 40);
@@ -278,18 +362,77 @@ describe('progression', () => {
     expect(a.phase).toBe('carried');
   });
 
-  it('a level 30 tank explodes on death and is credited for blast kills', () => {
+  it('a tank at the death-blast level explodes on death and is credited for blast kills', () => {
     const w = flatWorld(800);
     const a = addPlaced(w, 'A', 300);
     const big = addPlaced(w, 'Big', 900);
-    const near = addPlaced(w, 'Near', 940);
-    big.level = 30;
+    const near = addPlaced(w, 'Near', 960);
+    big.level = PERK_LEVEL.deathBlast;
     w.killTank(big, 'direct', a.id, null);
     const events = runTicks(w, cfg.deathBlastDelayTicks + 1);
     expect(ofType(events, 'blast')).toHaveLength(1);
     const death = ofType(events, 'death').find((d) => d.tank === near.id)!;
     expect(death.cause).toBe('blast');
     expect(death.killer).toBe(big.id);
+  });
+
+  it('a tank below the death-blast level does not explode', () => {
+    const w = flatWorld(800);
+    const a = addPlaced(w, 'A', 300);
+    const t = addPlaced(w, 'T', 900);
+    t.level = PERK_LEVEL.deathBlast - 1;
+    w.killTank(t, 'direct', a.id, null);
+    expect(ofType(runTicks(w, cfg.deathBlastDelayTicks + 5), 'blast')).toHaveLength(0);
+  });
+});
+
+
+describe('bot pacing', () => {
+  it('waits after its shell lands, turns the turret at human speed, then fires', () => {
+    const w = flatWorld(800);
+    const bot = addPlaced(w, 'Bot', 300, 'bot');
+    addPlaced(w, 'Target', 1100);
+    // A fresh bot starts out "blocked", so it reacts before its first shot too.
+    bot.angle = 150; // facing the wrong way: a big turn is needed
+    let lastLanded = w.tick;
+    let lastAngle = bot.angle;
+    let maxTurnPerTick = 0;
+    const gaps: number[] = [];
+    for (let i = 0; i < 60 * 40; i++) {
+      for (const e of w.step()) {
+        if (e.type === 'fire' && e.tank === bot.id) gaps.push(e.tick - lastLanded);
+        if (e.type === 'explode' && e.owner === bot.id) lastLanded = e.tick;
+        if (e.type === 'shellGone') lastLanded = e.tick;
+      }
+      maxTurnPerTick = Math.max(maxTurnPerTick, Math.abs(bot.angle - lastAngle));
+      lastAngle = bot.angle;
+    }
+    expect(gaps.length).toBeGreaterThan(3);
+    // Never fires sooner than the reaction pause plus the pause before firing.
+    for (const g of gaps) expect(g).toBeGreaterThanOrEqual(cfg.botReactionMinTicks + cfg.botFirePauseMinTicks);
+    // The turret never moves faster than a held key (80 degrees/second).
+    expect(maxTurnPerTick).toBeLessThanOrEqual(80 / 60 + 0.11);
+  });
+
+  it('a bot that lands right next to you rarely hits with its first shot', () => {
+    let firstShots = 0;
+    let firstHits = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const w = new World({ cfg, seed, wind: 0, terrain: terrainFrom(() => 800) });
+      const bot = addPlaced(w, 'Bot', 600, 'bot');
+      const target = addPlaced(w, 'Target', 760);
+      for (let i = 0; i < 60 * 12 && firstShots < seed; i++) {
+        for (const e of w.step()) {
+          if (e.type === 'fire' && e.tank === bot.id) firstShots++;
+          if (e.type === 'explode' && e.owner === bot.id) {
+            if (e.hitTank === target.id) firstHits++;
+            i = 1e9;
+          }
+        }
+      }
+    }
+    expect(firstShots).toBeGreaterThan(30);
+    expect(firstHits / firstShots).toBeLessThan(0.2);
   });
 });
 

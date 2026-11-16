@@ -40,6 +40,9 @@ export class Input {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', () => this.releaseAll());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.releaseAll();
+    });
     for (const btn of touchRoot.querySelectorAll<HTMLElement>('[data-act]')) {
       const act = btn.dataset.act as Action;
       btn.addEventListener('pointerdown', (e) => {
@@ -55,6 +58,8 @@ export class Input {
       };
       btn.addEventListener('pointerup', up);
       btn.addEventListener('pointercancel', up);
+      // iOS sometimes drops pointerup; losing capture always means the finger is gone.
+      btn.addEventListener('lostpointercapture', up);
       btn.addEventListener('contextmenu', (e) => e.preventDefault());
     }
   }
@@ -85,7 +90,8 @@ export class Input {
       return;
     }
     this.held.set(act, performance.now());
-    this.step(act, 1);
+    // One tap = 1 degree, or half a percent of power (power is the touchier control).
+    this.step(act, act === 'power-up' || act === 'power-down' ? 0.5 : 1);
     this.updateMove();
   }
 

@@ -103,11 +103,6 @@ export class Net {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
-  /** Drop and re-open the socket to get a fresh snapshot (used if terrain falls out of sync). */
-  resync() {
-    this.ws?.close();
-  }
-
   close() {
     this.closedByUs = true;
     clearTimeout(this.retryTimer);
