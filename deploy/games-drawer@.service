@@ -1,0 +1,37 @@
+# One copy of the game server. %i is the slot: a, b or staging. setup.sh installs this as
+# /etc/systemd/system/games-drawer@.service; the rollout tool writes each slot's env file.
+[Unit]
+Description=Games Drawer server (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=games
+Group=games
+EnvironmentFile=/etc/games-drawer/common.env
+EnvironmentFile=/etc/games-drawer/secrets.env
+# The admin page's password hash, from Parameter Store (games-drawer-deploy fetches it).
+EnvironmentFile=-/etc/games-drawer/admin.env
+EnvironmentFile=/etc/games-drawer/slot-%i.env
+ExecStart=/usr/local/bin/node ${RELEASE_DIR}/server.mjs
+# A crash restarts it; finishing a drain (exit 0) does not.
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+MemoryMax=450M
+LimitNOFILE=8192
+# Lock it down: it only needs to listen on localhost and write its logs.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+ReadWritePaths=/var/log/games-drawer /var/lib/games-drawer
+
+[Install]
+WantedBy=multi-user.target

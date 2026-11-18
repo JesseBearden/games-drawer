@@ -1,15 +1,16 @@
 import { CARD_SOUNDS } from './audio';
 import { suitOf, type Card, type GameServerMessage, type HeartsView as TableView, type PassDir } from '@tank/shared';
 import { colorCss, escapeHtml } from './state';
+import type { PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const SUIT_SYMBOL: Record<string, string> = { C: '♣', D: '♦', H: '♥', S: '♠' };
+export const SUIT_SYMBOL: Record<string, string> = { C: '♣', D: '♦', H: '♥', S: '♠' };
 const RANK_LABEL = (c: Card) => (c[0] === 'T' ? '10' : c[0]);
 const PASS_WORD: Record<PassDir, string> = { left: 'left', right: 'right', across: 'across', none: '' };
 
-function cardHtml(c: Card, extra = '') {
+export function cardHtml(c: Card, extra = '') {
   const s = suitOf(c);
   return `<span class="card s-${s} ${extra}" data-card="${c}" aria-label="${RANK_LABEL(c)} of ${{ C: 'clubs', D: 'diamonds', H: 'hearts', S: 'spades' }[s]}"><span class="c-corner">${RANK_LABEL(c)}<br>${SUIT_SYMBOL[s]}</span><span class="c-big">${SUIT_SYMBOL[s]}</span></span>`;
 }
@@ -31,6 +32,8 @@ export class HeartsTable implements View {
   private pending = false;
   private scoresOpen = false;
   private speaking = new Set<string>();
+  /** The card a controller has highlighted. */
+  private cursor: Card | null = null;
   /** Re-spreads the hand whenever its box changes size (rotating a phone, resizing a window). */
   private handObserver = new ResizeObserver(() => this.layoutHand());
 
@@ -80,6 +83,71 @@ export class HeartsTable implements View {
 
   resize() {
     this.layoutHand();
+  }
+
+  // ------------------------------------------------------------------ controller
+
+  /**
+   * Controller: left/right moves a highlight through your hand and A plays (or picks) that
+   * card; up moves to the buttons, down comes back. Y passes your three cards. View shows the scores.
+   */
+  onPad(p: PadPress, down: boolean): boolean {
+    if (!down || !this.view) return false;
+    const b = p.button;
+    if (b === 'view') {
+      this.scoresOpen = !this.scoresOpen;
+      this.renderOverlay();
+      return true;
+    }
+    if (this.padScope()) return false;
+    if (b === 'y') {
+      // Y passes once three cards are picked.
+      const act = this.el.querySelector<HTMLButtonElement>('.ht-action');
+      if (act && !act.hidden && !act.disabled) act.click();
+      return true;
+    }
+    const focused = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    if (focused) {
+      if (b === 'down' && this.el.contains(focused)) {
+        focused.blur();
+        this.moveCursor(0);
+        return true;
+      }
+      return false;
+    }
+    if (b === 'left' || b === 'right') {
+      this.moveCursor(b === 'left' ? -1 : 1);
+      return true;
+    }
+    if (b === 'a') {
+      if (this.cursor && this.view.cards.includes(this.cursor)) this.tapCard(this.cursor, true);
+      else this.moveCursor(0);
+      return true;
+    }
+    return false;
+  }
+
+  private moveCursor(step: number) {
+    const v = this.view;
+    if (!v || !v.cards.length) return;
+    let i = this.cursor ? v.cards.indexOf(this.cursor) : -1;
+    if (i < 0) i = Math.max(0, v.cards.findIndex((c) => v.legal.includes(c)));
+    else i = (i + step + v.cards.length) % v.cards.length;
+    this.cursor = v.cards[i];
+    document.body.classList.add('pad-mode');
+    this.renderHand();
+  }
+
+  padOrigin() {
+    const el = this.cursor ? this.el.querySelector(`.ht-hand .card[data-card="${this.cursor}"]`) : null;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top };
+  }
+
+  padScope() {
+    const o = this.el.querySelector('.ht-overlay') as HTMLElement | null;
+    return o && !o.hidden ? o : null;
   }
 
   // ------------------------------------------------------------------ rendering
@@ -168,6 +236,7 @@ export class HeartsTable implements View {
       if (v.passing?.includes(c)) cls.push('passing');
       if (this.lifted === c) cls.push('raised');
       if (myTurn) cls.push(v.legal.includes(c) ? 'legal' : 'illegal');
+      if (this.cursor === c) cls.push('pad-cursor');
       // Cards passed to you stay marked until you play your first card.
       if (v.received.includes(c) && v.seats[v.seat ?? 0].cards === 13) cls.push('new');
       html += cardHtml(c, cls.join(' '));
@@ -288,7 +357,7 @@ export class HeartsTable implements View {
     if (cardEl) this.tapCard(cardEl.dataset.card!);
   };
 
-  private tapCard(c: Card) {
+  private tapCard(c: Card, direct = false) {
     const v = this.view;
     if (!v || v.seat === null || this.pending) return;
     if (v.phase === 'passing' && !v.passing) {
@@ -304,7 +373,7 @@ export class HeartsTable implements View {
       return;
     }
     // Phones: first tap lifts the card, second plays it (no misplays from a stray tap).
-    if (this.shell.device.touch && this.lifted !== c) {
+    if (this.shell.device.touch && !direct && this.lifted !== c) {
       this.lifted = c;
       this.render();
       return;

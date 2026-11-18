@@ -1,10 +1,24 @@
 import { randomInt } from 'node:crypto';
-import { normalizeRoomCode, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH, type RoomKind, type RoomRequest } from '@tank/shared';
+import {
+  canPlayPrivately,
+  canPlayPublicly,
+  GAME_NAMES,
+  normalizeRoomCode,
+  ROOM_CODE_ALPHABET,
+  ROOM_CODE_LENGTH,
+  slotOfCode,
+  type GameId,
+  type RoomKind,
+  type RoomRequest,
+  type Slot,
+} from '@tank/shared';
 import { Room, type RoomDeps } from './room';
 
 export interface ManagerOptions extends Omit<RoomDeps, 'seed'> {
   maxPublicRooms: number;
   maxPrivateRooms: number;
+  /** Which deploy slot this server is; its room codes always map to it. */
+  slot?: Slot;
 }
 
 export type RoomLookup = { ok: true; room: Room } | { ok: false; code: 'capacity' | 'not-found' | 'room-full'; message: string };
@@ -13,6 +27,8 @@ export class RoomManager {
   readonly rooms = new Map<string, Room>();
   rejectedAtCapacity = 0;
   roomErrors = 0;
+  /** A newer copy of the server has taken over: finish the games here, but start no new ones. */
+  draining = false;
 
   constructor(private opts: ManagerOptions) {}
 
@@ -31,19 +47,23 @@ export class RoomManager {
       return { ok: true, room };
     }
     if (req.kind === 'public') {
-      // Rejoin the public room you were in, if it still has your tank.
-      for (const r of this.rooms.values()) if (r.kind === 'public' && r.hasSession(session)) return { ok: true, room: r };
-      // Otherwise the busiest public room with space, so people play together.
-      const open = [...this.rooms.values()]
-        .filter((r) => r.kind === 'public' && r.openSlots() > 0)
-        .sort((a, b) => b.humansConnected() - a.humansConnected());
+      const game = req.game ?? 'tanks';
+      if (!canPlayPublicly(game)) return { ok: false, code: 'not-found', message: `${GAME_NAMES[game]} isn’t open to everyone yet. Start a private room to play it.` };
+      const playing = (r: Room) => r.kind === 'public' && r.game?.id === game;
+      // Rejoin the public game you were in, if it still has your seat.
+      for (const r of this.rooms.values()) if (playing(r) && r.hasSession(session)) return { ok: true, room: r };
+      if (this.draining) return { ok: false, code: 'capacity', message: 'The game was updated. Press Play to start a new one.' };
+      // Otherwise the busiest one with space, so people play together.
+      const open = [...this.rooms.values()].filter((r) => playing(r) && r.openSlots() > 0).sort((a, b) => b.humansConnected() - a.humansConnected());
       if (open.length) return { ok: true, room: open[0] };
-      return this.create('public');
+      return this.create('public', game);
     }
-    return this.create('private');
+    if (req.game && !canPlayPrivately(req.game)) return { ok: false, code: 'not-found', message: 'That game isn’t available right now.' };
+    return this.create('private', req.game);
   }
 
-  create(kind: RoomKind): RoomLookup {
+  create(kind: RoomKind, game?: GameId): RoomLookup {
+    if (this.draining) return { ok: false, code: 'capacity', message: 'The game was just updated. Try again.' };
     const limit = kind === 'public' ? this.opts.maxPublicRooms : this.opts.maxPrivateRooms;
     if (this.count(kind) >= limit) {
       this.rejectedAtCapacity++;
@@ -55,8 +75,8 @@ export class RoomManager {
       code = '';
       // crypto.randomInt: private codes must not be predictable.
       for (let i = 0; i < ROOM_CODE_LENGTH; i++) code += ROOM_CODE_ALPHABET[randomInt(ROOM_CODE_ALPHABET.length)];
-    } while (this.rooms.has(code));
-    const room = new Room(code, kind, this.opts);
+    } while (this.rooms.has(code) || (this.opts.slot && slotOfCode(code) !== this.opts.slot));
+    const room = new Room(code, kind, this.opts, game);
     this.rooms.set(code, room);
     return { ok: true, room };
   }

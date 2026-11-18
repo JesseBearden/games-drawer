@@ -1,13 +1,18 @@
-import { GAME_NAMES, type ChatMessage, type GameId, type MemberInfo, type ServerMessage } from '@tank/shared';
+import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type MemberInfo, type ServerMessage } from '@tank/shared';
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
+import { SpadesTable } from './spadesView';
+import { DominoesTable } from './dominoesView';
+import { JigsawTable } from './jigsawView';
 import { HeartsTable } from './heartsView';
+import { MIC_OFF_SVG } from './icons';
 import { LobbyView } from './lobby';
 import type { Net } from './net';
 import type { Sprites } from './sprites';
 import { colorCss, escapeHtml } from './state';
 import { TankView } from './tankView';
 import type { Device, ShellApi, View } from './views';
-import { Voice } from './voice';
+import { setVoicePreference, Voice, voicePreference } from './voice';
+import { moveFocus, type Gamepads, type PadButton, type PadPress } from './gamepad';
 
 type Welcome = Extract<ServerMessage, { t: 'welcome' }>;
 
@@ -34,6 +39,11 @@ export class RoomApp {
   private mutedPlayers = new Map<string, string>();
   private cleanups: (() => void)[] = [];
   private api: ShellApi;
+  /** How swearing in chat is handled here (the server has the final say). */
+  chatFilter: ChatFilterMode;
+  /** Chat is paused until then (ms, page clock) after too many caught messages. */
+  private chatPausedUntil = 0;
+  private pauseTimer: number | undefined;
 
   constructor(
     welcome: Welcome,
@@ -42,6 +52,7 @@ export class RoomApp {
     private sfx: Sfx,
     private device: Device,
     private onLeave: () => void,
+    private pads: Gamepads | null = null,
   ) {
     const gameEl = $('game');
     gameEl.classList.toggle('phone', device.small);
@@ -51,6 +62,7 @@ export class RoomApp {
     this.alias = welcome.alias;
     this.room = welcome.room;
     this.membersList = welcome.members;
+    this.chatFilter = welcome.chatFilter;
     this.voice = this.makeVoice(welcome);
     this.api = this.makeApi();
     this.bindUi(welcome);
@@ -60,6 +72,55 @@ export class RoomApp {
     this.renderVoicePanel();
     this.showGame(welcome.game);
     this.pingTimer = window.setInterval(() => this.net.send({ t: 'ping', at: performance.now() }), 2000);
+    this.startVoiceByDefault();
+  }
+
+  // ------------------------------------------------------------------ voice on by default
+
+  /**
+   * Voice is on unless you've turned it off: new players get a welcome prompt (whose button is
+   * the tap browsers want before using the mic), and people who said yes before go straight in.
+   */
+  private startVoiceByDefault() {
+    const v = this.voice;
+    if (!v.available || !v.supported) return;
+    const pref = voicePreference();
+    if (pref === 'on') void v.join({ auto: true });
+    else if (pref === null) this.showVoicePrompt();
+  }
+
+  private showVoicePrompt() {
+    const el = document.createElement('div');
+    el.className = 'overlay voice-prompt';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-labelledby', 'voice-prompt-title');
+    el.innerHTML = `<div class="menu-card voice-prompt-card">
+        <div class="vp-icon" aria-hidden="true">🎙️</div>
+        <h2 id="voice-prompt-title">Games Drawer is better with conversation</h2>
+        <p>Turn on your mic to talk with everyone in this room while you play. You can mute it or turn it off any time with the 🎙️ button.</p>
+        <div class="vp-actions">
+          <button class="btn btn-primary btn-big" type="button" data-vp="on">Turn on voice</button>
+          <button class="btn btn-secondary" type="button" data-vp="off">No thanks</button>
+        </div>
+        <p class="hint">Headphones keep game sounds out of your mic.</p>
+      </div>`;
+    const close = () => {
+      el.remove();
+      this.cleanups = this.cleanups.filter((c) => c !== close);
+    };
+    el.addEventListener('click', (e) => {
+      const choice = (e.target as HTMLElement).closest<HTMLElement>('[data-vp]')?.dataset.vp;
+      if (!choice) return;
+      close();
+      if (choice === 'on') void this.voice.join();
+      else {
+        setVoicePreference('off');
+        this.toast('Voice is off. Tap 🎙️ whenever you want to talk.');
+      }
+    });
+    $('arena').append(el);
+    this.cleanups.push(close);
+    (el.querySelector('[data-vp="on"]') as HTMLButtonElement).focus();
   }
 
   private makeApi(): ShellApi {
@@ -90,7 +151,14 @@ export class RoomApp {
         get inVoice() {
           return shell.voice.inVoice;
         },
+        get micProblem() {
+          return shell.voice.micProblem;
+        },
         join: () => void shell.voice.join(),
+      },
+      pads: this.pads,
+      get chatFilter() {
+        return shell.chatFilter;
       },
     };
   }
@@ -108,6 +176,9 @@ export class RoomApp {
     const gameEl = $('game');
     if (id === 'tanks') this.view = new TankView(this.api, this.sprites);
     else if (id === 'hearts') this.view = new HeartsTable(this.api);
+    else if (id === 'spades') this.view = new SpadesTable(this.api);
+    else if (id === 'dominoes') this.view = new DominoesTable(this.api);
+    else if (id === 'jigsaw') this.view = new JigsawTable(this.api);
     else this.view = new LobbyView(this.api);
     gameEl.classList.toggle('landscape-only', this.view.landscape);
     gameEl.dataset.view = id ?? 'lobby';
@@ -116,6 +187,8 @@ export class RoomApp {
     $('menu-help').innerHTML = this.view.helpHtml;
     $('menu-lobby').hidden = !(this.room.kind === 'private' && id !== null);
     if (!$('menu').hidden) this.openMenu(false);
+    this.updateRoomInfo();
+    document.title = id ? `${gameInfo(id).title} · Games Drawer` : `Room ${this.room.code} · Games Drawer`;
     requestAnimationFrame(() => this.view?.resize?.());
   }
 
@@ -145,6 +218,21 @@ export class RoomApp {
       case 'chat':
         this.addChat(msg.msg);
         return;
+      case 'filter':
+        this.chatFilter = msg.mode;
+        this.renderFilterSetting();
+        this.updateChatInput();
+        this.view?.onChatFilter?.();
+        return;
+      case 'chatPaused':
+        this.chatPausedUntil = Date.now() + msg.ms;
+        clearInterval(this.pauseTimer);
+        this.pauseTimer = window.setInterval(() => {
+          this.updateChatInput();
+          if (Date.now() >= this.chatPausedUntil) clearInterval(this.pauseTimer);
+        }, 1000);
+        this.updateChatInput();
+        return;
       case 'pong':
         this.view?.onPong?.(msg.at);
         return;
@@ -170,6 +258,9 @@ export class RoomApp {
     this.alias = w.alias;
     this.room = w.room;
     this.membersList = w.members;
+    this.chatFilter = w.chatFilter;
+    this.renderFilterSetting();
+    this.updateChatInput();
     $('reconnect').hidden = true;
     this.toast(w.reclaimed ? 'Reconnected. You have your place back.' : 'Reconnected.');
     // Voice rejoins by itself (the mic is still open).
@@ -213,10 +304,12 @@ export class RoomApp {
     btn.hidden = false;
     const others = v.peers.filter((p) => p.id !== v.alias);
     btn.classList.toggle('active', v.inVoice);
-    btn.textContent = v.inVoice ? (v.selfMuted ? '🎙️🚫' : '🎙️') : '🎙️';
-    btn.title = v.inVoice ? 'Voice chat' : 'Join voice chat';
+    // Not in voice is hard to miss (red, the mic crossed out): talking is the point of a room.
+    btn.classList.toggle('voice-off', !v.inVoice);
     const count = v.peers.length;
-    if (count) btn.textContent += ` ${count}`;
+    btn.innerHTML = `${v.inVoice ? `🎙️${v.selfMuted ? '🚫' : ''}` : MIC_OFF_SVG}${count ? ` ${count}` : ''}`;
+    btn.title = !v.inVoice ? 'You’re not in voice chat. Tap to join.' : v.selfMuted ? 'Voice chat (you’re muted)' : 'Voice chat';
+    btn.setAttribute('aria-label', btn.title);
     panel.hidden = !this.voicePanelOpen;
     // The lobby shows voice state too.
     this.view?.onMembers?.(this.membersList);
@@ -225,6 +318,9 @@ export class RoomApp {
     if (!v.supported) {
       html += '<p>Voice needs a secure (https) page. It will work on the hosted game; for local testing use <b>npm run dev:https</b>.</p>';
     } else if (!v.inVoice) {
+      if (v.micProblem === 'blocked') html += '<p class="voice-problem">Your browser blocked the microphone, so you’re not in voice. Allow the microphone for this site in the browser’s settings, then tap Join voice.</p>';
+      else if (v.micProblem === 'missing') html += '<p class="voice-problem">No microphone found, so you’re not in voice. Plug one in (or use headphones with a mic), then tap Join voice.</p>';
+      else html += '<p class="voice-problem">You’re not in voice chat.</p>';
       html += `<p>${others.length ? `${others.length} in voice now.` : 'Nobody is in voice yet.'} Headphones stop game sound from leaking into your mic.</p>`;
       html += '<div class="voice-actions"><button class="btn btn-primary" data-v="join">Join voice</button></div>';
     } else {
@@ -261,6 +357,41 @@ export class RoomApp {
 
   // ------------------------------------------------------------------ chat
 
+  /** Grey out Send (with a reminder) when the message would be caught, or while chat is paused. */
+  private updateChatInput() {
+    const input = $<HTMLInputElement>('chat-input');
+    const send = $<HTMLButtonElement>('chat-send');
+    const hint = $('chat-hint');
+    const pausedFor = Math.ceil((this.chatPausedUntil - Date.now()) / 1000);
+    if (pausedFor > 0) {
+      input.disabled = true;
+      send.disabled = true;
+      input.placeholder = `Chat paused for ${pausedFor}s`;
+      hint.hidden = true;
+      return;
+    }
+    input.disabled = false;
+    input.placeholder = this.room.kind === 'public' ? 'Message… (keep it family friendly)' : 'Message…';
+    const r = checkChat(input.value, this.chatFilter);
+    const caught = !r.ok && r.reason !== 'empty' && r.reason !== 'too-long';
+    send.disabled = !r.ok;
+    hint.hidden = !caught;
+    input.classList.toggle('caught', caught);
+  }
+
+  /** The None / Hide / Block switch in the menu (private rooms only). */
+  private renderFilterSetting() {
+    const box = $('menu-filter');
+    box.hidden = this.room.kind !== 'private';
+    for (const b of box.querySelectorAll<HTMLElement>('[data-filter]')) {
+      const on = b.dataset.filter === this.chatFilter;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-checked', String(on));
+    }
+    const detail = CHAT_FILTER_LABELS[this.chatFilter].detail;
+    $('menu-filter-detail').textContent = `${detail[0].toUpperCase()}${detail.slice(1)}. Anyone in the room can change this.`;
+  }
+
   private addChat(m: ChatMessage) {
     if (m.speaker && this.mutedPlayers.has(m.speaker)) return;
     const li = document.createElement('li');
@@ -270,6 +401,10 @@ export class RoomApp {
       li.innerHTML = `<span class="time">${time}</span>${escapeHtml(m.text)}`;
     } else {
       li.innerHTML = `<span class="time">${time}</span><span class="who" style="color:${colorCss(m.color)}">${escapeHtml(m.from)}:</span> ${escapeHtml(m.text)}`;
+      if (m.hidden) {
+        li.classList.add('caught');
+        li.insertAdjacentHTML('beforeend', ' <small class="only-you">(not sent: only you can see this)</small>');
+      }
       if (m.speaker && m.speaker !== this.alias) {
         // Tap someone else's message for Mute / Report.
         li.classList.add('reportable');
@@ -385,7 +520,8 @@ export class RoomApp {
     const priv = this.room.kind === 'private';
     $('btn-share').hidden = !priv;
     $('menu-room').textContent = priv ? `Private room ${this.room.code}. Share the invite link to bring friends.` : 'Public room.';
-    const path = priv ? `/r/${this.room.code}` : '/';
+    // Private rooms show their invite link; public games show the game's own page.
+    const path = priv ? `/r/${this.room.code}` : this.gameId ? `/${gameInfo(this.gameId).slug}` : '/';
     if (location.pathname !== path) history.replaceState(null, '', path + location.search);
   }
 
@@ -444,12 +580,29 @@ export class RoomApp {
       e.preventDefault();
       const input = $<HTMLInputElement>('chat-input');
       const text = input.value.trim();
-      if (text) this.net.send({ t: 'chat', text });
+      // Caught messages never leave the browser: Send stays greyed out with a reminder.
+      if (!text || Date.now() < this.chatPausedUntil || !checkChat(text, this.chatFilter).ok) {
+        this.updateChatInput();
+        return;
+      }
+      this.net.send({ t: 'chat', text });
       input.value = '';
+      this.updateChatInput();
       if (this.device.small) input.blur();
     };
     form.addEventListener('submit', submit);
     this.cleanups.push(() => form.removeEventListener('submit', submit));
+    const typed = () => this.updateChatInput();
+    $('chat-input').addEventListener('input', typed);
+    this.cleanups.push(() => $('chat-input').removeEventListener('input', typed));
+    const filterPick = (e: Event) => {
+      const mode = (e.target as HTMLElement).closest<HTMLElement>('[data-filter]')?.dataset.filter;
+      if (mode && mode !== this.chatFilter) this.net.send({ t: 'filter', mode: mode as ChatFilterMode });
+    };
+    $('menu-filter').addEventListener('click', filterPick);
+    this.cleanups.push(() => $('menu-filter').removeEventListener('click', filterPick));
+    this.renderFilterSetting();
+    this.updateChatInput();
 
     const keys = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -508,7 +661,7 @@ export class RoomApp {
   private async share() {
     const url = `${location.origin}/r/${this.room.code}`;
     const playing = this.gameId ? ` We're playing ${GAME_NAMES[this.gameId]}.` : '';
-    const data = { title: 'Tank You For Being A Friend', text: `Come hang out.${playing} Tap to join my room:`, url };
+    const data = { title: 'Games Drawer', text: `Come hang out.${playing} Tap to join my room:`, url };
     const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
     if (nav.share && (!nav.canShare || nav.canShare(data))) {
       try {
@@ -524,6 +677,46 @@ export class RoomApp {
     } catch {
       this.toast(`Invite link: ${url}`);
     }
+  }
+
+  // ------------------------------------------------------------------ controller
+
+  /** What the controller should stay inside: a prompt or panel on top, if one is open. */
+  private padScope(): HTMLElement | null {
+    const prompt = $('arena').querySelector<HTMLElement>('.voice-prompt');
+    if (prompt) return prompt;
+    if (!$('menu').hidden) return $('menu');
+    if (this.voicePanelOpen) return $('voice-panel');
+    return this.view?.padScope?.() ?? null;
+  }
+
+  /** A controller button went down. Menu always opens the menu; the rest go to what's on top. */
+  onPad(p: PadPress) {
+    const b = p.button;
+    if (b === 'menu') {
+      this.openMenu($('menu').hidden);
+      return;
+    }
+    const scope = this.padScope();
+    if (!scope && this.view?.onPad?.(p, true)) return;
+    const area = scope ?? $('game');
+    if (b === 'up' || b === 'down' || b === 'left' || b === 'right') {
+      // From the highlighted card if there is one; otherwise the first press lands on the first button.
+      moveFocus(area, b, scope ? undefined : (this.view?.padOrigin?.() ?? undefined));
+    } else if (b === 'a') {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && el !== document.body && area.contains(el)) el.click();
+      else moveFocus(area, 'down');
+    } else if (b === 'b') {
+      // Back: close whatever is open, or let go of the highlighted button.
+      if (!$('menu').hidden) this.openMenu(false);
+      else if (this.voicePanelOpen) $('btn-voice').click();
+      else (document.activeElement as HTMLElement | null)?.blur?.();
+    }
+  }
+
+  onPadRelease(b: PadButton) {
+    this.view?.onPad?.({ button: b, repeat: false, stick: false }, false);
   }
 
   private openMenu(open: boolean) {

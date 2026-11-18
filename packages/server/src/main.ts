@@ -1,8 +1,10 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isAdminPasswordHash } from './adminAuth';
 import { FileLog } from './eventlog';
-import { startGameServer } from './server';
-import type { GameConfig } from '@tank/shared';
+import { startGameServer, type Limits } from './server';
+import { isSlot, type GameConfig } from '@tank/shared';
 
 /**
  * Environment:
@@ -21,12 +23,32 @@ import type { GameConfig } from '@tank/shared';
  *                      turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp
  *   TURN_SECRET        shared secret (coturn static-auth-secret); players get expiring credentials
  *   TURN_TTL_SECONDS   how long each player's TURN credentials last (default 86400)
+ *   LIMITS             JSON overrides for the abuse limits in server.ts, e.g. {"privateRoomsPer10Min":50}
+ *   SLOT               a or b when two copies run side by side during a deploy (see deploy/README.md)
+ *   RELEASE            the build's git commit, reported by /healthz
+ *   DRAIN_MAX_MS       on SIGUSR2, finish games for at most this long, then exit (default 3 hours)
+ *   CLIENT_DIST, BLOCKLIST_PATH   file locations (defaults work in the repo and in a release bundle)
+ *   PUZZLE_DIR         where jigsaw puzzles are saved (default ./data/puzzles)
+ *   ADMIN_PASSWORD_HASH  turns on /admin; make it with `npm run admin-password` (never the
+ *                      password itself). In development it's read from .env.local (git ignores it).
+ *   ADMIN_LOG_DIRS     comma-separated log folders /admin adds up (default: LOG_DIR)
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '../../..');
+// A release bundle (npm run release) puts server.mjs next to client/ and blocklist.txt.
+const bundled = fs.existsSync(path.join(here, 'client', 'index.html'));
+const root = bundled ? here : path.resolve(here, '../../..');
 const env = process.env;
+// Local settings that must stay out of the repo (the admin password's hash). Production gets
+// them from systemd's environment files instead.
+if (env.NODE_ENV !== 'production' && fs.existsSync(path.join(root, '.env.local'))) process.loadEnvFile(path.join(root, '.env.local'));
 const production = env.NODE_ENV === 'production';
-const log = new FileLog(env.LOG_DIR ?? path.join(root, 'logs'));
+const logDir = env.LOG_DIR ?? path.join(root, 'logs');
+const log = new FileLog(logDir);
+const adminPasswordHash = env.ADMIN_PASSWORD_HASH?.trim() || undefined;
+if (adminPasswordHash && !isAdminPasswordHash(adminPasswordHash)) {
+  console.error('ADMIN_PASSWORD_HASH is not a hash from `npm run admin-password`.');
+  process.exit(1);
+}
 
 let gameConfig: Partial<GameConfig> | undefined;
 if (env.GAME_CONFIG) {
@@ -37,6 +59,18 @@ if (env.GAME_CONFIG) {
     console.error('GAME_CONFIG is not valid JSON.');
     process.exit(1);
   }
+}
+let limits: Partial<Limits> = {};
+try {
+  limits = env.LIMITS ? JSON.parse(env.LIMITS) : {};
+} catch {
+  console.error('LIMITS is not valid JSON.');
+  process.exit(1);
+}
+const slot = env.SLOT || undefined;
+if (slot !== undefined && !isSlot(slot)) {
+  console.error('SLOT must be a or b.');
+  process.exit(1);
 }
 const turnUrls = (env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 if (turnUrls.length && !env.TURN_SECRET) {
@@ -50,9 +84,9 @@ const server = await startGameServer({
   port,
   host: env.HOST ?? '0.0.0.0',
   production,
-  clientDist: path.join(root, 'packages/client/dist'),
+  clientDist: env.CLIENT_DIST ?? (bundled ? path.join(root, 'client') : path.join(root, 'packages/client/dist')),
   log,
-  blocklistPath: path.join(root, 'packages/server/blocklist.txt'),
+  blocklistPath: env.BLOCKLIST_PATH ?? (bundled ? path.join(root, 'blocklist.txt') : path.join(root, 'packages/server/blocklist.txt')),
   emptyRoomMs: Number(env.EMPTY_ROOM_MS ?? 60_000),
   publicReclaimMs: Number(env.RECLAIM_MS ?? 60_000),
   maxPublicRooms: Number(env.MAX_PUBLIC_ROOMS ?? 10),
@@ -64,8 +98,14 @@ const server = await startGameServer({
   iceServers: env.VOICE_ICE_SERVERS ? JSON.parse(env.VOICE_ICE_SERVERS) : undefined,
   turn,
   gameConfig,
-  // Local testing opens lots of tabs from one machine.
-  limits: production ? {} : { maxConnectionsPerIp: 40, connectsPerMinute: 200 },
+  slot,
+  release: env.RELEASE,
+  puzzleDir: env.PUZZLE_DIR ?? path.join(bundled ? process.cwd() : root, 'data', 'puzzles'),
+  adminPasswordHash,
+  adminLogDirs: env.ADMIN_LOG_DIRS ? env.ADMIN_LOG_DIRS.split(',').map((s) => s.trim()).filter(Boolean) : [logDir],
+  // Local testing opens lots of tabs (and phones, which reach the server through Vite as the same
+  // address) from one machine.
+  limits: { ...(production ? {} : { maxConnectionsPerIp: 40, connectsPerMinute: 200, privateRoomsPer10Min: 100 }), ...limits },
 }).catch((err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`Port ${port} is already in use. Is another copy of the game server running? (Set GAME_PORT to use a different port.)`);
@@ -76,12 +116,29 @@ const server = await startGameServer({
   process.exit(1);
 });
 
-console.log(`Tank server listening on port ${server.port} (${production ? 'production' : 'development'})`);
+console.log(
+  `Games Drawer server listening on port ${server.port} (${production ? 'production' : 'development'}${slot ? `, slot ${slot}` : ''}${env.RELEASE ? `, release ${env.RELEASE}` : ''})`,
+);
+console.log(adminPasswordHash ? 'Admin page: /admin' : 'Admin page off (no ADMIN_PASSWORD_HASH).');
+log.event('server_start', { release: env.RELEASE ?? 'dev', slot: slot ?? null });
 
-for (const sig of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(sig, async () => {
-    await server.close();
-    log.close();
-    process.exit(0);
+let stopping = false;
+async function stop(code = 0) {
+  if (stopping) return;
+  stopping = true;
+  await server.close();
+  log.close();
+  process.exit(code);
+}
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => void stop());
+
+// Deploys send SIGUSR2 to the old copy once the new one takes new rooms: games in progress play
+// out, then it exits by itself. (Windows has no SIGUSR2; deploys only run on Linux.)
+if (process.platform !== 'win32') {
+  process.on('SIGUSR2', async () => {
+    console.log('Draining: finishing games in progress, starting no new ones.');
+    await server.drain(Number(env.DRAIN_MAX_MS ?? 3 * 60 * 60 * 1000));
+    console.log('Drained.');
+    await stop();
   });
 }

@@ -1,6 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { gameForPath } from '@tank/shared';
+
+const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Title and description for a page address, so a shared link previews as what it is:
+ * a game's page, or an invite to someone's room. Null keeps the home page's.
+ */
+export function pageMeta(pathname: string): { title: string; description: string } | null {
+  const game = gameForPath(pathname);
+  if (game) return { title: `${game.title} · Games Drawer`, description: game.tagline };
+  if (/^\/r\/[A-Za-z]+\/?$/.test(pathname)) return { title: 'Join my room · Games Drawer', description: 'Come hang out: little games, chat and voice. Tap to join.' };
+  return null;
+}
+
+/** Put a page's title and description into the HTML (the <title> and the link-preview tags). */
+export function withPageMeta(html: string, meta: { title: string; description: string } | null): string {
+  if (!meta) return html;
+  const t = escapeAttr(meta.title);
+  const d = escapeAttr(meta.description);
+  return html
+    .replace(/<title>[^<]*<\/title>/, `<title>${t}</title>`)
+    .replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${t}$2`)
+    .replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${d}$2`)
+    .replace(/(<meta name="description" content=")[^"]*(")/, `$1${d}$2`);
+}
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -8,6 +34,9 @@ const TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
@@ -66,6 +95,12 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
   } catch {
     stat = null;
   }
+  // A missing file with an extension (a build asset or a sound) is a real 404. Answering with the
+  // page instead would hand a browser HTML where it expects JavaScript, e.g. mid-deploy.
+  if (!stat && path.extname(decoded) !== '') {
+    res.writeHead(404, { 'content-type': 'text/plain', 'cache-control': 'no-store' }).end('Not found');
+    return;
+  }
   if (!stat || stat.isDirectory()) file = path.join(root, 'index.html');
   if (!fs.existsSync(file)) {
     res.writeHead(404, { 'content-type': 'text/plain' }).end('Client not built. Run npm run build.');
@@ -78,7 +113,7 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
   if (path.basename(file) === 'index.html') {
     // Link previews (iMessage and friends) need an absolute image URL; fill in our address.
     const host = req.headers.host && /^[A-Za-z0-9.:[\]-]{1,255}$/.test(req.headers.host) ? req.headers.host : null;
-    let html = fs.readFileSync(file, 'utf8');
+    let html = withPageMeta(fs.readFileSync(file, 'utf8'), pageMeta(decoded));
     if (host) {
       const local = /^(localhost|127\.|\[::1\])/.test(host);
       html = html.replace('content="/og.png"', `content="${local ? 'http' : 'https'}://${host}/og.png"`);

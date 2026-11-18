@@ -1,3 +1,8 @@
-# Extra blocked words or phrases for room chat and player names, one per line.
-# Matching ignores case, spaces, punctuation, accents and common leetspeak (0->o, 3->e, @->a...).
-# The obscenity library's English profanity and slur list already applies; add anything it misses here.
+# Extra blocked words or phrases, one per line: blocked in chat and names in every room, whatever
+# the room's filter setting. Matching ignores case, spaces, punctuation, accents and common
+# leetspeak (0->o, 3->e, @->a...).
+#
+# This file is read by the server only, so the browser won't grey out Send for these; the
+# sender gets the "only you can see this" note instead. For words that should be checked in
+# the browser too, and for the allow list of harmless words (like "cockpit"), edit
+# packages/shared/src/chatFilter.ts.

@@ -13,13 +13,16 @@ import {
   type GameConfig,
   type VoiceSettings,
   type ServerMessage,
+  type Slot,
 } from '@tank/shared';
 import { ChatModerator } from './chat';
 import type { LogSink } from './eventlog';
 import { clientIp, originAllowed, SessionSigner, TokenBucket, WindowCounter } from './guard';
 import { RoomManager } from './manager';
 import type { Conn, Room, TurnSettings } from './room';
+import { PuzzleStore } from './puzzleStore';
 import { serveStatic } from './static';
+import { createAdmin } from './admin';
 
 export interface Limits {
   /** Open WebSockets per IP. */
@@ -82,18 +85,32 @@ export interface ServerOptions {
   gameConfig?: Partial<GameConfig>;
   /** Run the tick loop (tests can drive ticks by hand). */
   autoTick?: boolean;
+  /** Deploy slot (a or b) when two copies run side by side; room codes then map to it. */
+  slot?: Slot;
+  /** Which build this is (the git commit), reported by /healthz. */
+  release?: string;
+  /** Folder for jigsaw saves (kept in memory if not given). */
+  puzzleDir?: string;
+  /** scrypt hash of the admin page's password (see adminAuth.ts); no admin page without it. */
+  adminPasswordHash?: string;
+  /** Log folders the admin page adds up (default: none, so empty numbers). */
+  adminLogDirs?: string[];
 }
 
 export interface GameServer {
   port: number;
   manager: RoomManager;
   counters: Record<string, number | string>;
+  /** Stop starting games, then resolve once the last room has closed (or after maxMs). */
+  drain(maxMs: number): Promise<void>;
   close(): Promise<void>;
 }
 
 export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   const limits: Limits = { ...DEFAULT_LIMITS, ...o.limits };
   const signer = new SessionSigner(o.sessionSecret);
+  const puzzles = new PuzzleStore(o.puzzleDir ?? null);
+  puzzles.sweep(Date.now());
   const manager = new RoomManager({
     now: () => Date.now(),
     log: o.log,
@@ -102,10 +119,12 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     publicReclaimMs: o.publicReclaimMs,
     maxPublicRooms: o.maxPublicRooms,
     maxPrivateRooms: o.maxPrivateRooms,
+    slot: o.slot,
     chatHistorySize: 10,
     iceServers: o.iceServers ?? DEFAULT_ICE_SERVERS,
     turn: o.turn,
     cfg: o.gameConfig,
+    puzzles,
   });
   const counters = {
     connections: 0,
@@ -124,6 +143,13 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   const connects = new WindowCounter(60_000);
   const privateCreates = new WindowCounter(10 * 60_000);
   const failedJoins = new WindowCounter(5 * 60_000);
+  const admin = createAdmin({
+    passwordHash: o.adminPasswordHash,
+    logDirs: o.adminLogDirs ?? [],
+    trustProxy: o.trustProxy,
+    secureCookie: o.production,
+    log: o.log,
+  });
 
   // ---------------------------------------------------------------- HTTP
 
@@ -131,7 +157,10 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
       if (url.pathname === '/healthz') {
-        res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
+        // Deploys check this to know the new copy is up and which build it is.
+        res
+          .writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+          .end(JSON.stringify({ ok: true, release: o.release ?? 'dev', slot: o.slot ?? null, draining: manager.draining }));
         return;
       }
       if (url.pathname === '/stats') {
@@ -140,6 +169,13 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           return;
         }
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(stats(), null, 2));
+        return;
+      }
+      if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+        admin(req, res, url).catch(() => {
+          if (!res.headersSent) res.writeHead(500).end();
+          else res.destroy();
+        });
         return;
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -161,8 +197,15 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   server.requestTimeout = 15_000;
 
   function stats() {
+    let players = 0;
+    for (const r of manager.rooms.values()) players += r.humansConnected();
     return {
       ...counters,
+      release: o.release ?? 'dev',
+      slot: o.slot ?? null,
+      draining: manager.draining,
+      roomCount: manager.rooms.size,
+      players,
       rejectedAtCapacity: manager.rejectedAtCapacity,
       roomErrors: manager.roomErrors,
       memoryMb: Math.round(process.memoryUsage().rss / 1e6),
@@ -377,6 +420,20 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     port,
     manager,
     counters,
+    drain: (maxMs: number) =>
+      new Promise<void>((resolve) => {
+        manager.draining = true;
+        o.log.event('drain_start', { rooms: manager.rooms.size });
+        const deadline = Date.now() + maxMs;
+        const check = setInterval(() => {
+          if (manager.rooms.size === 0 || Date.now() >= deadline) {
+            clearInterval(check);
+            o.log.event('drain_done', { roomsLeft: manager.rooms.size });
+            resolve();
+          }
+        }, 1000);
+        timers.push(check);
+      }),
     close: () =>
       new Promise<void>((resolve) => {
         for (const t of timers) clearInterval(t);

@@ -5,6 +5,15 @@
   inset: 0;
 }
 
+/* Keep a view's own layering (like the stacked cards in a hand) inside it, so it never lands on
+   top of the menu, chat or toasts. (Tanks keeps its own: its rotate prompt covers the toolbar.) */
+.lobby-view,
+.hearts-view,
+.jigsaw-view {
+  isolation: isolate;
+  z-index: 0;
+}
+
 .landing-hint {
   margin-top: -4px;
 }
@@ -21,7 +30,10 @@
 
 /* Outside the battlefield the toolbar moves to the top right, out of the way of cards. */
 .game[data-view='lobby'] .toolbar,
-.game[data-view='hearts'] .toolbar {
+.game[data-view='hearts'] .toolbar,
+.game[data-view='spades'] .toolbar,
+.game[data-view='dominoes'] .toolbar,
+.game[data-view='jigsaw'] .toolbar {
   top: calc(8px + var(--safe-t));
   bottom: auto;
   left: auto;
@@ -29,13 +41,19 @@
   transform: none;
 }
 
-.game[data-view='hearts'] .toasts {
+.game[data-view='hearts'] .toasts,
+.game[data-view='spades'] .toasts,
+.game[data-view='dominoes'] .toasts,
+.game[data-view='jigsaw'] .toasts {
   bottom: auto;
   top: 34%;
 }
 
 .game[data-view='lobby'] .arena,
-.game[data-view='hearts'] .arena {
+.game[data-view='hearts'] .arena,
+.game[data-view='spades'] .arena,
+.game[data-view='dominoes'] .arena,
+.game[data-view='jigsaw'] .arena {
   background: radial-gradient(ellipse at 50% 40%, #233089 0%, var(--navy) 70%);
 }
 
@@ -118,8 +136,50 @@
   font-weight: 600;
 }
 
+/* Out of voice chat, in the lobby: hard to miss, and one tap to join. */
 .voice-cta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
   margin: 4px 0;
+  padding: 10px 12px;
+  border: 2px solid #ff5a6a;
+  border-radius: 14px;
+  background: rgba(215, 38, 61, 0.22);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.voice-cta b {
+  display: block;
+}
+
+.voice-cta small {
+  display: block;
+  color: #ffd0d5;
+  font-weight: 600;
+}
+
+.voice-cta .vc-icon {
+  display: flex;
+  color: #ff7b88;
+}
+
+.voice-cta .vc-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.voice-cta .vc-join {
+  margin-left: auto;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #d7263d;
+  color: #fff;
+  font-weight: 800;
 }
 
 .game-cards {
@@ -315,8 +375,76 @@
 }
 
 /* Nothing is in the middle while passing, so the status and Pass button get the space. */
-.ht[data-phase='passing'] .ht-trick {
+.ht[data-phase='passing'] .ht-trick,
+.ht[data-phase='bidding'] .ht-trick {
   display: none;
+}
+
+/* ------------------------------------------------------------------ spades (on the hearts table) */
+
+.sp-score {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.sp-score b {
+  color: var(--text);
+}
+
+.sp-score small {
+  margin-left: 2px;
+}
+
+.sp-bids {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(36px, 52px));
+  gap: 6px;
+  justify-content: center;
+}
+
+.sp-bids .btn {
+  padding: 8px 0;
+  font-size: 16px;
+}
+
+.sp-bids .btn:first-child {
+  grid-column: span 2;
+}
+
+.sp-bid {
+  color: var(--accent);
+}
+
+.sp-bid.nil {
+  color: #6dff9a;
+}
+
+.sp-bid.pending {
+  color: var(--muted);
+}
+
+.sp-partner {
+  margin-left: 4px;
+  color: #9fb2ff;
+}
+
+.ht-seat.sp-us {
+  background: rgba(40, 60, 150, 0.6);
+}
+
+.sp-result {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sp-result .neg {
+  color: #ff7a8a;
 }
 
 .ht-slot {
@@ -568,6 +696,7 @@
 
 .ht-panel .actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
   margin-top: 10px;
@@ -576,6 +705,23 @@
 /* Phones held upright: the other three players sit in a row along the top, so the trick gets
    the full width, and the cards get bigger. */
 @media (max-width: 600px) {
+  /* Score tables: four names side by side wrap instead of running off the edge. */
+  .ht-table th {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    vertical-align: bottom;
+  }
+
+  .ht-table th .dot {
+    display: none;
+  }
+
+  .ht-table th,
+  .ht-table td {
+    padding: 4px 3px;
+  }
+
   .hearts-view {
     --cw: clamp(44px, 14.5vw, 64px);
     --tw: clamp(48px, 16vw, 76px);
@@ -709,6 +855,763 @@
   }
 
   .ht-status {
+    font-size: 14px;
+  }
+
+  /* Spades: the team scores move to the empty top-left corner, leaving the middle to the trick. */
+  .sp-score {
+    position: absolute;
+    top: calc(10px + var(--safe-t));
+    left: calc(12px + var(--safe-l));
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    font-size: 13px;
+  }
+}
+
+/* ------------------------------------------------------------------ voice welcome prompt */
+
+.voice-prompt {
+  z-index: 60;
+  background: rgba(8, 10, 36, 0.7);
+}
+
+.voice-prompt-card {
+  width: min(420px, 100%);
+  text-align: center;
+}
+
+.voice-prompt-card h2 {
+  margin: 4px 0 8px;
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+.voice-prompt-card p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.vp-icon {
+  font-size: 40px;
+}
+
+.vp-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+@media (max-height: 460px) {
+  .vp-icon {
+    display: none;
+  }
+
+  .voice-prompt-card h2 {
+    font-size: 21px;
+  }
+
+  .vp-actions {
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+
+/* ------------------------------------------------------------------ chat: send button and filter */
+
+.chat-row {
+  display: flex;
+  gap: 6px;
+}
+
+.chat-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-send {
+  padding: 8px 14px;
+  font-size: 15px;
+}
+
+.chat-send:disabled {
+  background: var(--navy-3);
+  color: var(--muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+#chat-input.caught {
+  border-color: #ff7a8a;
+}
+
+.chat-hint {
+  margin: 6px 2px 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffb3bd;
+}
+
+.chat-log li.caught {
+  opacity: 0.6;
+}
+
+.chat-log .only-you {
+  color: #ffb3bd;
+  font-style: italic;
+}
+
+.menu-filter {
+  margin: 10px 0;
+}
+
+.menu-filter-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.seg {
+  display: flex;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--navy-3);
+}
+
+.seg button {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  background: var(--navy);
+  color: var(--text);
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.seg button + button {
+  border-left: 2px solid var(--navy-3);
+}
+
+.seg button.active {
+  background: var(--accent);
+  color: #3a1d00;
+}
+
+.menu-filter .hint {
+  text-align: left;
+  margin: 6px 0 0;
+}
+
+.lobby-filter {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+/* ------------------------------------------------------------------ dominoes (on the card-table layout) */
+
+.dominoes-view {
+  /* Tiles in your hand: --dw wide, twice as tall. The card table's hand row sizes from --ch. */
+  --dw: clamp(30px, 8.5vw, 46px);
+  --ch: calc(var(--dw) * 2);
+}
+
+.dominoes-view .ht-center {
+  justify-content: stretch;
+}
+
+.dm-board {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.dm-layout {
+  position: absolute;
+  inset: 0;
+}
+
+.dm-tile {
+  position: absolute;
+  padding: 0;
+  border: none;
+  background: none;
+  line-height: 0;
+}
+
+.dm-tile svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+.dm-face {
+  fill: #fffdf6;
+  stroke: rgba(0, 0, 0, 0.25);
+  stroke-width: 2;
+}
+
+.dm-tile line,
+.dm-ghost line {
+  stroke: #7d7a70;
+  stroke-width: 4;
+}
+
+.dm-pips {
+  fill: #1b1b28;
+}
+
+.dm-placed.dm-last .dm-face {
+  fill: #fff4c4;
+}
+
+.dm-ghost {
+  position: absolute;
+  padding: 0;
+  border: 2px dashed #6dff9a;
+  border-radius: 10px;
+  background: rgba(109, 255, 154, 0.12);
+  line-height: 0;
+  cursor: pointer;
+  animation: dm-glow 1.2s ease-in-out infinite alternate;
+}
+
+.dm-ghost svg {
+  width: 100%;
+  height: 100%;
+  opacity: 0.45;
+}
+
+.dm-ghost.pad-cursor,
+.dm-ghost:hover {
+  background: rgba(109, 255, 154, 0.3);
+}
+
+@keyframes dm-glow {
+  from {
+    box-shadow: 0 0 0 0 rgba(109, 255, 154, 0.2);
+  }
+  to {
+    box-shadow: 0 0 14px 2px rgba(109, 255, 154, 0.55);
+  }
+}
+
+.dm-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.dm-pop {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, 0);
+  font-family: var(--display);
+  font-size: 28px;
+  color: var(--accent);
+  text-shadow: 0 3px 0 #b5561f, 0 6px 14px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.dm-pop.go {
+  animation: dm-pop 1.5s ease-out forwards;
+}
+
+@keyframes dm-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.8);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -40px) scale(1);
+  }
+}
+
+.dm-info {
+  min-height: 1.2em;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+}
+
+.dm-hand-tiles {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: clamp(3px, 1vw, 8px);
+  height: 100%;
+  padding-top: 10px;
+}
+
+.dm-mine {
+  position: relative;
+  flex: 0 1 var(--dw);
+  min-width: 18px;
+  aspect-ratio: 1 / 2;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.dm-mine .dm-face,
+.dm-mine line,
+.dm-mine .dm-pips {
+  transition:
+    fill 0.12s ease,
+    stroke 0.12s ease;
+}
+
+/* Tiles you can't play are greyed by recolouring the tile itself, not with a CSS filter: a filter
+   here, on top of the tile's drop shadow, makes Safari on iPad draw the tile in the wrong place,
+   cut off. These are the colours brightness(0.6) saturate(0.6) gave. */
+.dm-hand.my-turn .dm-mine.illegal .dm-face {
+  fill: #989795;
+}
+
+.dm-hand.my-turn .dm-mine.illegal line {
+  stroke: #4a4944;
+}
+
+.dm-hand.my-turn .dm-mine.illegal .dm-pips {
+  fill: #111119;
+}
+
+.dm-mine.raised {
+  transform: translateY(-12px);
+}
+
+.dm-mine.raised svg {
+  filter: drop-shadow(0 0 0 #ffcc33) drop-shadow(0 0 4px #ffcc33);
+}
+
+body.pad-mode .dm-mine.pad-cursor {
+  transform: translateY(-14px);
+  outline: 3px solid #6dff9a;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.dm-result {
+  text-align: center;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.dm-wait {
+  text-align: center;
+  font-weight: 800;
+  color: var(--accent);
+  margin: 4px 0 0;
+}
+
+.domino-icon {
+  vertical-align: middle;
+}
+
+@media (max-height: 460px) {
+  .dominoes-view {
+    --dw: clamp(22px, 8vh, 36px);
+  }
+
+  .dm-info {
+    font-size: 12px;
+  }
+}
+
+/* ------------------------------------------------------------------ jigsaw */
+
+.jigsaw-view .pz-setup {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  touch-action: pan-y;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  /* No bottom padding here: the sticky Start bar would stop short of the screen's edge. */
+  padding: calc(64px + var(--safe-t)) 16px 0;
+}
+
+.pz-setup-card {
+  width: min(640px, 100%);
+  margin-bottom: calc(16px + var(--safe-b));
+  background: var(--panel);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(10, 10, 40, 0.5);
+}
+
+.pz-setup-card h2,
+.pz-setup-card h3,
+.pz-setup-card h4 {
+  font-family: var(--display);
+  font-weight: 400;
+  margin: 0;
+}
+
+.pz-setup-card h4 {
+  font-size: 17px;
+  margin: 14px 0 8px;
+  color: var(--muted);
+}
+
+.pz-setup-card h2 {
+  font-size: 30px;
+}
+
+.pz-setup-card h3 {
+  font-size: 20px;
+  margin: 18px 0 10px;
+}
+
+.pz-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 10px;
+}
+
+.pz-image {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 4px 6px;
+  background: var(--navy);
+  border: 3px solid transparent;
+  border-radius: 12px;
+  color: var(--text);
+  font: 700 13px var(--body);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pz-image img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.pz-image span {
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pz-image.picked {
+  border-color: var(--accent);
+}
+
+.pz-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pz-btn {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: var(--navy-2);
+  color: var(--text);
+  font: 800 15px var(--body);
+  cursor: pointer;
+}
+
+.pz-btn.picked,
+.pz-btn[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--navy);
+}
+
+/* Start stays in reach while you scroll through the pictures. */
+.pz-start-bar {
+  position: sticky;
+  bottom: 0;
+  margin: 12px -20px -20px;
+  padding: 10px 20px 14px;
+  background: #161c50;
+  border-top: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 0 20px 20px;
+}
+
+.pz-start-bar .pz-grid {
+  margin: 0 0 8px;
+}
+
+.pz-start {
+  width: 100%;
+}
+
+.pz-setup-card .hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 10px 0 0;
+}
+
+.pz-saves {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pz-saves li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--navy);
+  border-radius: 12px;
+  padding: 6px 8px;
+}
+
+.pz-saves img {
+  width: 64px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.pz-saves span {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pz-saves b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pz-saves small {
+  color: var(--muted);
+}
+
+.pz-forget {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: 700 16px var(--body);
+  cursor: pointer;
+}
+
+.pz-forget:hover,
+.pz-forget:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.pz-play {
+  position: absolute;
+  inset: 0;
+}
+
+.pz-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  display: block;
+}
+
+.pz-status {
+  position: absolute;
+  top: calc(12px + var(--safe-t));
+  left: calc(12px + var(--safe-l));
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 700;
+  max-width: calc(100% - 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.pz-status b {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.pz-status span {
+  color: var(--muted);
+}
+
+.pz-tools {
+  position: absolute;
+  left: 50%;
+  bottom: calc(12px + var(--safe-b));
+  transform: translateX(-50%);
+  width: max-content;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: var(--panel);
+  border-radius: 999px;
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+}
+
+.pz-tools .pz-btn {
+  flex-shrink: 0;
+}
+
+.pz-preview {
+  position: absolute;
+  right: calc(12px + var(--safe-r));
+  bottom: calc(72px + var(--safe-b));
+  width: min(320px, 40vw);
+  border-radius: 10px;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.pz-loading,
+.pz-done {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 14px 20px;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+.pz-done {
+  top: calc(64px + var(--safe-t));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100% - 24px);
+}
+
+/* The magnifier above a finger dragging a piece (the view sets its size and place). */
+.pz-loupe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.9),
+    0 10px 28px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.6;
+  visibility: hidden;
+  transition:
+    opacity 0.12s,
+    scale 0.12s,
+    visibility 0s 0.12s;
+}
+
+.pz-loupe.on {
+  opacity: 1;
+  scale: 1;
+  visibility: visible;
+  transition:
+    opacity 0.12s,
+    scale 0.12s;
+}
+
+.pz-done b {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 24px;
+  color: var(--accent);
+}
+
+.pz-btn svg {
+  vertical-align: -4px;
+}
+
+/* Pinch zooms on a touch screen. */
+@media (pointer: coarse) {
+  .pz-zoom {
+    display: none;
+  }
+}
+
+/* The magnifier's button is only for touch screens. */
+.pz-touch {
+  display: none;
+}
+
+@media (any-pointer: coarse) {
+  .pz-touch {
+    display: inline-block;
+  }
+}
+
+@media (max-width: 640px) {
+  .pz-wide {
+    display: none;
+  }
+
+  .pz-images {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .pz-image {
+    font-size: 11px;
+    padding: 3px 3px 4px;
+    border-width: 2px;
+  }
+
+  .pz-status {
+    max-width: calc(100% - 210px);
+    font-size: 13px;
+  }
+
+  .pz-status span {
+    display: none;
+  }
+
+  .pz-btn {
+    padding: 6px 10px;
     font-size: 14px;
   }
 }

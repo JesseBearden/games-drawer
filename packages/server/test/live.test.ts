@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { PROTOCOL_VERSION, type RoomRequest, type ServerMessage } from '@tank/shared';
+import { PROTOCOL_VERSION, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH, slotOfCode, type RoomRequest, type ServerMessage } from '@tank/shared';
 import { MemoryLog } from '../src/eventlog';
 import { startGameServer, type GameServer, type Limits, type ServerOptions } from '../src/server';
 
@@ -329,6 +329,25 @@ describe('live server: HTTP in production mode', () => {
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
+  it('answers a missing build file with 404, but invite links with the page', async () => {
+    const missing = await fetch(`${base}/assets/app-OLDHASH.js`);
+    expect(missing.status).toBe(404);
+    expect(await missing.text()).not.toContain('<title>');
+    expect((await fetch(`${base}/sfx/nope.wav`)).status).toBe(404);
+    const invite = await fetch(`${base}/r/BCDFG`);
+    expect(invite.status).toBe(200);
+    expect(await invite.text()).toContain('<title>Join my room · Games Drawer</title>');
+  });
+
+  it('gives each game page its own title, so a shared link previews as that game', async () => {
+    const hearts = await (await fetch(`${base}/hearts`)).text();
+    expect(hearts).toContain('<title>Hearts · Games Drawer</title>');
+    const alias = await (await fetch(`${base}/tankyouforbeingafriend`)).text();
+    expect(alias).toContain('<title>Tank You For Being A Friend · Games Drawer</title>');
+    expect(await (await fetch(`${base}/`)).text()).toContain('<title>game</title>');
+    expect(await (await fetch(`${base}/no-such-game`)).text()).toContain('<title>game</title>');
+  });
+
   it('serves sounds as audio, cached for a day', async () => {
     const res = await fetch(`${base}/sfx/boom.wav`);
     expect(res.headers.get('content-type')).toBe('audio/wav');
@@ -337,7 +356,8 @@ describe('live server: HTTP in production mode', () => {
 
   it('invite links fall back to the game page', async () => {
     const res = await fetch(`${base}/r/BCDFG`);
-    expect(await res.text()).toContain('<title>game</title>');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('og:image');
   });
 
   it('fills in an absolute link-preview image address', async () => {
@@ -388,5 +408,80 @@ describe('live server: HTTP in production mode', () => {
     const body = await ok.json();
     expect(body).toHaveProperty('rooms');
     expect(JSON.stringify(body)).not.toMatch(/session|127\.0\.0\.1/);
+  });
+});
+
+describe('live server: deploy slots and draining', () => {
+  it('reports its release and slot on /healthz', async () => {
+    const s = await startWith({}, { slot: 'b', release: 'abc123' });
+    try {
+      const res = await fetch(`http://127.0.0.1:${s.port}/healthz`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, release: 'abc123', slot: 'b', draining: false });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('only makes room codes for its own slot', async () => {
+    const s = await startWith({ privateRoomsPer10Min: 100, maxConnectionsPerIp: 100, connectsPerMinute: 1000 }, { slot: 'a', maxPrivateRooms: 30 });
+    try {
+      for (let i = 0; i < 12; i++) {
+        const { c, w } = await joined(s.port, { kind: 'create-private' });
+        expect(slotOfCode(w.room.code)).toBe('a');
+        c.ws.close();
+      }
+      const { c, w } = await joined(s.port);
+      expect(slotOfCode(w.room.code)).toBe('a');
+      c.ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('while draining, keeps games going but starts no new ones, then finishes', async () => {
+    const s = await startWith({}, { slot: 'a', emptyRoomMs: 300 });
+    try {
+      const host = await joined(s.port, { kind: 'create-private' });
+      const code = host.w.room.code;
+      const drained = s.drain(60_000);
+      expect(((await (await fetch(`http://127.0.0.1:${s.port}/healthz`)).json()) as { draining: boolean }).draining).toBe(true);
+
+      // A friend can still join the room in progress...
+      const friend = await joined(s.port, { kind: 'private', code });
+      expect(friend.w.room.code).toBe(code);
+      // ...but nobody can start a new room or public game here.
+      for (const room of [{ kind: 'create-private' }, { kind: 'public' }] as RoomRequest[]) {
+        const c = connect(s.port);
+        await c.opened;
+        hello(c, room);
+        const err = await c.waitFor('error');
+        expect(err.code).toBe('capacity');
+        c.ws.close();
+      }
+
+      // Once everyone leaves, the room closes and the drain finishes.
+      host.c.ws.close();
+      friend.c.ws.close();
+      await drained;
+      expect(s.manager.rooms.size).toBe(0);
+    } finally {
+      await s.close();
+    }
+  }, 15_000);
+});
+
+describe('deploy slots', () => {
+  it('splits room codes evenly between the two slots', () => {
+    const counts = { a: 0, b: 0 };
+    const alphabet = ROOM_CODE_ALPHABET;
+    for (let i = 0; i < 4000; i++) {
+      let code = '';
+      for (let j = 0; j < ROOM_CODE_LENGTH; j++) code += alphabet[(i * 7 + j * 13 + ((i * j) % 17)) % alphabet.length];
+      counts[slotOfCode(code)]++;
+    }
+    expect(counts.a / 4000).toBeGreaterThan(0.4);
+    expect(counts.b / 4000).toBeGreaterThan(0.4);
+    expect(slotOfCode('BCDFG')).toBe(slotOfCode('BCDFG'));
   });
 });

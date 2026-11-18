@@ -1,13 +1,12 @@
-import type { MemberInfo } from '@tank/shared';
+import { canPlayPrivately, CHAT_FILTER_LABELS, GAMES, isGameId, type MemberInfo } from '@tank/shared';
+import { MIC_OFF_SVG } from './icons';
 import { colorCss, escapeHtml } from './state';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const GAMES = [
-  { id: 'tanks', name: 'Tanks', icon: '💥', blurb: 'Drop in by helicopter and blow each other up. Bots fill the empty spots.', players: '1–4 players' },
-  { id: 'hearts', name: 'Hearts', icon: '♥️', blurb: 'The classic trick-taking card game. Avoid hearts and the queen of spades.', players: '4 seats, bots fill in' },
-] as const;
+/** Games a private room can pick: everything not switched off (see games.ts). */
+const pickable = () => GAMES.filter((g) => canPlayPrivately(g.id));
 
 /** The private room's home: who's here, voice, and a game picker anyone can use. */
 export class LobbyView implements View {
@@ -20,6 +19,10 @@ export class LobbyView implements View {
   constructor(private shell: ShellApi) {
     this.el.hidden = false;
     this.el.addEventListener('click', this.onClick);
+    this.render();
+  }
+
+  onChatFilter() {
     this.render();
   }
 
@@ -44,12 +47,20 @@ export class LobbyView implements View {
       html += `<li data-alias="${escapeHtml(m.id)}" class="${this.speaking.has(m.id) ? 'speaking' : ''}"><span class="dot" style="background:${colorCss(m.color)}"></span>${escapeHtml(m.name)}${you}${away}</li>`;
     }
     html += '</ul>';
+    const filter = CHAT_FILTER_LABELS[s.chatFilter];
+    html += `<p class="lobby-filter">Chat filter: <b>${filter.name}</b> (${filter.detail}). Change it in the ☰ menu.</p>`;
     if (s.voice.available && !s.voice.inVoice) {
-      html += '<button class="btn btn-secondary voice-cta" data-act="voice" type="button">🎙️ Join voice chat</button>';
+      const why =
+        s.voice.micProblem === 'blocked'
+          ? 'Your browser blocked the microphone. Allow it for this site in the browser’s settings, then tap here.'
+          : s.voice.micProblem === 'missing'
+            ? 'No microphone found. Plug one in, then tap here.'
+            : 'Everyone here can talk while you play.';
+      html += `<button class="voice-cta" data-act="voice" type="button"><span class="vc-icon">${MIC_OFF_SVG}</span><span><b>You’re not in voice chat</b><small>${why}</small></span><span class="vc-join">Join</span></button>`;
     }
     html += '<h3>Pick a game</h3><div class="game-cards">';
-    for (const g of GAMES) {
-      html += `<button class="game-card" data-game="${g.id}" type="button"><span class="game-icon">${g.icon}</span><span class="game-name">${g.name}</span><span class="game-blurb">${g.blurb}</span><span class="game-players">${g.players}</span></button>`;
+    for (const g of pickable()) {
+      html += `<button class="game-card" data-game="${g.id}" type="button"><span class="game-icon">${g.icon}</span><span class="game-name">${g.name}${g.underConstruction ? ' <span class="uc-chip">🚧 Under construction</span>' : ''}</span><span class="game-blurb">${g.blurb}</span><span class="game-players">${g.players}</span></button>`;
     }
     html += '</div><p class="hint">Anyone in the room can pick. Chat and voice keep going between games.</p></div>';
     this.el.innerHTML = html;
@@ -58,7 +69,7 @@ export class LobbyView implements View {
   private onClick = (e: Event) => {
     const t = e.target as HTMLElement;
     const game = t.closest<HTMLElement>('[data-game]')?.dataset.game;
-    if (game === 'tanks' || game === 'hearts') {
+    if (isGameId(game) && canPlayPrivately(game)) {
       this.shell.play('lobbyJoin');
       this.shell.pickGame(game);
       return;

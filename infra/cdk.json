@@ -1,0 +1,8 @@
+{
+  "app": "node --import tsx bin/app.ts",
+  "context": {
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "cli-telemetry": false
+  }
+}

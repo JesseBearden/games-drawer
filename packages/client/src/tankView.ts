@@ -6,6 +6,20 @@ import { Renderer } from './renderer';
 import type { Sprites } from './sprites';
 import { colorCss, escapeHtml, GameState, type TankInit } from './state';
 import type { ShellApi, View } from './views';
+import type { PadButton, PadPress } from './gamepad';
+import type { Action } from './input';
+
+const PAD_ACTIONS: Partial<Record<PadButton, Action>> = {
+  a: 'fire',
+  left: 'angle-left',
+  right: 'angle-right',
+  up: 'power-up',
+  down: 'power-down',
+  lb: 'move-left',
+  lt: 'move-left',
+  rb: 'move-right',
+  rt: 'move-right',
+};
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -16,7 +30,7 @@ const EMPTY_HEART =
 export class TankView implements View {
   readonly landscape = true;
   readonly helpHtml =
-    '<p><b>Desktop:</b> ←/→ aim, ↑/↓ power, Space fire, A/D move (from level 4), Tab scores.</p><p><b>Drop:</b> any game key or button releases you from the helicopter.</p>';
+    '<p><b>Desktop:</b> ←/→ aim, ↑/↓ power, Space fire, A/D move (from level 4), Tab scores.</p><p><b>Controller:</b> left stick or d-pad aims and sets power, A fires, bumpers or triggers drive, View shows scores.</p><p><b>Drop:</b> any game key or button releases you from the helicopter.</p>';
   state: GameState | null = null;
   private renderer: Renderer | null = null;
   camera: Camera | null = null;
@@ -135,6 +149,28 @@ export class TankView implements View {
     return false;
   }
 
+  /** Controller: A fires, d-pad aims and sets power, bumpers or triggers drive, View shows scores. */
+  onPad(p: PadPress, down: boolean): boolean {
+    if (p.button === 'view') {
+      if (down) this.toggleScores();
+      return true;
+    }
+    if (p.repeat) return true;
+    // The stick is read every frame as an analog aim (see frame); pushing it also drops you.
+    if (p.stick) {
+      if (down) this.input.anyPress();
+      return true;
+    }
+    const act = PAD_ACTIONS[p.button];
+    if (act) {
+      if (down) this.input.press(act);
+      else this.input.release(act);
+      return true;
+    }
+    if (down && p.button !== 'menu') this.input.anyPress();
+    return p.button !== 'menu';
+  }
+
   setPaused(paused: boolean) {
     this.input.enabled = !paused;
     if (paused) this.input.releaseAll();
@@ -211,6 +247,8 @@ export class TankView implements View {
     const dt = Math.min(100, now - this.lastFrame);
     this.lastFrame = now;
     this.input.update(dt);
+    const pad = this.shell.pads?.state;
+    if (pad) this.input.analog(pad.lx, pad.ly, dt);
     if (this.aimDirty && now - this.lastAimSent > 80) {
       this.shell.sendGame({ t: 'aim', angle: this.input.angle, power: this.input.power });
       this.lastAimSent = now;

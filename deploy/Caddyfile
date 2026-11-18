@@ -1,0 +1,44 @@
+# Caddy config for the game server. setup.sh fills in @DOMAIN@ and writes this to
+# /etc/caddy/Caddyfile. Caddy gets and renews the HTTPS certificates by itself.
+#
+# Two copies of the game server can run at once during a deploy, on ports 8801 (slot a) and
+# 8802 (slot b). Requests that name a slot (?slot=a, sent by players reconnecting to a room
+# on that copy) go straight to it. Everything else goes to whichever copies
+# games-drawer-upstreams.caddy lists, which the rollout tool rewrites: one copy normally, or
+# both with weights while a new version takes a small share of new rooms.
+
+@DOMAIN@ {
+	encode zstd gzip
+
+	# Server stats are for the rollout tool on this machine only.
+	handle /stats* {
+		respond 404
+	}
+	@slotA query slot=a
+	@slotB query slot=b
+	handle @slotA {
+		reverse_proxy 127.0.0.1:8801
+	}
+	handle @slotB {
+		reverse_proxy 127.0.0.1:8802
+	}
+	handle {
+		import /etc/caddy/games-drawer-upstreams.caddy
+	}
+}
+
+# www. goes to the plain domain, keeping the path (so www invite links work too).
+www.@DOMAIN@ {
+	redir https://@DOMAIN@{uri} permanent
+}
+
+# Staging: the next version, tested here before players get it.
+staging.@DOMAIN@ {
+	encode zstd gzip
+	handle /stats* {
+		respond 404
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8803
+	}
+}

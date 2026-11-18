@@ -1,6 +1,10 @@
 import type { Rng } from './rng';
 
-export const DEFAULT_NAMES = [
+/** Anything that can pick a whole number in a range (an Rng, or a game host's dice). */
+export type IntSource = Pick<Rng, 'int'>;
+
+/** Tank-pun names for the bots in Tanks. */
+export const TANK_BOT_NAMES = [
   'Tanks A Lot',
   'Tank Top',
   'Think Tank',
@@ -28,11 +32,42 @@ export const DEFAULT_NAMES = [
   'Boom Buddy',
 ];
 
+/** @deprecated Tank bots only; people and card-game bots use randomName(). */
+export const DEFAULT_NAMES = TANK_BOT_NAMES;
+
+/** Player names are a title and a snack: "Captain Pancake", "Duchess Nugget". */
+export const NAME_TITLES = [
+  'Captain', 'Duchess', 'Professor', 'Sir', 'Lady', 'Baron', 'Admiral', 'Doctor', 'Count', 'Agent',
+  'Chef', 'Coach', 'Major', 'Judge', 'Mayor', 'Duke', 'Queen', 'King', 'Auntie', 'Uncle',
+  'Lil', 'Big', 'DJ', 'Sheriff', 'Grandma', 'Grandpa', 'Cousin', 'Detective', 'General', 'Saint',
+];
+
+export const NAME_SNACKS = [
+  'Pancake', 'Nugget', 'Pickle', 'Waffles', 'Muffin', 'Toast', 'Dumpling', 'Meatball', 'Noodle', 'Biscuit',
+  'Pretzel', 'Taco', 'Burrito', 'Nacho', 'Cupcake', 'Donut', 'Bagel', 'Crouton', 'Tater Tot', 'Gumdrop',
+  'Jellybean', 'Marshmallow', 'Cheddar', 'Brisket', 'Churro', 'Cannoli', 'Popcorn', 'Sprinkles', 'Peanut', 'Pudding',
+  'Meatloaf', 'Cornbread', 'Snickerdoodle', 'Spud', 'Pierogi', 'Empanada', 'Wonton', 'Gnocchi', 'Ravioli', 'Macaroni',
+  'Fudge', 'Toffee', 'Tamale', 'Strudel', 'Croissant', 'Hotcake', 'Pop Tart', 'Fish Stick', 'Jelly Roll', 'Cheese Puff',
+];
+
 export const MAX_NAME_LENGTH = 20;
 
-export function randomName(rng?: Rng): string {
-  const i = rng ? rng.int(0, DEFAULT_NAMES.length - 1) : Math.floor(Math.random() * DEFAULT_NAMES.length);
-  return DEFAULT_NAMES[i];
+/** A random "Title Snack" name that fits the name length limit. */
+export function randomName(rng?: IntSource): string {
+  const pick = <T>(list: T[]) => list[rng ? rng.int(0, list.length - 1) : Math.floor(Math.random() * list.length)];
+  for (;;) {
+    const name = `${pick(NAME_TITLES)} ${pick(NAME_SNACKS)}`;
+    if (name.length <= MAX_NAME_LENGTH) return name;
+  }
+}
+
+/** A random name nobody in `taken` (lower-case) is using. */
+export function freshName(taken: Set<string>, rng?: IntSource): string {
+  for (let i = 0; i < 50; i++) {
+    const n = randomName(rng);
+    if (!taken.has(n.toLowerCase())) return n;
+  }
+  return uniqueName(randomName(rng), taken);
 }
 
 /**

@@ -3,12 +3,18 @@ import type { TerrainData } from './terrain';
 import type { ControllerKind, GameEvent, Point, Shell, Tank, TankPhase } from './types';
 import type { World } from './world';
 import { isCard, type HeartsView } from './hearts';
+import type { SpadesView } from './spades';
+import { isTileId, type DominoesView } from './dominoes';
+import { isPuzzleId, type PuzzleState, type PuzzleSummary } from './puzzle';
 
 /**
  * WebSocket message contract. Bump PROTOCOL_VERSION on any breaking change; the server
  * rejects clients on a different version and the client asks the player to reload.
  * Fixtures in test/fixtures exercise every message type from both sides.
  */
+import { isChatFilterMode, type ChatFilterMode } from './chatFilter';
+import { isGameId, type GameId } from './games';
+
 export const PROTOCOL_VERSION = 2;
 
 /** Private room codes: consonants only (they never spell words), this many letters. */
@@ -23,20 +29,40 @@ export function isRoomCode(code: string) {
   return code.length === ROOM_CODE_LENGTH && [...code].every((c) => ROOM_CODE_ALPHABET.includes(c));
 }
 
+/**
+ * During a deploy two copies of the server run side by side, in "slots" a and b: games in
+ * progress finish on the old copy while new rooms start on the new one. A room's code says
+ * which slot holds it, so the web server can send reconnects and invite links to the right
+ * copy without asking either of them.
+ */
+export type Slot = 'a' | 'b';
+
+export function isSlot(v: unknown): v is Slot {
+  return v === 'a' || v === 'b';
+}
+
+export function slotOfCode(code: string): Slot {
+  let sum = 0;
+  for (const c of code) sum += ROOM_CODE_ALPHABET.indexOf(c);
+  return sum % 2 === 0 ? 'a' : 'b';
+}
+
 export type RoomKind = 'public' | 'private';
 export type Device = 'desktop' | 'phone';
 
+/**
+ * Which room a hello asks for. Public rooms play one game (tanks if none is named). A new
+ * private room opens on the lobby, or straight into a game when one is named (a game page's
+ * "Play with friends").
+ */
 export type RoomRequest =
-  | { kind: 'public' }
-  | { kind: 'create-private' }
+  | { kind: 'public'; game?: GameId }
+  | { kind: 'create-private'; game?: GameId }
   | { kind: 'private'; code: string };
 
 // ------------------------------------------------------------------ games
 
-/** Games a room can play. Public rooms always play tanks; private rooms pick from the lobby. */
-export type GameId = 'tanks' | 'hearts';
-export const GAME_IDS: GameId[] = ['tanks', 'hearts'];
-export const GAME_NAMES: Record<GameId, string> = { tanks: 'Tanks', hearts: 'Hearts' };
+// The games themselves (ids, names, pages, rollout) are listed in games.ts.
 
 /** Input for the tank game. `resync` asks for a fresh snapshot without reconnecting. */
 export type TankInput =
@@ -49,7 +75,32 @@ export type TankInput =
 /** Input for Hearts. `again` starts a new game after one ends. */
 export type HeartsInput = { t: 'pass'; cards: string[] } | { t: 'play'; card: string } | { t: 'again' };
 
-export type GameInput = TankInput | HeartsInput;
+/** Input for Spades: bid 0 (nil) to 13 tricks, play a card, or deal a new game after one ends. */
+export type SpadesInput = { t: 'bid'; bid: number } | { t: 'play'; card: string } | { t: 'again' };
+
+/**
+ * Input for Dominoes: put a tile on a line, draw from the boneyard, say you're ready for the
+ * next hand, or deal a new game.
+ */
+export type DominoesInput = { t: 'place'; tile: string; arm: string } | { t: 'draw' } | { t: 'ready' } | { t: 'again' };
+
+/**
+ * Input for the jigsaw: pick a picture and piece count (or continue a saved puzzle), pick up a
+ * piece (its whole group comes with it), drag it, drop it, show where your pointer is, tidy the
+ * loose pieces, go back to choosing, or look up saved puzzles. Positions are board coordinates.
+ */
+export type PuzzleInput =
+  | { t: 'pz-new'; image: string; pieces: number }
+  | { t: 'pz-resume'; id: string }
+  | { t: 'pz-setup' }
+  | { t: 'pz-grab'; piece: number }
+  | { t: 'pz-drag'; x: number; y: number }
+  | { t: 'pz-drop'; x: number; y: number }
+  | { t: 'pz-cursor'; x: number; y: number }
+  | { t: 'pz-tidy' }
+  | { t: 'pz-saves'; ids: string[] };
+
+export type GameInput = TankInput | HeartsInput | SpadesInput | DominoesInput | PuzzleInput;
 
 // ------------------------------------------------------------------ client -> server
 
@@ -69,6 +120,8 @@ export type ClientMessage =
   | { t: 'pick'; game: GameId }
   /** End the current game and take everyone back to the lobby (private rooms). */
   | { t: 'lobby' }
+  /** Private rooms: change how swearing in chat is handled (anyone in the room can). */
+  | { t: 'filter'; mode: ChatFilterMode }
   /** Input for whatever game the room is playing. */
   | { t: 'g'; m: GameInput };
 
@@ -134,6 +187,8 @@ export interface ChatMessage {
   /** Server time, ms since epoch. */
   at: number;
   system?: boolean;
+  /** Caught by the chat filter: only the sender sees it (shown dimmed, marked as not sent). */
+  hidden?: boolean;
 }
 
 /** Someone in the room (the "party"), whatever game is on. */
@@ -176,7 +231,26 @@ export type TankServerMessage =
 /** Hearts sends each player their own view of the table (never anyone else's cards). */
 export type HeartsServerMessage = { t: 'hearts'; view: HeartsView };
 
-export type GameServerMessage = TankServerMessage | HeartsServerMessage;
+export type SpadesServerMessage = { t: 'spades'; view: SpadesView };
+
+export type DominoesServerMessage = { t: 'dominoes'; view: DominoesView };
+
+export type PuzzlePhase = 'setup' | 'playing' | 'done';
+
+export type PuzzleServerMessage =
+  /** The whole puzzle (on joining, starting, continuing or going back to choosing). */
+  | { t: 'pz-state'; phase: PuzzlePhase; state: PuzzleState | null; held: { g: number; by: string }[] }
+  /** Pieces that moved for good (a drop, a snap, a tidy): [index, x, y, group]. */
+  | { t: 'pz-moved'; pieces: [number, number, number, number][]; locked: number[]; by: string | null; snapped: boolean }
+  /** Someone is dragging a group: where the piece they grabbed is now. */
+  | { t: 'pz-drag'; g: number; piece: number; x: number; y: number; by: string }
+  /** A group was picked up (by someone's alias) or let go (null). */
+  | { t: 'pz-held'; g: number; by: string | null }
+  | { t: 'pz-cursor'; by: string; x: number; y: number }
+  /** Saved puzzles you asked about; `gone` are ones that no longer exist (forget them). */
+  | { t: 'pz-saves'; saves: PuzzleSummary[]; gone: string[] };
+
+export type GameServerMessage = TankServerMessage | HeartsServerMessage | SpadesServerMessage | DominoesServerMessage | PuzzleServerMessage;
 
 export type ServerMessage =
   | {
@@ -195,6 +269,8 @@ export type ServerMessage =
       members: MemberInfo[];
       /** Recent chat, oldest first. */
       chat: ChatMessage[];
+      /** How swearing in chat is handled here (public rooms: always 'block'). */
+      chatFilter: ChatFilterMode;
     }
   /** The room switched games (null: back to the lobby). */
   | { t: 'game'; game: GameId | null }
@@ -204,6 +280,10 @@ export type ServerMessage =
   | { t: 'chat'; msg: ChatMessage }
   | { t: 'name'; name: string }
   | { t: 'pong'; at: number }
+  /** The room's chat filter changed. */
+  | { t: 'filter'; mode: ChatFilterMode }
+  /** Too many caught messages: your chat is paused this long. */
+  | { t: 'chatPaused'; ms: number }
   /** Who is in voice chat right now. */
   | { t: 'voice'; peers: VoicePeer[] }
   | { t: 'rtc'; from: string; data: RtcSignal }
@@ -276,8 +356,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       if (o.device !== 'desktop' && o.device !== 'phone') return null;
       if (!room || typeof room !== 'object') return null;
       let req: RoomRequest;
-      if (room.kind === 'public') req = { kind: 'public' };
-      else if (room.kind === 'create-private') req = { kind: 'create-private' };
+      if (room.game !== undefined && !isGameId(room.game)) return null;
+      const game = room.game as GameId | undefined;
+      if (room.kind === 'public') req = game ? { kind: 'public', game } : { kind: 'public' };
+      else if (room.kind === 'create-private') req = game ? { kind: 'create-private', game } : { kind: 'create-private' };
       else if (room.kind === 'private' && str(room.code, 12)) req = { kind: 'private', code: room.code };
       else return null;
       return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device };
@@ -299,9 +381,11 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return str(o.to, 32) && data ? { t: 'rtc', to: o.to, data } : null;
     }
     case 'pick':
-      return GAME_IDS.includes(o.game as GameId) ? { t: 'pick', game: o.game as GameId } : null;
+      return isGameId(o.game) ? { t: 'pick', game: o.game } : null;
     case 'lobby':
       return { t: 'lobby' };
+    case 'filter':
+      return isChatFilterMode(o.mode) ? { t: 'filter', mode: o.mode } : null;
     case 'g': {
       const input = parseGameInput(o.m);
       return input ? { t: 'g', m: input } : null;
@@ -334,6 +418,30 @@ export function parseGameInput(v: unknown): GameInput | null {
       return isCard(o.card) ? { t: 'play', card: o.card } : null;
     case 'again':
       return { t: 'again' };
+    case 'pz-new':
+      return typeof o.image === 'string' && o.image.length <= 40 && num(o.pieces) ? { t: 'pz-new', image: o.image, pieces: o.pieces } : null;
+    case 'pz-resume':
+      return isPuzzleId(o.id) ? { t: 'pz-resume', id: o.id } : null;
+    case 'pz-setup':
+      return { t: 'pz-setup' };
+    case 'pz-grab':
+      return Number.isInteger(o.piece) && (o.piece as number) >= 0 && (o.piece as number) < 5000 ? { t: 'pz-grab', piece: o.piece as number } : null;
+    case 'pz-drag':
+    case 'pz-drop':
+    case 'pz-cursor':
+      return num(o.x) && num(o.y) && Math.abs(o.x) < 1e6 && Math.abs(o.y) < 1e6 ? { t: o.t, x: o.x, y: o.y } : null;
+    case 'pz-tidy':
+      return { t: 'pz-tidy' };
+    case 'pz-saves':
+      return Array.isArray(o.ids) && o.ids.length <= 40 && o.ids.every(isPuzzleId) ? { t: 'pz-saves', ids: [...(o.ids as string[])] } : null;
+    case 'place':
+      return isTileId(o.tile) && typeof o.arm === 'string' && /^[ewns][+-]?$/.test(o.arm) ? { t: 'place', tile: o.tile, arm: o.arm } : null;
+    case 'draw':
+      return { t: 'draw' };
+    case 'ready':
+      return { t: 'ready' };
+    case 'bid':
+      return Number.isInteger(o.bid) && (o.bid as number) >= 0 && (o.bid as number) <= 13 ? { t: 'bid', bid: o.bid as number } : null;
     default:
       return null;
   }

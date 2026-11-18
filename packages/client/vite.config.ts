@@ -19,6 +19,7 @@ export default defineConfig({
     proxy: {
       '/ws': { target: 'ws://localhost:8787', ws: true },
       '/stats': { target: 'http://localhost:8787' },
+      '/admin': { target: 'http://localhost:8787' },
     },
   },
   preview: {
@@ -31,5 +32,19 @@ export default defineConfig({
   build: {
     outDir: path.join(here, 'dist'),
     emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              // The chat filter's word lists get their own file, so it stays cached through game
+              // updates and only downloads again when the lists themselves change.
+              name: 'chat-filter',
+              test: /[\\/]node_modules[\\/]obscenity[\\/]|[\\/]shared[\\/]src[\\/]chatFilter\.ts$/,
+            },
+          ],
+        },
+      },
+    },
   },
 });

@@ -1,0 +1,10 @@
+{
+  "region": "us-east-2",
+  "domain": "gamesdrawer.com",
+  "githubRepo": "JesseBearden/games-drawer",
+  "instanceType": "t4g.micro",
+  "amiId": null,
+  "monthlyBudgetUsd": 30,
+  "killSwitchUsd": 75,
+  "anomalyAlerts": false
+}

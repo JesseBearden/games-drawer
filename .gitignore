@@ -5,3 +5,14 @@ logs/
 .DS_Store
 .vite/
 coverage/
+release/
+release.tar.gz
+test-results/
+playwright-report/
+cdk.out/
+puzzle-candidates/
+data/
+
+# Local secrets (the admin password hash). Never commit.
+.env
+.env.*

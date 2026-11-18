@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# games-drawer-deploy <release> <command> [args]
+#
+# Runs on the game server (installed as /usr/local/bin/games-drawer-deploy). GitHub Actions
+# calls it through AWS Systems Manager. It makes sure Node and the AWS CLI are installed,
+# fetches the release bundle from S3 if this machine doesn't have it yet, and hands over to
+# that release's rollout tool. Commands: staging, canary [percent], check, promote, rollback,
+# status (see deploy/rollout.ts).
+set -euo pipefail
+source /etc/games-drawer/deploy.env
+NODE_MAJOR=24
+
+rel="${1:-}"
+shift || true
+if [[ ! "$rel" =~ ^[0-9a-f]{7,40}$ ]]; then
+  echo "usage: games-drawer-deploy <git commit> <command> [args]" >&2
+  exit 2
+fi
+
+# Node, straight from nodejs.org, checked against its published checksum.
+if ! /usr/local/bin/node --version 2>/dev/null | grep -q "^v${NODE_MAJOR}\."; then
+  case "$(uname -m)" in
+    aarch64) arch=arm64 ;;
+    x86_64) arch=x64 ;;
+    *) echo "unsupported CPU $(uname -m)" >&2; exit 1 ;;
+  esac
+  base="https://nodejs.org/dist/latest-v${NODE_MAJOR}.x"
+  line="$(curl -fsSL "$base/SHASUMS256.txt" | grep -E "node-v[0-9.]+-linux-${arch}\.tar\.xz$")"
+  sum="${line%% *}"
+  file="${line##* }"
+  curl -fsSL "$base/$file" -o /tmp/node.tar.xz
+  echo "$sum  /tmp/node.tar.xz" | sha256sum -c --quiet -
+  tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner \
+    --exclude='*/CHANGELOG.md' --exclude='*/README.md' --exclude='*/LICENSE'
+  rm -f /tmp/node.tar.xz
+  echo "Installed $(/usr/local/bin/node --version)"
+fi
+
+if ! command -v aws >/dev/null; then
+  snap install aws-cli --classic
+fi
+export PATH="$PATH:/snap/bin"
+
+# The admin page's password hash (a one-way hash, never the password itself) lives in AWS
+# Parameter Store. Fetch it each deploy, so changing it there takes effect with the next one.
+# If it isn't there (or AWS can't be reached), keep whatever this machine had.
+if hash="$(aws ssm get-parameter --region "$REGION" --name /games-drawer/admin-password-hash --with-decryption \
+  --query Parameter.Value --output text 2>/dev/null)" && [[ "$hash" == scrypt\$* ]]; then
+  (umask 077 && printf 'ADMIN_PASSWORD_HASH=%s\n' "$hash" > /etc/games-drawer/admin.env)
+elif [ ! -f /etc/games-drawer/admin.env ]; then
+  (umask 077 && : > /etc/games-drawer/admin.env)
+fi
+
+dir="/opt/games-drawer/releases/$rel"
+if [ ! -f "$dir/server.mjs" ]; then
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  aws s3 cp --only-show-errors --region "$REGION" "s3://$BUCKET/releases/$rel.tar.gz" "$tmp/release.tar.gz"
+  rm -rf "$dir.tmp"
+  mkdir -p "$dir.tmp"
+  tar -xzf "$tmp/release.tar.gz" -C "$dir.tmp" --no-same-owner
+  chmod -R a+rX,go-w "$dir.tmp"
+  mv "$dir.tmp" "$dir"
+fi
+exec /usr/local/bin/node "$dir/deploy/rollout.mjs" "$rel" "$@"

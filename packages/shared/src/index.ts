@@ -10,3 +10,8 @@ export * from './protocol';
 export * from './palette';
 export * from './names';
 export * from './hearts';
+export * from './games';
+export * from './spades';
+export * from './chatFilter';
+export * from './dominoes';
+export * from './puzzle';

@@ -135,6 +135,23 @@ export class Input {
     this.sink.aimChanged();
   }
 
+  /** Any controller button that isn't a game action still drops you from the helicopter. */
+  anyPress() {
+    if (this.enabled) this.sink.gameplayPress();
+  }
+
+  /**
+   * A controller's left stick, every frame: sideways turns the barrel, up and down set the
+   * power. Squared, so small pushes make fine adjustments.
+   */
+  analog(x: number, y: number, dtMs: number) {
+    if (!this.enabled || (x === 0 && y === 0)) return;
+    const curve = (v: number) => Math.sign(v) * v * v;
+    if (x) this.angle = Math.min(180, Math.max(0, this.angle - (curve(x) * 75 * dtMs) / 1000));
+    if (y) this.power = Math.min(100, Math.max(5, this.power - (curve(y) * 45 * dtMs) / 1000));
+    this.sink.aimChanged();
+  }
+
   /** Call every frame: applies continuous adjustment for held buttons. */
   update(dtMs: number) {
     const now = performance.now();

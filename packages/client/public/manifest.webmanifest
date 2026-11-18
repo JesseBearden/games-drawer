@@ -1,10 +1,10 @@
 {
-  "name": "Tank You For Being A Friend",
-  "short_name": "Tank You",
-  "description": "Drop in by helicopter and blow up your friends.",
+  "name": "Games Drawer",
+  "short_name": "Games Drawer",
+  "description": "Little games to play with friends while you hang out.",
   "start_url": "/",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#141a4a",
   "theme_color": "#1b2a6b",
   "icons": [

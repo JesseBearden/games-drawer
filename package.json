@@ -1,25 +1,31 @@
 {
-  "name": "tank-you-for-being-a-friend",
+  "name": "games-drawer",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "infra"
   ],
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch --clear-screen=false packages/server/src/main.ts",
     "dev:client": "vite --config packages/client/vite.config.ts",
     "build": "vite build --config packages/client/vite.config.ts",
-    "start": "npm run build && cross-env NODE_ENV=production tsx packages/server/src/main.ts",
+    "start": "npm run release && node release/server.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client && tsc -p deploy && tsc -p infra && tsc -p e2e",
     "stats": "tsx scripts/stats.ts",
+    "admin-password": "tsx scripts/admin-password.ts",
     "sprites": "tsx scripts/slice-sprites.ts",
-    "dev:https": "cross-env HTTPS=1 npm run dev"
+    "dev:https": "cross-env HTTPS=1 npm run dev",
+    "release": "tsx scripts/release.ts",
+    "e2e": "npm run release && playwright test",
+    "infra": "npm run cdk -w infra --"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
     "@types/pngjs": "^6.0.5",
     "@types/ws": "^8.18.2",
@@ -27,6 +33,7 @@
     "@wasm-audio-decoders/ogg-vorbis": "^0.1.20",
     "concurrently": "^10.0.7",
     "cross-env": "^10.1.0",
+    "esbuild": "^0.28.2",
     "pngjs": "^7.0.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

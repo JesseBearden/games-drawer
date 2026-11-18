@@ -1,0 +1,5 @@
+*.sh text eol=lf
+deploy/games-drawer-deploy text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/*.service text eol=lf
+deploy/*.conf text eol=lf

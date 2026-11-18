@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type ClientMessage, type Device, type RoomRequest, type ServerMessage } from '@tank/shared';
+import { isSlot, PROTOCOL_VERSION, slotOfCode, type ClientMessage, type Device, type RoomRequest, type ServerMessage, type Slot } from '@tank/shared';
 
 const SESSION_KEY = 'tank.session';
 
@@ -23,6 +23,21 @@ function setSession(s: string) {
   }
 }
 
+/**
+ * Which copy of the server to reach (see Slot in the protocol). The room code decides once we know
+ * it; before that, ?slot= on the page lets a deploy test the new copy directly. With no slot the
+ * web server picks, which is how new rooms reach the newest copy.
+ */
+function slotFor(roomCode: string | null): Slot | null {
+  if (roomCode) return slotOfCode(roomCode);
+  try {
+    const s = new URLSearchParams(location.search).get('slot');
+    return isSlot(s) ? s : null;
+  } catch {
+    return null;
+  }
+}
+
 export type FatalError = Extract<ServerMessage, { t: 'error' }>;
 
 export interface NetHandlers {
@@ -39,6 +54,8 @@ export class Net {
   private retryTimer: number | undefined;
   private connected = false;
   private room: RoomRequest;
+  /** The room's code once known (public rooms have one too), for reconnecting to the same copy. */
+  private roomCode: string | null = null;
 
   constructor(
     room: RoomRequest,
@@ -47,6 +64,7 @@ export class Net {
     private h: NetHandlers,
   ) {
     this.room = room;
+    if (room.kind === 'private') this.roomCode = room.code;
     document.addEventListener('visibilitychange', this.onVisible);
     window.addEventListener('online', this.onVisible);
   }
@@ -54,7 +72,8 @@ export class Net {
   connect() {
     clearTimeout(this.retryTimer);
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const slot = slotFor(this.roomCode);
+    const ws = new WebSocket(`${proto}://${location.host}/ws${slot ? `?slot=${slot}` : ''}`);
     this.ws = ws;
     ws.onopen = () => {
       this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device });
@@ -72,6 +91,7 @@ export class Net {
         setSession(msg.session);
         // Reconnects go straight back to the same room.
         this.room = msg.room.kind === 'private' ? { kind: 'private', code: msg.room.code } : { kind: 'public' };
+        this.roomCode = msg.room.code;
       }
       if (msg.t === 'error') {
         if (msg.code === 'replaced' || msg.code === 'version' || msg.code === 'room-closed' || !this.connected) {

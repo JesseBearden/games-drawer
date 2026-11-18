@@ -61,9 +61,34 @@ export function voiceSupported(): boolean {
   return typeof RTCPeerConnection !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && window.isSecureContext;
 }
 
+const PREF_KEY = 'gd.voice';
+
+/**
+ * Whether this browser wants voice: 'on' joins voice in every private room straight away,
+ * 'off' stays out until you join yourself, null (never chosen) asks once with a welcome prompt.
+ */
+export function voicePreference(): 'on' | 'off' | null {
+  try {
+    const v = localStorage.getItem(PREF_KEY);
+    return v === 'on' || v === 'off' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setVoicePreference(v: 'on' | 'off') {
+  try {
+    localStorage.setItem(PREF_KEY, v);
+  } catch {
+    /* private mode: ask again next time */
+  }
+}
+
 export class Voice {
   inVoice = false;
   selfMuted = false;
+  /** Why the mic didn't come on last time: the browser said no, or there's no mic at all. */
+  micProblem: 'blocked' | 'missing' | null = null;
   peers: VoicePeer[] = [];
   private links = new Map<string, PeerLink>();
   private muted = new Set<string>();
@@ -119,8 +144,12 @@ export class Voice {
     this.hooks.changed();
   }
 
-  /** Must be called from a tap/click (microphone permission and audio playback need one). */
-  async join() {
+  /**
+   * Turn on the mic and join. Best from a tap (some browsers only allow sound after one);
+   * `auto` is for rooms joined with voice already switched on, and quietly falls back to the
+   * button if the browser says no.
+   */
+  async join(opts: { auto?: boolean } = {}) {
     if (this.inVoice || this.joining || !this.available) return;
     if (!this.supported) {
       this.hooks.toast('Voice needs a secure (https) page. Use the hosted game or npm run dev:https.');
@@ -132,11 +161,21 @@ export class Voice {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
         video: false,
       });
-    } catch {
+    } catch (err) {
       this.joining = false;
-      this.hooks.toast('Microphone permission was denied.');
+      const name = (err as { name?: string } | null)?.name;
+      this.micProblem = name === 'NotFoundError' || name === 'OverconstrainedError' ? 'missing' : 'blocked';
+      this.hooks.toast(
+        this.micProblem === 'missing'
+          ? 'No microphone found, so you’re not in voice.'
+          : opts.auto
+            ? 'Couldn’t turn on your mic. Tap 🎙️ to try again.'
+            : 'The browser blocked the microphone. Allow it for this site in the browser’s settings, then tap 🎙️.',
+      );
+      this.hooks.changed();
       return;
     }
+    this.micProblem = null;
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctor();
     await this.ctx.resume().catch(() => {});
@@ -154,13 +193,27 @@ export class Voice {
     this.joining = false;
     this.timer = window.setInterval(() => this.tick(), 60);
     this.hooks.send({ t: 'voice', join: true });
-    this.hooks.toast('Joined voice chat');
+    this.hooks.toast(opts.auto ? 'Voice is on. Tap 🎙️ to mute or turn it off.' : 'Joined voice chat');
+    setVoicePreference('on');
     this.hooks.changed();
     this.connectPeers();
+    // Browsers may hold back sound until the page has been tapped; resume on the next tap.
+    if (this.ctx && this.ctx.state !== 'running') this.resumeOnTap();
   }
 
+  private resumeOnTap() {
+    const resume = () => {
+      document.removeEventListener('pointerdown', resume, true);
+      void this.ctx?.resume().catch(() => {});
+      for (const link of this.links.values()) if (link.audio.srcObject && link.audio.paused) void link.audio.play().catch(() => {});
+    };
+    document.addEventListener('pointerdown', resume, true);
+  }
+
+  /** Leave voice by choice; remembered, so the next room doesn't switch it back on. */
   leave() {
     if (!this.inVoice) return;
+    setVoicePreference('off');
     this.hooks.send({ t: 'voice', join: false });
     this.teardown();
     this.hooks.toast('Left voice chat');
@@ -268,7 +321,10 @@ export class Voice {
     pc.ontrack = (e) => {
       const stream = e.streams[0] ?? new MediaStream([e.track]);
       audio.srcObject = stream;
-      audio.play().catch(() => this.hooks.toast('Tap the screen to hear voice chat.'));
+      audio.play().catch(() => {
+        this.hooks.toast('Tap the screen to hear voice chat.');
+        this.resumeOnTap();
+      });
       if (this.ctx) {
         const a = this.ctx.createAnalyser();
         a.fftSize = 512;

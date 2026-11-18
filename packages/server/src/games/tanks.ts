@@ -1,5 +1,5 @@
 import {
-  DEFAULT_NAMES,
+  TANK_BOT_NAMES,
   heliDyns,
   Rng,
   randomSeed,
@@ -179,8 +179,8 @@ export class TanksGame implements ServerGame {
     const taken = new Set<string>();
     for (const t of this.world.tanks.values()) taken.add(t.name.toLowerCase());
     for (const m of this.host.members()) taken.add(m.name.toLowerCase());
-    const free = DEFAULT_NAMES.filter((n) => !taken.has(n.toLowerCase()));
-    return free.length ? this.rng.pick(free) : uniqueName(this.rng.pick(DEFAULT_NAMES), taken);
+    const free = TANK_BOT_NAMES.filter((n) => !taken.has(n.toLowerCase()));
+    return free.length ? this.rng.pick(free) : uniqueName(this.rng.pick(TANK_BOT_NAMES), taken);
   }
 
   // ------------------------------------------------------------------ input

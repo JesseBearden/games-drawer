@@ -1,7 +1,7 @@
 import {
   botPass,
   botPlay,
-  DEFAULT_NAMES,
+  freshName,
   deal,
   HEARTS_TARGET,
   HeartsRound,
@@ -48,13 +48,15 @@ export class HeartsGame implements ServerGame {
   private nextHandAt: number | null = null;
   private botAt = 0;
 
+  /** The host's random numbers, in the shape the name picker wants. */
+  private dice = { int: (min: number, max: number) => min + this.host.randomInt(max - min + 1) };
+
   constructor(private host: GameHost) {
     const used = new Set(host.members().map((m) => m.name.toLowerCase()));
     const colors = new Set(host.members().map((m) => m.color));
-    const names = DEFAULT_NAMES.filter((n) => !used.has(n.toLowerCase()));
     this.seats = [0, 1, 2, 3].map(() => {
-      const i = this.host.randomInt(names.length);
-      const botName = names.splice(i, 1)[0] ?? 'Bot';
+      const botName = freshName(used, this.dice);
+      used.add(botName.toLowerCase());
       let botColor = 0;
       while (colors.has(botColor)) botColor++;
       colors.add(botColor);
@@ -78,6 +80,14 @@ export class HeartsGame implements ServerGame {
   /** True when nobody is at the seat to play it right now (bot, or player disconnected). */
   private botControls(seat: number) {
     return !this.memberAt(seat)?.conn;
+  }
+
+  /**
+   * Someone at the table is still choosing cards to pass. Bots hold their own passes until
+   * then, so a friend who sits down mid-pass (taking a bot's seat) still gets to choose.
+   */
+  private peopleStillPassing() {
+    return this.seats.some((_, i) => !this.botControls(i) && !this.round.passes[i]);
   }
 
   addPlayer(m: Member): boolean {
@@ -132,8 +142,7 @@ export class HeartsGame implements ServerGame {
     for (const s of this.seats) taken.add(s.botName.toLowerCase());
     for (const s of this.seats) {
       if (s.session === null && s.botName.toLowerCase() === lower) {
-        const free = DEFAULT_NAMES.filter((n) => !taken.has(n.toLowerCase()));
-        s.botName = free.length ? free[this.host.randomInt(free.length)] : `${s.botName} Bot`;
+        s.botName = freshName(taken, this.dice);
         taken.add(s.botName.toLowerCase());
       }
     }
@@ -220,10 +229,9 @@ export class HeartsGame implements ServerGame {
   }
 
   private afterPass() {
-    if (this.round.phase === 'playing') {
-      this.phase = 'playing';
-      this.schedule();
-    }
+    if (this.round.phase === 'playing') this.phase = 'playing';
+    // Bots pass a moment after the last person does (and the first play gets a fresh delay).
+    this.schedule();
   }
 
   private afterPlay() {
@@ -248,7 +256,7 @@ export class HeartsGame implements ServerGame {
       changed = true;
     }
     if (now >= this.botAt) {
-      if (this.phase === 'passing') {
+      if (this.phase === 'passing' && !this.peopleStillPassing()) {
         for (let s = 0; s < 4 && this.phase === 'passing'; s++) {
           if (this.round.passes[s] || !this.botControls(s)) continue;
           this.round.submitPass(s, botPass(this.round.hands[s]));

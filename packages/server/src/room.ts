@@ -3,8 +3,11 @@ import {
   cleanName,
   cleanText,
   DEFAULT_CONFIG,
-  DEFAULT_NAMES,
+  freshName,
   GAME_NAMES,
+  canPlayPrivately,
+  CHAT_FILTER_LABELS,
+  type ChatFilterMode,
   PROTOCOL_VERSION,
   Rng,
   uniqueName,
@@ -23,6 +26,10 @@ import {
 import { MAX_CHAT_LENGTH, RateLimiter, RULE_VERSION, type ChatModerator } from './chat';
 import type { LogSink } from './eventlog';
 import { HeartsGame } from './games/hearts';
+import { SpadesGame } from './games/spades';
+import { DominoesGame } from './games/dominoes';
+import { JigsawGame } from './games/jigsaw';
+import { PuzzleStore } from './puzzleStore';
 import { TanksGame } from './games/tanks';
 import type { Conn, GameHost, Member, ServerGame } from './games/types';
 
@@ -53,6 +60,8 @@ export interface RoomDeps {
   turn?: TurnSettings;
   /** Random integers for card shuffles (crypto by default). */
   randomInt?: (n: number) => number;
+  /** Where jigsaw puzzles are saved (in memory if not given). */
+  puzzles?: PuzzleStore;
 }
 
 /** Chat reports per player per minute. */
@@ -63,6 +72,10 @@ export const RENAME_COOLDOWN_MS = 10_000;
 export const ANNOUNCE_COOLDOWN_MS = 20_000;
 /** Starting or ending a game, at most this often per room. */
 export const GAME_SWITCH_COOLDOWN_MS = 1500;
+/** Three caught messages within a minute pause that player's chat for 30 seconds. */
+export const CAUGHT_LIMIT = 3;
+export const CAUGHT_WINDOW_MS = 60_000;
+export const CHAT_PAUSE_MS = 30_000;
 
 interface Player extends Member {
   name: string;
@@ -81,6 +94,30 @@ interface Player extends Member {
   reportTimes: number[];
   /** The current connection has been sent its welcome (game messages wait for it). */
   welcomed: boolean;
+  /** When the chat filter caught this player's recent messages (for the timeout). */
+  caughtTimes: number[];
+  /** Chat is paused until then after too many caught messages. */
+  chatPausedUntil: number;
+}
+
+/**
+ * One game, from when it starts until it ends (back to the lobby, or the room closes): how long
+ * people played and how many at once. Logged as one `game_session` line for the admin page.
+ */
+interface GameSession {
+  game: GameId;
+  startedAt: number;
+  /** Last time the counts below were brought up to date. */
+  lastAt: number;
+  /** Time with at least one person connected, and with two or more. */
+  activeMs: number;
+  groupMs: number;
+  /** People × time: two people for an hour is two person-hours. */
+  personMs: number;
+  peak: number;
+  /** Everyone who played some of it (pseudonyms). */
+  pids: Set<string>;
+  chats: number;
 }
 
 export type JoinResult = { ok: true; reclaimed: boolean; name: string } | { ok: false; code: 'room-full'; message: string };
@@ -99,10 +136,13 @@ export class Room {
   readonly chatHistory: ChatMessage[] = [];
   readonly createdAt: number;
   game: ServerGame | null = null;
+  private session: GameSession | null = null;
   emptySince: number | null;
   closed = false;
   private rng: Rng;
   private lastSwitch = -Infinity;
+  /** How swearing in chat is handled. Public rooms always block; private rooms start on hide. */
+  chatFilter: ChatFilterMode;
   private readonly cfg: GameConfig;
   private host: GameHost;
 
@@ -110,19 +150,78 @@ export class Room {
     readonly code: string,
     readonly kind: RoomKind,
     private deps: RoomDeps,
+    /** The game it opens on. Public rooms always have one (tanks if not given); private rooms
+     *  open on the lobby unless created from a game's page. */
+    firstGame?: GameId,
   ) {
     this.rng = new Rng((deps.seed ?? randomInt(2 ** 31)) ^ 0x2c1b3c6d);
+    this.chatFilter = kind === 'public' ? 'block' : 'hide';
     this.cfg = { ...DEFAULT_CONFIG, ...deps.cfg };
     this.createdAt = deps.now();
     // A brand-new room is "empty" until its creator's connection lands.
     this.emptySince = this.createdAt;
     this.host = this.makeHost();
     this.log('room_created', {});
-    if (kind === 'public') this.game = this.makeGame('tanks');
+    const first = firstGame ?? (kind === 'public' ? 'tanks' : null);
+    if (first) {
+      this.game = this.makeGame(first);
+      this.beginSession(first);
+    }
+  }
+
+  // ------------------------------------------------------------------ play time, for the admin page
+
+  private beginSession(game: GameId) {
+    const now = this.deps.now();
+    this.session = { game, startedAt: now, lastAt: now, activeMs: 0, groupMs: 0, personMs: 0, peak: 0, pids: new Set(), chats: 0 };
+    this.countPeople();
+  }
+
+  /** Add up the time since the last change, at the old head count. Call before anyone comes or goes. */
+  private accrue() {
+    const s = this.session;
+    if (!s) return;
+    const now = this.deps.now();
+    const dt = Math.max(0, now - s.lastAt);
+    const n = this.humansConnected();
+    s.personMs += n * dt;
+    if (n >= 1) s.activeMs += dt;
+    if (n >= 2) s.groupMs += dt;
+    s.lastAt = now;
+  }
+
+  /** Note who's here now. Call after anyone comes or goes. */
+  private countPeople() {
+    const s = this.session;
+    if (!s) return;
+    s.peak = Math.max(s.peak, this.humansConnected());
+    for (const p of this.players.values()) if (p.conn && s.pids.size < 50) s.pids.add(p.pid);
+  }
+
+  private endSession(endedBy: 'lobby' | 'room_closed') {
+    const s = this.session;
+    if (!s) return;
+    this.accrue();
+    this.session = null;
+    this.log('game_session', {
+      game: s.game,
+      endedBy,
+      ms: this.deps.now() - s.startedAt,
+      activeMs: s.activeMs,
+      groupMs: s.groupMs,
+      personMs: s.personMs,
+      peak: s.peak,
+      players: s.pids.size,
+      pids: [...s.pids],
+      chats: s.chats,
+    });
   }
 
   private makeGame(id: GameId): ServerGame {
     if (id === 'hearts') return new HeartsGame(this.host);
+    if (id === 'spades') return new SpadesGame(this.host);
+    if (id === 'dominoes') return new DominoesGame(this.host);
+    if (id === 'jigsaw') return new JigsawGame(this.host, (this.deps.puzzles ??= new PuzzleStore(null)));
     return new TanksGame(this.host, { cfg: this.deps.cfg, seed: this.deps.seed });
   }
 
@@ -187,6 +286,7 @@ export class Room {
         existing.conn.close(4000, 'replaced');
       }
       const wasAway = !existing.conn;
+      this.accrue();
       if (existing.inVoice) {
         // A new connection starts outside voice; the old peer connections are gone.
         existing.inVoice = false;
@@ -198,6 +298,7 @@ export class Room {
       existing.connectedAt = now;
       existing.reservedUntil = Infinity;
       const seatBack = this.game ? this.game.reconnect(existing) : true;
+      this.countPeople();
       this.emptySince = null;
       if (wasAway) this.announce(existing, 'arrive', `${existing.name} is back.`);
       this.broadcastMembers();
@@ -207,6 +308,7 @@ export class Room {
     if (this.openSlots() <= 0) return { ok: false, code: 'room-full', message: 'Room is full.' };
     const wanted = this.acceptableName(requestedName);
     const name = uniqueName(wanted ?? this.randomName(), this.takenNames());
+    this.accrue();
     const p: Player = {
       session,
       pid: pseudonym(session),
@@ -225,12 +327,15 @@ export class Room {
       inVoice: false,
       reportTimes: [],
       welcomed: false,
+      caughtTimes: [],
+      chatPausedUntil: 0,
     };
     this.players.set(session, p);
     if (this.game && !this.game.addPlayer(p)) {
       this.players.delete(session);
       return { ok: false, code: 'room-full', message: 'Room is full.' };
     }
+    this.countPeople();
     this.emptySince = null;
     this.log('join', { pid: p.pid, device });
     this.announce(p, 'arrive', `${p.name} joined.`);
@@ -243,7 +348,8 @@ export class Room {
     const name = cleanName(raw);
     if (!name) return null;
     try {
-      return this.deps.moderator.screen(name).ok ? name : null;
+      // Names follow people into public games, so they're held to the strictest setting.
+      return this.deps.moderator.screen(name, 'block').ok ? name : null;
     } catch {
       return null;
     }
@@ -261,6 +367,7 @@ export class Room {
     const p = this.players.get(session);
     if (!p || (conn && p.conn !== conn)) return;
     const now = this.deps.now();
+    this.accrue();
     p.conn = null;
     p.welcomed = false;
     if (p.inVoice) {
@@ -295,6 +402,7 @@ export class Room {
   close(reason: string) {
     if (this.closed) return;
     this.closed = true;
+    this.endSession('room_closed');
     this.game?.dispose();
     for (const p of this.players.values()) {
       if (p.conn) {
@@ -307,8 +415,7 @@ export class Room {
 
   private randomName() {
     const taken = this.takenNames();
-    const free = DEFAULT_NAMES.filter((n) => !taken.has(n.toLowerCase()));
-    return free.length ? this.rng.pick(free) : this.rng.pick(DEFAULT_NAMES);
+    return freshName(taken, this.rng);
   }
 
   private takenNames() {
@@ -327,6 +434,10 @@ export class Room {
 
   private startGame(p: Player, id: GameId) {
     if (this.kind !== 'private') return;
+    if (!canPlayPrivately(id)) {
+      this.notice(p, 'That game isn’t available right now.');
+      return;
+    }
     if (this.game) {
       this.notice(p, 'Go back to the lobby to pick another game.');
       return;
@@ -335,6 +446,7 @@ export class Room {
     if (now - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) return;
     this.lastSwitch = now;
     this.game = this.makeGame(id);
+    this.beginSession(id);
     this.broadcast({ t: 'game', game: id });
     for (const m of this.players.values()) this.game.addPlayer(m);
     for (const m of this.players.values()) if (m.conn && m.welcomed) this.game.sendInit(m, false);
@@ -348,6 +460,7 @@ export class Room {
     if (now - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) return;
     this.lastSwitch = now;
     const id = this.game.id;
+    this.endSession('lobby');
     this.game.dispose();
     this.game = null;
     this.broadcast({ t: 'game', game: null });
@@ -398,6 +511,9 @@ export class Room {
         return;
       case 'lobby':
         this.endGame(p);
+        return;
+      case 'filter':
+        this.setChatFilter(p, msg.mode);
         return;
       case 'hello':
         return;
@@ -466,8 +582,22 @@ export class Room {
   /** Rate-limited chat attempts since the last housekeeping, logged as counts (not text). */
   private rateLimited = { rapid: 0, repeat: 0 };
 
+  /** Private rooms: anyone can change how swearing is handled; everyone is told. */
+  private setChatFilter(p: Player, mode: ChatFilterMode) {
+    if (this.kind !== 'private' || mode === this.chatFilter) return;
+    this.chatFilter = mode;
+    const label = CHAT_FILTER_LABELS[mode];
+    this.broadcast({ t: 'filter', mode });
+    this.systemChat(`${p.name} set the chat filter to ${label.name}: ${label.detail}.`);
+    this.log('chat_filter', { mode, by: p.pid });
+  }
+
   private chat(p: Player, raw: string) {
     const now = this.deps.now();
+    if (now < p.chatPausedUntil) {
+      this.notice(p, `You can chat again in ${Math.ceil((p.chatPausedUntil - now) / 1000)} seconds.`);
+      return;
+    }
     // The audit log keeps what was submitted, up to twice the accepted length.
     const submitted = raw.slice(0, MAX_CHAT_LENGTH * 2);
     const text = cleanText(submitted, MAX_CHAT_LENGTH + 1);
@@ -481,25 +611,45 @@ export class Room {
     const base = { room: this.code, roomKind: this.kind, msgId, sender: p.pid, senderName: p.name, text: submitted, ruleVersion: RULE_VERSION };
     let result;
     try {
-      result = this.deps.moderator.screen(text);
+      result = this.deps.moderator.screen(text, this.chatFilter);
     } catch (err) {
       this.deps.log.chat({ ...base, outcome: 'error', reason: String(err) });
       this.deps.log.event('moderation_failure', { room: this.code });
       this.notice(p, "Couldn't send that. Please try again.");
       return;
     }
-    const msg: ChatMessage = { id: msgId, from: p.name, speaker: p.alias, color: p.color, text: text.trim(), at: now };
+    const msg: ChatMessage = { id: msgId, from: p.name, speaker: p.alias, color: p.color, text: result.ok ? result.text : text.trim(), at: now };
     if (!result.ok) {
       this.deps.log.chat({ ...base, outcome: 'blocked', reason: result.reason });
       if (result.reason === 'too-long') this.notice(p, `Messages are limited to ${MAX_CHAT_LENGTH} characters.`);
-      else if (result.reason !== 'empty') p.conn?.send(JSON.stringify({ t: 'chat', msg } satisfies ServerMessage));
+      else if (result.reason !== 'empty') this.caught(p, msg, now);
       return;
     }
     this.deps.log.chat({ ...base, outcome: 'delivered' });
+    if (this.session) this.session.chats++;
     this.recentMessages.set(msgId, { pid: p.pid, at: now });
     if (this.recentMessages.size > 200) this.recentMessages.delete(this.recentMessages.keys().next().value!);
     this.pushHistory(msg);
     this.broadcast({ t: 'chat', msg });
+  }
+
+  /**
+   * The filter caught a message (the browser normally stops these before they're sent). The
+   * sender sees it dimmed as "only you", with a reminder; three in a minute pause their chat.
+   */
+  private caught(p: Player, msg: ChatMessage, now: number) {
+    p.conn?.send(JSON.stringify({ t: 'chat', msg: { ...msg, hidden: true } } satisfies ServerMessage));
+    p.caughtTimes = p.caughtTimes.filter((t) => now - t < CAUGHT_WINDOW_MS);
+    p.caughtTimes.push(now);
+    if (p.caughtTimes.length >= CAUGHT_LIMIT) {
+      p.caughtTimes = [];
+      p.chatPausedUntil = now + CHAT_PAUSE_MS;
+      p.conn?.send(JSON.stringify({ t: 'chatPaused', ms: CHAT_PAUSE_MS } satisfies ServerMessage));
+      this.sendSystem(p, `Chat paused for ${CHAT_PAUSE_MS / 1000} seconds. Keep Games Drawer chat family friendly.`);
+      this.log('chat_paused', { pid: p.pid });
+    } else {
+      this.sendSystem(p, 'Keep Games Drawer chat family friendly. Only you can see that message.');
+    }
   }
 
   private rename(p: Player, raw: string) {
@@ -578,6 +728,7 @@ export class Room {
       game: this.game?.id ?? null,
       members: this.members(),
       chat: this.chatHistory.slice(),
+      chatFilter: this.chatFilter,
     };
   }
 
