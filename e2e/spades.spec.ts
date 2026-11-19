@@ -3,8 +3,7 @@ import { createRoom, playIfMyTurn, watchErrors } from './helpers';
 
 test('Spades in a private room: bid, then play your cards', async ({ page }) => {
   const errors = watchErrors(page);
-  await createRoom(page, 'Sid');
-  await page.locator('[data-game="spades"]').click();
+  await createRoom(page, 'Sid', 'spades');
   await expect(page.locator('#game')).toHaveAttribute('data-view', 'spades');
   await expect(page.locator('#spades-view .ht-hand .card')).toHaveCount(13);
 

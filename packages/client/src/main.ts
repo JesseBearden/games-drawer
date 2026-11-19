@@ -1,30 +1,42 @@
 import './styles.css';
 import './room.css';
+import './paper.css';
+import './entry.css';
+import './table.css';
+import './cards.css';
+import './jigsaw.css';
+import './tanks.css';
 import {
   canPlayPrivately,
-  canPlayPublicly,
   cleanName,
   gameForPath,
+  gameInfo,
   GAMES,
+  isGameId,
+  isInviteToken,
   isRoomCode,
   normalizeRoomCode,
   randomName,
   ROOM_CODE_LENGTH,
-  type GameInfo,
+  slotOfCode,
+  type GameId,
   type RoomRequest,
   type ServerMessage,
+  type TableInfo,
 } from '@tank/shared';
-import { RoomApp } from './shell';
+import { RoomApp, type EntryChoice } from './shell';
 import type { Device } from './views';
 import { Sfx } from './audio';
 import { Gamepads, moveFocus, watchPadMode } from './gamepad';
 import { Net } from './net';
 import { escapeHtml } from './state';
 import { loadSprites, type Sprites } from './sprites';
+import { MIC_CONSTRAINTS, voiceSupported } from './voice';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const NAME_KEY = 'tank.name';
+const LAST_GAME_KEY = 'gd.lastGame';
 const spritesReady: Promise<Sprites> = loadSprites();
 const sfx = new Sfx();
 
@@ -34,123 +46,87 @@ function detectDevice(): Device {
   return { touch, small };
 }
 
-function storedName() {
+function stored(key: string) {
   try {
-    return localStorage.getItem(NAME_KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function saveName(name: string) {
+function store(key: string, value: string) {
   try {
-    localStorage.setItem(NAME_KEY, name);
+    localStorage.setItem(key, value);
   } catch {
-    /* ignore */
+    /* private mode: just not remembered */
   }
 }
 
-/** Invite links look like /r/BCDFG. */
-function inviteCode(): string | null {
-  const m = location.pathname.match(/^\/r\/([A-Za-z]+)\/?$/);
-  const code = m ? normalizeRoomCode(m[1]) : '';
-  return isRoomCode(code) ? code : null;
-}
+// ------------------------------------------------------------------ the pages
 
-const nameInput = $<HTMLInputElement>('name-input');
-nameInput.value = storedName() || randomName();
-$('name-dice').addEventListener('click', () => {
-  let n = randomName();
-  while (n === nameInput.value) n = randomName();
-  nameInput.value = n;
-});
+/** Which page an address is: home, starting a table (maybe with a game picked), or joining one. */
+type Page = { kind: 'home' } | { kind: 'start'; game: GameId | null } | { kind: 'join'; code: string; token: string | null };
 
-// ------------------------------------------------------------------ pages
-
-/** Big two-line logos for games with long names. */
-const LOGOS: Record<string, string> = { tanks: 'Tank You<br><span>For Being A Friend</span>' };
-
-/** The sign on games that are still being finished. */
-const UNDER_CONSTRUCTION = '<span class="uc-chip">🚧 Under construction</span>';
-
-/** The game whose page is showing, or null on the home page. */
-let pageGame: GameInfo | null = null;
-
-function renderGameList() {
-  let html = '';
-  for (const g of GAMES) {
-    if (!canPlayPrivately(g.id)) continue;
-    const pub = canPlayPublicly(g.id);
-    html += `<div class="game-tile">
-      <a class="gt-main" href="/${g.slug}" data-nav="/${g.slug}">
-        <span class="gt-icon" aria-hidden="true">${g.icon}</span>
-        <span class="gt-text"><b>${escapeHtml(g.name)}</b>${g.underConstruction ? UNDER_CONSTRUCTION : ''}<small>${escapeHtml(g.blurb)}</small></span>
-      </a>
-      ${pub ? `<button class="btn btn-primary gt-play" type="button" data-play="${g.id}">Play</button>` : '<span class="gt-tag">Private rooms</span>'}
-    </div>`;
+function pageFor(): Page {
+  const path = location.pathname;
+  const params = new URLSearchParams(location.search);
+  // Invite links look like /r/BCDFG, with ?i=<token> when they're from someone (and maybe for someone).
+  const m = path.match(/^\/r\/([A-Za-z]+)\/?$/);
+  if (m) {
+    const code = normalizeRoomCode(m[1]);
+    const token = params.get('i');
+    if (isRoomCode(code)) return { kind: 'join', code, token: isInviteToken(token) ? token : null };
   }
-  $('game-list').innerHTML = html;
+  if (path === '/start') {
+    const g = params.get('game');
+    return { kind: 'start', game: isGameId(g) && canPlayPrivately(g) ? g : null };
+  }
+  // A game's own address (/jigsaw, /tanks…) starts a table with that game picked.
+  const game = gameForPath(path);
+  if (game && canPlayPrivately(game.id)) return { kind: 'start', game: game.id };
+  return { kind: 'home' };
 }
 
-/** Show the home page or a game's page for the current address. */
+let page: Page = pageFor();
+
+/** Each game's paper colour (DESIGN.md), and the order the start page lists them. */
+const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', hearts: 'butter', spades: 'lilac', tanks: 'peach' };
+const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'tanks'];
+const startGames = () => [...GAMES].filter((g) => canPlayPrivately(g.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
+
 function showPage() {
-  const game = gameForPath(location.pathname);
-  // Old and alternative addresses settle on the game's main one (e.g. /tankyouforbeingafriend).
-  if (game && location.pathname !== `/${game.slug}`) history.replaceState(null, '', `/${game.slug}${location.search}`);
-  if (!game && !inviteCode() && location.pathname !== '/') history.replaceState(null, '', `/${location.search}`);
-  pageGame = game;
-  // Arrived on an invite link: joining that room comes first.
-  const invite = inviteCode();
-  $('invite-panel').hidden = !invite;
-  $('invite-code').textContent = invite ?? '';
-  const create = $('create-private');
-  create.textContent = invite ? 'Start my own room instead' : 'Start a private room';
-  create.classList.toggle('btn-primary', !invite);
-  create.classList.toggle('btn-big', !invite);
-  create.classList.toggle('btn-secondary', !!invite);
-  $('home-head').hidden = !!game;
-  $('home-actions').hidden = !!game;
-  $('game-head').hidden = !game;
-  $('game-actions').hidden = !game;
-  showError(null);
-  if (!game) {
-    document.title = 'Games Drawer';
-    renderGameList();
-    return;
+  page = pageFor();
+  // Old and unknown addresses settle on home; game addresses keep their name (/jigsaw).
+  if (page.kind === 'home' && location.pathname !== '/') history.replaceState(null, '', '/');
+  if (page.kind === 'start') {
+    const g = gameForPath(location.pathname);
+    if (g && location.pathname !== `/${g.slug}`) history.replaceState(null, '', `/${g.slug}`);
   }
-  document.title = `${game.title} · Games Drawer`;
-  // The catalog's icons are our own (an emoji, or Dominoes' drawn tile), never player text.
-  $('gp-icon').innerHTML = game.icon;
-  $('gp-title').innerHTML = LOGOS[game.id] ?? escapeHtml(game.title);
-  $('gp-tagline').textContent = game.tagline;
-  $('gp-construction').hidden = !game.underConstruction;
-  const pub = canPlayPublicly(game.id);
-  $('play-public').hidden = !pub;
-  $('play-friends').classList.toggle('btn-primary', !pub);
-  $('play-friends').classList.toggle('btn-big', !pub);
-  $('play-friends').classList.toggle('btn-secondary', pub);
-  $('gp-hint').textContent = pub
-    ? 'Play now joins a game with anyone who’s on. Play with friends opens your own room with chat, voice and an invite link.'
-    : 'Opens your own room with chat, voice and an invite link.';
-  $('gp-howto').innerHTML = game.howTo.map((h) => `<li>${escapeHtml(h)}</li>`).join('');
-  $('gp-players').textContent = game.players;
+  $('page-home').hidden = page.kind !== 'home';
+  $('page-start').hidden = page.kind !== 'start';
+  $('page-join').hidden = page.kind !== 'join';
+  showError(null);
+  nameEditing = false;
+  if (page.kind === 'home') {
+    document.title = 'Games Drawer';
+  } else if (page.kind === 'start') {
+    document.title = page.game ? `${gameInfo(page.game).name} · Games Drawer` : 'Start a table · Games Drawer';
+    renderStartGames(page.game);
+    renderName('start');
+  } else {
+    document.title = 'Join a table · Games Drawer';
+    void loadJoin(page);
+  }
 }
 
 function navigate(path: string) {
-  if (path !== location.pathname) history.pushState(null, '', path);
+  if (path !== location.pathname + location.search) history.pushState(null, '', path);
   showPage();
-  window.scrollTo(0, 0);
+  $('landing').scrollTo(0, 0);
 }
 
 $('landing').addEventListener('click', (e) => {
-  const t = e.target as HTMLElement;
-  const play = t.closest<HTMLElement>('[data-play]')?.dataset.play;
-  if (play) {
-    const game = GAMES.find((g) => g.id === play);
-    if (game) start({ kind: 'public', game: game.id }, $('game-list'));
-    return;
-  }
-  const link = t.closest<HTMLAnchorElement>('a[data-nav]');
+  const link = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[data-nav]');
   if (link) {
     e.preventDefault();
     navigate(link.dataset.nav!);
@@ -160,29 +136,238 @@ window.addEventListener('popstate', () => {
   if (!app) showPage();
 });
 
-const gameButtons = () => $('game-actions').querySelector<HTMLElement>('.actions')!;
-const homeButtons = () => $('home-actions').querySelector<HTMLElement>('.actions')!;
+// ------------------------------------------------------------------ choosing a game
 
-$('join-invite').addEventListener('click', () => {
-  const code = inviteCode();
-  if (code) start({ kind: 'private', code }, $('invite-panel'));
-});
+function renderStartGames(picked: GameId | null) {
+  const games = startGames();
+  const last = stored(LAST_GAME_KEY);
+  const choose = picked ?? (games.find((g) => g.id === last)?.id || games[0]?.id);
+  $('start-games').innerHTML = games
+    .map(
+      (g) => `<label class="pc-choice paper-${GAME_PAPER[g.id] ?? 'sky'}">
+        <input type="radio" name="game" value="${g.id}"${g.id === choose ? ' checked' : ''} />
+        <img src="/art/games/${g.id}.webp" alt="" width="52" height="52" />
+        <span>${escapeHtml(g.name)}${g.underConstruction ? '<small>Work in Progress</small>' : ''}</span>
+      </label>`,
+    )
+    .join('');
+}
 
-$('play-public').addEventListener('click', () => pageGame && start({ kind: 'public', game: pageGame.id }, gameButtons()));
-$('play-friends').addEventListener('click', () => pageGame && start({ kind: 'create-private', game: pageGame.id }, gameButtons()));
-$('create-private').addEventListener('click', () => start({ kind: 'create-private' }, homeButtons()));
-$('code-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const form = $('code-form');
-  const c = normalizeRoomCode($<HTMLInputElement>('code-input').value);
-  if (!isRoomCode(c)) {
-    showError(`Room codes are ${ROOM_CODE_LENGTH} letters.`, form);
+// ------------------------------------------------------------------ your name
+
+const DICE_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/><g fill="currentColor"><circle cx="8" cy="8" r="1.7"/><circle cx="16" cy="8" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="8" cy="16" r="1.7"/><circle cx="16" cy="16" r="1.7"/></g></svg>';
+
+/** The name we'd use: the one remembered on this device, or the one an invite was made for. */
+let suggestedName: string | null = stored(NAME_KEY);
+let nameEditing = false;
+
+/** A known name shows as a line with Change; otherwise a box (with a dice for a random one). */
+function renderName(form: 'start' | 'join') {
+  const box = document.querySelector<HTMLElement>(`[data-name-for="${form}"]`)!;
+  const name = suggestedName;
+  if (name && !nameEditing) {
+    box.innerHTML = `<div class="pc-namerow"><b>Your name</b><span id="${form}-name-shown">${escapeHtml(name)}</span><button type="button" class="pc-link" data-name-act="change">Change</button></div>`;
     return;
   }
-  start({ kind: 'private', code: c }, form);
+  box.innerHTML = `<div class="pc-field"><label for="${form}-name">Your name</label>
+    <div class="entry-row">
+      <input id="${form}-name" class="pc-input" name="name" maxlength="20" placeholder="Your first name" autocomplete="given-name" autocapitalize="words" spellcheck="false" value="${escapeHtml(name ?? '')}" />
+      <button type="button" class="pc-btn pc-btn-plain entry-dice" data-name-act="dice" aria-label="Pick a random name" title="Pick a random name">${DICE_SVG}</button>
+    </div></div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const act = (e.target as HTMLElement).closest<HTMLElement>('[data-name-act]');
+  if (!act) return;
+  const box = act.closest<HTMLElement>('[data-name-for]')!;
+  const form = box.dataset.nameFor as 'start' | 'join';
+  if (act.dataset.nameAct === 'change') {
+    nameEditing = true;
+    renderName(form);
+    const input = $<HTMLInputElement>(`${form}-name`);
+    input.focus();
+    input.select();
+  } else {
+    const input = $<HTMLInputElement>(`${form}-name`);
+    let n = randomName();
+    while (n === input.value) n = randomName();
+    input.value = n;
+    showError(null);
+  }
 });
-// Fixing the code clears the complaint about it.
+
+/** The name to join with, or null (with the box pointed out) when there isn't one yet. */
+function chosenName(form: 'start' | 'join'): string | null {
+  const input = document.getElementById(`${form}-name`) as HTMLInputElement | null;
+  const name = cleanName(input ? input.value : (suggestedName ?? ''));
+  if (!name) {
+    showError('Type your name first, so everyone knows who you are.', document.querySelector<HTMLElement>(`[data-name-for="${form}"]`)!);
+    input?.focus();
+    return null;
+  }
+  if (input) input.value = name;
+  suggestedName = name;
+  store(NAME_KEY, name);
+  return name;
+}
+
+// ------------------------------------------------------------------ home: a code
+
+$('code-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const code = normalizeRoomCode($<HTMLInputElement>('code-input').value);
+  if (!isRoomCode(code)) {
+    showError(`Table codes are ${ROOM_CODE_LENGTH} letters.`, $('code-form'));
+    $('code-input').focus();
+    return;
+  }
+  navigate(`/r/${code}`);
+});
 $('code-input').addEventListener('input', () => showError(null));
+
+// ------------------------------------------------------------------ start a table
+
+$('start-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const form = $<HTMLFormElement>('start-form');
+  const game = new FormData(form).get('game');
+  const name = chosenName('start');
+  if (!name || !isGameId(game)) return;
+  store(LAST_GAME_KEY, game);
+  const mic = (e as SubmitEvent).submitter?.getAttribute('value') !== 'off';
+  start({ kind: 'create-private', game }, { mic, name }, form);
+});
+
+// ------------------------------------------------------------------ join a table
+
+/** "Jesse", "Jesse and Sam", "Jesse, Sam and Mory": each name in bold (escaped: names are typed by people). */
+const namesHtml = (people: string[]) => {
+  const b = people.map((n) => `<b>${escapeHtml(n)}</b>`);
+  return b.length <= 1 ? (b[0] ?? '') : `${b.slice(0, -1).join(', ')} and ${b.at(-1)}`;
+};
+
+/** How each game reads in "Join Jesse for …". */
+const GAME_PHRASE: Record<GameId, string> = { jigsaw: 'a puzzle', dominoes: 'dominoes', hearts: 'Hearts', spades: 'Spades', tanks: 'Tanks' };
+
+/** The join page re-checks who's there this often, so someone arriving or leaving shows before you join. */
+const JOIN_REFRESH_MS = 8000;
+let joinTimer = 0;
+
+/**
+ * A table you can't join (closed, full, too many tries): no join buttons, and Back to home is
+ * the page's one main button. (Not a page to optimise: it's rare.)
+ */
+function setJoinClosed(closed: boolean) {
+  const home = $('join-home');
+  home.classList.toggle('pc-btn-main', closed);
+  home.classList.toggle('pc-btn-big', closed);
+  home.classList.toggle('pc-btn-wide', closed);
+  home.classList.toggle('pc-btn-plain', !closed);
+}
+
+/** Open the join page: reset it, then look the table up. */
+function loadJoin(p: Extract<Page, { kind: 'join' }>) {
+  $('join-title').textContent = 'Join the table';
+  $('join-detail').textContent = '';
+  $('join-form').hidden = false;
+  setJoinClosed(false);
+  renderName('join');
+  return refreshJoin(p, true);
+}
+
+/**
+ * Look the table up (who's there, what they're playing, who invited you) and fill in the page.
+ * Everyone at the table is named before you join, so you can choose not to.
+ */
+async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
+  clearTimeout(joinTimer);
+  const title = $('join-title');
+  const detail = $('join-detail');
+  const form = $('join-form');
+  let info: TableInfo | null = null;
+  try {
+    const q = new URLSearchParams({ code: p.code, slot: slotOfCode(p.code) });
+    if (p.token) q.set('i', p.token);
+    const res = await fetch(`/api/table?${q}`, { cache: 'no-store' });
+    if (res.ok) info = (await res.json()) as TableInfo;
+  } catch {
+    /* offline or an old server: the page still works, just without names */
+  }
+  // The address may have changed (or you joined) while we waited.
+  const stillHere = () => !app && page.kind === 'join' && page.code === p.code;
+  if (!stillHere()) return;
+  const again = () => {
+    joinTimer = window.setTimeout(() => {
+      if (stillHere() && document.visibilityState === 'visible') void refreshJoin(p);
+      else if (stillHere()) again();
+    }, JOIN_REFRESH_MS);
+  };
+  if (!info) {
+    again();
+    return;
+  }
+  detail.hidden = false;
+  if (!info.ok) {
+    form.hidden = true;
+    setJoinClosed(true);
+    if (info.reason === 'busy') {
+      title.textContent = 'Too many tries';
+      detail.textContent = 'Wait a few minutes, then try the code again.';
+    } else {
+      title.textContent = 'This table has closed';
+      detail.textContent = 'Ask whoever invited you for a new link, or start your own table.';
+    }
+    return;
+  }
+  const who = namesHtml(info.people);
+  if (info.full) {
+    form.hidden = true;
+    setJoinClosed(true);
+    title.textContent = 'This table is full';
+    detail.innerHTML = `${who || 'Four people'} ${info.people.length === 1 ? 'is' : 'are'} already playing. Ask them to make room, or start your own table.`;
+    again();
+    return;
+  }
+  form.hidden = false;
+  setJoinClosed(false);
+  const game = info.game ? GAME_PHRASE[info.game] : null;
+  const joinLine = who ? (game ? `Join ${who} for ${game}` : `Join ${who} at the table`) : '';
+  if (joinLine && (!info.from || info.people.includes(info.from))) {
+    // Whoever invited you is there: "Join Jesse and Sam for a puzzle" says it all.
+    title.innerHTML = joinLine;
+    detail.textContent = '';
+  } else {
+    // They've stepped away (or nobody's there): who invited you, then who's there.
+    title.textContent = info.from ? `${info.from} invited you to play` : 'Join the table';
+    detail.innerHTML = joinLine ? `${joinLine}.` : `Nobody is at the table right now${game ? `. It’s set up for ${game}` : ''}.`;
+  }
+  // People who dropped out still hold their seat and may come back: name them too.
+  const away = (info.away ?? []).filter((n) => !info.people.includes(n));
+  if (away.length) {
+    const line = `${namesHtml(away)} stepped away and may come back.`;
+    detail.innerHTML = detail.innerHTML ? `${detail.innerHTML} ${line}` : line;
+  }
+  detail.hidden = !detail.textContent;
+  // An invite made for you by name fills it in, unless this device already knows yours.
+  if (first && info.for && !stored(NAME_KEY)) {
+    suggestedName = info.for;
+    nameEditing = false;
+    renderName('join');
+  }
+  again();
+}
+
+$('join-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (page.kind !== 'join') return;
+  const name = chosenName('join');
+  if (!name) return;
+  const mic = (e as SubmitEvent).submitter?.getAttribute('value') !== 'off';
+  start({ kind: 'private', code: page.code }, { mic, name }, $('join-form'));
+});
+
+// ------------------------------------------------------------------ notices
 
 /**
  * Where a problem is shown: right under what you tapped (the bottom of the page is off the
@@ -191,21 +376,14 @@ $('code-input').addEventListener('input', () => showError(null));
 let errorAnchor: HTMLElement | null = null;
 let pendingTimer = 0;
 
-/** Put the message line under `anchor` (or what was tapped last), and show it. */
 function placeNotice(text: string, kind: 'error' | 'pending', anchor?: HTMLElement) {
   const el = $('landing-error');
-  const at = anchor ?? errorAnchor ?? (inviteCode() ? $('invite-panel') : pageGame ? gameButtons() : homeButtons());
-  // Moving it would replay its opening animation: only when it's somewhere else.
-  const moved = el.previousElementSibling !== at;
-  if (moved) at.after(el);
-  const before = el.hidden || moved ? 0 : el.offsetHeight;
+  const at = anchor ?? errorAnchor ?? $(`page-${page.kind}`);
+  if (el.previousElementSibling !== at) at.after(el);
   el.classList.toggle('pending', kind === 'pending');
   el.classList.remove('retrying');
   el.textContent = text;
   el.hidden = false;
-  // A longer message (two lines on a phone) grows smoothly instead of jolting the page.
-  const after = el.offsetHeight;
-  if (before && after !== before) el.animate([{ height: `${before}px` }, { height: `${after}px` }], { duration: 200, easing: 'ease-out' });
   el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
@@ -218,11 +396,7 @@ function showError(msg: string | null, anchor?: HTMLElement) {
   el.classList.remove('pending', 'retrying');
 }
 
-/**
- * While joining: "Joining room ABCDE…" in the same spot the answer will appear (so nothing jumps).
- * It waits a moment first, since most answers are quicker than that; meanwhile an old complaint
- * fades back, as it's being tried again.
- */
+/** "Joining…" where the answer will appear, after a moment (most answers are quicker). */
 function showPending(text: string) {
   clearTimeout(pendingTimer);
   const el = $('landing-error');
@@ -240,48 +414,77 @@ let app: RoomApp | null = null;
 let net: Net | null = null;
 
 /**
- * The room this tab is in. If the page reloads (or a phone discards the tab while
- * you switch apps) we go straight back in and reclaim your place.
+ * The table this tab is at, and whether the mic was on. If the page reloads (or a phone discards
+ * the tab while you switch apps) we go straight back in and reclaim your place.
  */
 const ACTIVE_KEY = 'tank.active';
-function setActive(room: RoomRequest | null) {
+interface Active {
+  room: RoomRequest;
+  mic: boolean;
+}
+function setActive(a: Active | null) {
   try {
-    if (room) sessionStorage.setItem(ACTIVE_KEY, JSON.stringify(room));
+    if (a) sessionStorage.setItem(ACTIVE_KEY, JSON.stringify(a));
     else sessionStorage.removeItem(ACTIVE_KEY);
   } catch {
     /* ignore */
   }
 }
-function getActive(): RoomRequest | null {
+function getActive(): Active | null {
   try {
     const raw = sessionStorage.getItem(ACTIVE_KEY);
-    return raw ? (JSON.parse(raw) as RoomRequest) : null;
+    const a = raw ? (JSON.parse(raw) as Active | RoomRequest) : null;
+    if (!a) return null;
+    // Older tabs stored just the room.
+    return 'kind' in a ? { room: a, mic: false } : a;
   } catch {
     return null;
   }
 }
 
-/** Join or open a room. `from` is what was tapped: if it doesn't work out, the reason shows there. */
-async function start(room: RoomRequest, from?: HTMLElement) {
-  // Called from a button tap, so audio is allowed to start (required on iPhone).
+/** Ask for the mic straight from the tap, so the browser's question answers "with mic on". */
+function requestMic(): Promise<MediaStream> | null {
+  if (!voiceSupported()) return null;
+  const p = navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+  p.catch(() => {}); // handled when voice starts
+  return p;
+}
+
+/** An audio context made during the tap, so iPhones and iPads let it play. */
+function tapAudioContext(): AudioContext | null {
+  try {
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor || !voiceSupported()) return null;
+    const ctx = new Ctor();
+    void ctx.resume().catch(() => {});
+    return ctx;
+  } catch {
+    return null;
+  }
+}
+
+/** Join or open a table. `from` is what was tapped: if it doesn't work out, the reason shows there. */
+async function start(room: RoomRequest, opts: { mic: boolean; name: string; resumed?: boolean }, from?: HTMLElement) {
+  // Called from a button tap, so sound is allowed to start (required on iPhone).
   sfx.unlock();
+  const entry: EntryChoice = {
+    mic: opts.mic,
+    resumed: !!opts.resumed,
+    micStream: opts.mic && !opts.resumed ? requestMic() : null,
+    audioCtx: opts.mic ? tapAudioContext() : null,
+  };
   errorAnchor = from ?? null;
-  showPending(
-    room.kind === 'private' ? `Joining room ${room.code}…` : room.kind === 'create-private' ? 'Opening your room…' : 'Finding a game…',
-  );
+  showPending(room.kind === 'private' ? 'Joining the table…' : 'Setting up your table…');
   setBusy(true);
-  const name = cleanName(nameInput.value) || randomName();
-  nameInput.value = name;
-  saveName(name);
   const sprites = await spritesReady;
   const device = detectDevice();
   net?.close();
-  const thisNet = new Net(room, () => storedName() || name, device.touch ? 'phone' : 'desktop', {
+  const thisNet = new Net(room, () => stored(NAME_KEY) || opts.name, device.touch ? 'phone' : 'desktop', {
     onMessage: (msg: ServerMessage) => {
       if (msg.t === 'welcome' && !app) {
-        setActive(msg.room.kind === 'private' ? { kind: 'private', code: msg.room.code } : { kind: 'public', game: msg.game ?? 'tanks' });
+        setActive({ room: { kind: 'private', code: msg.room.code }, mic: opts.mic });
         enterGame();
-        app = new RoomApp(msg, thisNet, sprites, sfx, device, leave, pads);
+        app = new RoomApp(msg, thisNet, sprites, sfx, device, leave, pads, entry);
         if (import.meta.env.DEV) (window as unknown as { __tank: RoomApp }).__tank = app;
         return;
       }
@@ -289,16 +492,18 @@ async function start(room: RoomRequest, from?: HTMLElement) {
     },
     onFatal: (err) => {
       if (app) leave();
+      dropEntry(entry);
       setActive(null);
       setBusy(false);
-      showError(err.message);
+      showError(err.message.replace(/\broom\b/g, 'table'));
     },
     onReconnecting: () => {
       if (app) app.showReconnecting();
       else {
         thisNet.close();
+        dropEntry(entry);
         setBusy(false);
-        showError("Couldn't reach the game server. Is it running?");
+        showError("Couldn't reach Games Drawer. Check your internet connection and try again.");
       }
     },
   });
@@ -306,11 +511,17 @@ async function start(room: RoomRequest, from?: HTMLElement) {
   thisNet.connect();
 }
 
+/** Didn't get in: let go of the mic and audio we opened for it. */
+function dropEntry(entry: EntryChoice) {
+  void entry.micStream?.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
+  void entry.audioCtx?.close().catch(() => {});
+}
+
 // ------------------------------------------------------------------ controllers
 
 /**
- * One reader for every controller. In a room the room handles it; on the home page and game
- * pages the d-pad moves between buttons, A presses, and B goes back to all games.
+ * One reader for every controller. At a table the table handles it; on these pages the d-pad
+ * moves between buttons, A presses, and B goes back home.
  */
 const pads = new Gamepads({
   press: (p) => {
@@ -322,7 +533,7 @@ const pads = new Gamepads({
       const el = document.activeElement as HTMLElement | null;
       if (el && el !== document.body && landing.contains(el)) el.click();
       else moveFocus(landing, 'down');
-    } else if (b === 'b' && pageGame) navigate('/');
+    } else if (b === 'b' && page.kind !== 'home') navigate('/');
   },
   release: (b) => app?.onPadRelease(b),
   connected: () => app?.toast('Controller connected. Menu opens the menu; the d-pad and A get around.'),
@@ -334,16 +545,19 @@ for (const ev of ['gesturestart', 'gesturechange'] as const) document.addEventLi
 
 showPage();
 const resume = getActive();
-if (resume) start(resume);
+if (resume && resume.room.kind === 'private') start(resume.room, { mic: resume.mic, name: stored(NAME_KEY) || randomName(), resumed: true });
 
 function enterGame() {
   showError(null);
+  // Let go of the button that was pressed ("Start with mic on"): it's hidden now, and a
+  // controller's next press should go to the game, not to wherever focus would move from there.
+  (document.activeElement as HTMLElement | null)?.blur?.();
   $('landing').hidden = true;
   $('game').hidden = false;
   setBusy(false);
 }
 
-/** Back out of a room: to the game's page after a public game, home after a private room. */
+/** Leave the table and go home. */
 function leave() {
   setActive(null);
   app?.dispose();
@@ -352,7 +566,6 @@ function leave() {
   net = null;
   $('game').hidden = true;
   $('landing').hidden = false;
-  // A private room's address is its invite link; once you've left, go home instead.
-  if (inviteCode()) history.replaceState(null, '', `/${location.search}`);
+  history.replaceState(null, '', '/');
   showPage();
 }

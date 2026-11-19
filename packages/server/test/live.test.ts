@@ -269,6 +269,58 @@ describe('live server: abuse limits', () => {
     }
   });
 
+  it('the join page looks up a table: who started it, the game, who is there', async () => {
+    const s = await startWith();
+    try {
+      const host = await joined(s.port, { kind: 'create-private', game: 'jigsaw' });
+      const code = host.w.room.code;
+      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}`)).json();
+      expect(info).toEqual({ ok: true, from: 'Tester', for: null, game: 'jigsaw', people: ['Tester'], away: [], full: false });
+      const gone = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=BBBBB`)).json();
+      expect(gone).toEqual({ ok: false, reason: 'closed' });
+      host.c.ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('invite links name who sent them and who they are for, as the server knows them', async () => {
+    const s = await startWith();
+    try {
+      const host = await joined(s.port, { kind: 'create-private' });
+      const code = host.w.room.code;
+      host.c.send({ t: 'invite', for: '  Liz  ' });
+      const inv = await host.c.waitFor('invite');
+      expect(inv.for).toBe('Liz');
+      expect(inv.token).toMatch(/^[a-z2-9]{8}$/);
+      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}&i=${inv.token}`)).json();
+      expect(info).toMatchObject({ ok: true, from: 'Tester', for: 'Liz', game: null });
+      // Asking again for the same person gives the same link.
+      host.c.messages.length = 0;
+      host.c.send({ t: 'invite', for: 'Liz' });
+      expect((await host.c.waitFor('invite')).token).toBe(inv.token);
+      // A made-up token is ignored: the page just names whoever started the table.
+      const fake = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}&i=zzzzzzzz`)).json();
+      expect(fake).toMatchObject({ ok: true, from: 'Tester', for: null });
+      host.c.ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('table lookups with wrong codes count as code guessing', async () => {
+    const s = await startWith({ failedJoinsPer5Min: 2 });
+    try {
+      const host = await joined(s.port, { kind: 'create-private' });
+      for (const guess of ['BBBBB', 'CCCCC']) await fetch(`http://127.0.0.1:${s.port}/api/table?code=${guess}`);
+      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${host.w.room.code}`)).json();
+      expect(info).toEqual({ ok: false, reason: 'busy' });
+      host.c.ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
   it('limits how many private rooms one IP can create', async () => {
     const s = await startWith({ privateRoomsPer10Min: 2 });
     try {
@@ -310,7 +362,7 @@ describe('live server: HTTP in production mode', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tank-http-'));
     dist = path.join(tmp, 'dist');
     fs.mkdirSync(path.join(dist, 'assets'), { recursive: true });
-    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><title>game</title><meta property="og:image" content="/og.png" />');
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><title>game</title><meta property="og:image" content="/art/og.jpg" />');
     fs.writeFileSync(path.join(dist, 'assets', 'app.js'), 'console.log(1)');
     fs.mkdirSync(path.join(dist, 'sfx'), { recursive: true });
     fs.writeFileSync(path.join(dist, 'sfx', 'boom.wav'), 'RIFF');
@@ -336,7 +388,7 @@ describe('live server: HTTP in production mode', () => {
     expect((await fetch(`${base}/sfx/nope.wav`)).status).toBe(404);
     const invite = await fetch(`${base}/r/BCDFG`);
     expect(invite.status).toBe(200);
-    expect(await invite.text()).toContain('<title>Join my room · Games Drawer</title>');
+    expect(await invite.text()).toContain('<title>Join my table · Games Drawer</title>');
   });
 
   it('gives each game page its own title, so a shared link previews as that game', async () => {
@@ -362,7 +414,7 @@ describe('live server: HTTP in production mode', () => {
 
   it('fills in an absolute link-preview image address', async () => {
     const html = await (await fetch(`${base}/r/BCDFG`)).text();
-    expect(html).toContain(`content="http://127.0.0.1:${s.port}/og.png"`);
+    expect(html).toContain(`content="http://127.0.0.1:${s.port}/art/og.jpg"`);
   });
 
   it('never echoes a hostile Host header into the page', async () => {
@@ -376,7 +428,7 @@ describe('live server: HTTP in production mode', () => {
       req.end();
     });
     expect(html).not.toContain('<script>alert');
-    expect(html).toContain('content="/og.png"');
+    expect(html).toContain('content="/art/og.jpg"');
   });
 
   it('never serves files outside the client folder', async () => {

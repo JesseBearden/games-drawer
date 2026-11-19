@@ -30,8 +30,7 @@ function overlaps(a: { x: number; y: number; width: number; height: number }, b:
 }
 
 test('Hearts fits a phone held either way, and turning it keeps the hand centred', async ({ page }) => {
-  await createRoom(page, 'Pip');
-  await page.locator('[data-game="hearts"]').click();
+  await createRoom(page, 'Pip', 'hearts');
   await passThree(page);
   await expect(page.locator('.ht-slot .card').first()).toBeVisible({ timeout: 30_000 });
   await expectHandFits(page);

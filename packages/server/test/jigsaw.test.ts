@@ -270,7 +270,7 @@ describe('jigsaw in a room', () => {
       const saves = pz(later.b.conn, 'pz-saves').at(-1)!.saves;
       expect(saves).toHaveLength(1);
       expect(saves[0]).toMatchObject({ id, image: 'dog', pieces: 54, done: false });
-      expect(saves[0].progress).toBeCloseTo(1 / 53);
+      expect(saves[0].progress).toBeCloseTo(2 / 54);
       later.send('b', { t: 'pz-resume', id });
       expect(later.game.phase).toBe('playing');
       expect(later.game.state!.pieces).toEqual(saved.pieces);

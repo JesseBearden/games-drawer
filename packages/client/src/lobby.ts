@@ -1,17 +1,20 @@
-import { canPlayPrivately, CHAT_FILTER_LABELS, GAMES, isGameId, type MemberInfo } from '@tank/shared';
-import { MIC_OFF_SVG } from './icons';
-import { colorCss, escapeHtml } from './state';
+import { canPlayPrivately, CHAT_FILTER_LABELS, GAMES, isGameId, type GameId, type MemberInfo } from '@tank/shared';
+import { escapeHtml } from './state';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-/** Games a private room can pick: everything not switched off (see games.ts). */
-const pickable = () => GAMES.filter((g) => canPlayPrivately(g.id));
+/** Each game's paper colour and the order they're listed (the same as the start page). */
+const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', hearts: 'butter', spades: 'lilac', tanks: 'peach' };
+const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'tanks'];
 
-/** The private room's home: who's here, voice, and a game picker anyone can use. */
+/** Games a table can pick: everything not switched off (see games.ts). */
+const pickable = () => GAMES.filter((g) => canPlayPrivately(g.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
+
+/** Between games (Menu, Switch game): who's at the table, and a game picker anyone can use. */
 export class LobbyView implements View {
   readonly landscape = false;
-  readonly helpHtml = '<p>Pick a game to start it for everyone in the room. Chat and voice keep going between games.</p>';
+  readonly helpHtml = '<p>Pick a game to start it for everyone at the table. Messages and mics keep going between games.</p>';
   private el = $('lobby-view');
   private members: MemberInfo[] = [];
   private speaking = new Set<string>();
@@ -33,36 +36,36 @@ export class LobbyView implements View {
 
   onSpeaking(aliases: Set<string>) {
     this.speaking = aliases;
-    for (const li of this.el.querySelectorAll<HTMLElement>('[data-alias]')) li.classList.toggle('speaking', aliases.has(li.dataset.alias!));
+    for (const li of this.el.querySelectorAll<HTMLElement>('[data-alias]')) li.classList.toggle('is-talking', aliases.has(li.dataset.alias!));
   }
 
   private render() {
     const s = this.shell;
-    let html = `<div class="lobby-card"><div class="lobby-head"><h2>Room <span class="room-code">${escapeHtml(s.roomCode)}</span></h2>`;
-    html += '<button class="btn btn-secondary" data-act="invite" type="button">Invite friends</button></div>';
-    html += '<ul class="lobby-members">';
+    let html = '<div class="lobby-paper"><h1 class="pc-h2">Pick a game</h1>';
+    html += '<p>Anyone at the table can pick. Messages and mics keep going between games.</p>';
+    html += '<div class="pc-choices lobby-games">';
+    for (const g of pickable()) {
+      html += `<button class="pc-choice paper-${GAME_PAPER[g.id] ?? 'sky'}" data-game="${g.id}" type="button"><img src="/art/games/${g.id}.webp" alt="" width="52" height="52" /><span>${escapeHtml(g.name)}${g.underConstruction ? '<small>Work in Progress</small>' : ''}</span></button>`;
+    }
+    html += '</div><h2 class="pc-h3">At the table</h2><ul class="lobby-people">';
     for (const m of this.members) {
-      const you = m.id === s.alias ? ' <small>(you)</small>' : '';
-      const away = m.connected ? '' : ' <small>(away)</small>';
-      html += `<li data-alias="${escapeHtml(m.id)}" class="${this.speaking.has(m.id) ? 'speaking' : ''}"><span class="dot" style="background:${colorCss(m.color)}"></span>${escapeHtml(m.name)}${you}${away}</li>`;
+      const notes = [m.id === s.alias ? 'You' : '', m.connected ? '' : 'Away'].filter(Boolean).join(' · ');
+      html += `<li data-alias="${escapeHtml(m.id)}" class="pc-tag${m.connected ? '' : ' is-away'}${this.speaking.has(m.id) ? ' is-talking' : ''}"><b><span class="pc-talk"><i></i><i></i><i></i></span>${escapeHtml(m.name)}</b>${notes ? `<span class="pc-note">${notes}</span>` : ''}</li>`;
     }
     html += '</ul>';
-    const filter = CHAT_FILTER_LABELS[s.chatFilter];
-    html += `<p class="lobby-filter">Chat filter: <b>${filter.name}</b> (${filter.detail}). Change it in the ☰ menu.</p>`;
     if (s.voice.available && !s.voice.inVoice) {
       const why =
         s.voice.micProblem === 'blocked'
-          ? 'Your browser blocked the microphone. Allow it for this site in the browser’s settings, then tap here.'
+          ? 'Your browser is blocking the mic.'
           : s.voice.micProblem === 'missing'
-            ? 'No microphone found. Plug one in, then tap here.'
+            ? 'No microphone found on this device.'
             : 'Everyone here can talk while you play.';
-      html += `<button class="voice-cta" data-act="voice" type="button"><span class="vc-icon">${MIC_OFF_SVG}</span><span><b>You’re not in voice chat</b><small>${why}</small></span><span class="vc-join">Join</span></button>`;
+      html += `<div class="pc-alert"><span style="flex: 1">Your mic is off. ${why}</span><button class="pc-btn pc-btn-plain" data-act="voice" type="button">Turn on mic</button></div>`;
     }
-    html += '<h3>Pick a game</h3><div class="game-cards">';
-    for (const g of pickable()) {
-      html += `<button class="game-card" data-game="${g.id}" type="button"><span class="game-icon">${g.icon}</span><span class="game-name">${g.name}${g.underConstruction ? ' <span class="uc-chip">🚧 Under construction</span>' : ''}</span><span class="game-blurb">${g.blurb}</span><span class="game-players">${g.players}</span></button>`;
-    }
-    html += '</div><p class="hint">Anyone in the room can pick. Chat and voice keep going between games.</p></div>';
+    const filter = CHAT_FILTER_LABELS[s.chatFilter];
+    // (The table code is in the Invite sheet, for reading out over the phone.)
+    html += `<div class="lobby-bottom"><button class="pc-btn pc-btn-plain" data-act="invite" type="button">Invite someone</button></div>`;
+    html += `<p class="lobby-filter pc-small">Message filter: <b>${filter.name}</b> (${filter.detail}). Change it in the Menu.</p></div>`;
     this.el.innerHTML = html;
   }
 

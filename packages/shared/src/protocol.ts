@@ -122,8 +122,37 @@ export type ClientMessage =
   | { t: 'lobby' }
   /** Private rooms: change how swearing in chat is handled (anyone in the room can). */
   | { t: 'filter'; mode: ChatFilterMode }
+  /** Make an invite link from you, optionally for one person by name (their name is filled in for them). */
+  | { t: 'invite'; for: string | null }
   /** Input for whatever game the room is playing. */
   | { t: 'g'; m: GameInput };
+
+/** Invite tokens (the ?i= on an invite link): short, random, from this alphabet. */
+export const INVITE_TOKEN_LENGTH = 8;
+export const INVITE_TOKEN_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+export const isInviteToken = (v: unknown): v is string =>
+  typeof v === 'string' && v.length === INVITE_TOKEN_LENGTH && [...v].every((c) => INVITE_TOKEN_ALPHABET.includes(c));
+
+/**
+ * What the join page shows before you join (GET /api/table?code=…&i=…). Names come from the
+ * server, never from the link, so a link can't claim to be from someone it isn't.
+ */
+export type TableInfo =
+  | {
+      ok: true;
+      /** Who invited you (the invite link's sender), or who started the table for a bare code. */
+      from: string | null;
+      /** The name the invite was made for, filled in on the join page. */
+      for: string | null;
+      /** The game being played, or null while they pick one. */
+      game: GameId | null;
+      /** Names of the people there now. */
+      people: string[];
+      /** People who dropped out but still hold their seat (they may come back). */
+      away: string[];
+      full: boolean;
+    }
+  | { ok: false; reason: 'closed' | 'busy' };
 
 /** WebRTC negotiation payloads (peer-to-peer voice). */
 export type RtcSignal =
@@ -287,6 +316,8 @@ export type ServerMessage =
   /** Who is in voice chat right now. */
   | { t: 'voice'; peers: VoicePeer[] }
   | { t: 'rtc'; from: string; data: RtcSignal }
+  /** Your invite link's token (and the name it's for, as the server cleaned it). */
+  | { t: 'invite'; token: string; for: string | null }
   | { t: 'error'; code: ErrorCode; message: string };
 
 export type ErrorCode =
@@ -386,6 +417,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return { t: 'lobby' };
     case 'filter':
       return isChatFilterMode(o.mode) ? { t: 'filter', mode: o.mode } : null;
+    case 'invite':
+      return o.for === null || str(o.for, 64) ? { t: 'invite', for: o.for as string | null } : null;
     case 'g': {
       const input = parseGameInput(o.m);
       return input ? { t: 'g', m: input } : null;

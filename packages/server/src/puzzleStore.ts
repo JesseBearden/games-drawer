@@ -69,7 +69,7 @@ export class PuzzleStore {
       imageFile: s.imageFile,
       title: s.title,
       pieces: s.pieces.length,
-      progress: puzzleProgress(s.pieces),
+      progress: puzzleProgress(s.pieces, s.locked),
       updatedAt: s.updatedAt,
       done: s.doneAt !== null,
     };

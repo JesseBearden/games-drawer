@@ -61,28 +61,11 @@ export function voiceSupported(): boolean {
   return typeof RTCPeerConnection !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && window.isSecureContext;
 }
 
-const PREF_KEY = 'gd.voice';
-
-/**
- * Whether this browser wants voice: 'on' joins voice in every private room straight away,
- * 'off' stays out until you join yourself, null (never chosen) asks once with a welcome prompt.
- */
-export function voicePreference(): 'on' | 'off' | null {
-  try {
-    const v = localStorage.getItem(PREF_KEY);
-    return v === 'on' || v === 'off' ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setVoicePreference(v: 'on' | 'off') {
-  try {
-    localStorage.setItem(PREF_KEY, v);
-  } catch {
-    /* private mode: ask again next time */
-  }
-}
+/** What we ask the browser for: its own echo cancellation, noise suppression and level control. */
+export const MIC_CONSTRAINTS: MediaStreamConstraints = {
+  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+  video: false,
+};
 
 export class Voice {
   inVoice = false;
@@ -96,7 +79,10 @@ export class Voice {
   private ctx: AudioContext | null = null;
   private micAnalyser: AnalyserNode | null = null;
   private gate: GainNode | null = null;
+  private micSource: MediaStreamAudioSourceNode | null = null;
   private sendTrack: MediaStreamTrack | null = null;
+  /** The page is hidden and peers get the plain mic (see onVisibility). */
+  private rawMic = false;
   private gateOpenUntil = 0;
   private timer: number | undefined;
   private lastSpeaking = '';
@@ -145,60 +131,106 @@ export class Voice {
   }
 
   /**
-   * Turn on the mic and join. Best from a tap (some browsers only allow sound after one);
-   * `auto` is for rooms joined with voice already switched on, and quietly falls back to the
-   * button if the browser says no.
+   * Turn on the mic and join. Best from a tap (some browsers only allow sound after one).
+   * The entry page's "with mic on" buttons ask for the mic during the tap itself and hand the
+   * request over here (`stream`), along with an audio context made in the same tap (`ctx`), so
+   * iPhones and iPads let it play. `auto` is for joining straight from that choice.
    */
-  async join(opts: { auto?: boolean } = {}) {
+  async join(opts: { auto?: boolean; stream?: Promise<MediaStream> | null; ctx?: AudioContext | null } = {}) {
     if (this.inVoice || this.joining || !this.available) return;
     if (!this.supported) {
-      this.hooks.toast('Voice needs a secure (https) page. Use the hosted game or npm run dev:https.');
+      this.hooks.toast('The mic needs a secure (https) page. Use the hosted site or npm run dev:https.');
       return;
     }
     this.joining = true;
     try {
-      this.mic = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-        video: false,
-      });
+      this.mic = await (opts.stream ?? navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS));
     } catch (err) {
       this.joining = false;
       const name = (err as { name?: string } | null)?.name;
       this.micProblem = name === 'NotFoundError' || name === 'OverconstrainedError' ? 'missing' : 'blocked';
-      this.hooks.toast(
-        this.micProblem === 'missing'
-          ? 'No microphone found, so you’re not in voice.'
-          : opts.auto
-            ? 'Couldn’t turn on your mic. Tap 🎙️ to try again.'
-            : 'The browser blocked the microphone. Allow it for this site in the browser’s settings, then tap 🎙️.',
-      );
+      this.hooks.toast(this.micProblem === 'missing' ? 'No microphone found on this device.' : 'Your mic is blocked. Tap Turn on mic to see how to allow it.');
+      opts.ctx?.close().catch(() => {});
       this.hooks.changed();
       return;
     }
     this.micProblem = null;
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    this.ctx = new Ctor();
+    this.ctx = opts.ctx && opts.ctx.state !== 'closed' ? opts.ctx : new Ctor();
     await this.ctx.resume().catch(() => {});
     // mic -> analyser (level) and -> gate (gain 0/1) -> stream we actually send
-    const src = this.ctx.createMediaStreamSource(this.mic);
+    this.micSource = this.ctx.createMediaStreamSource(this.mic);
     this.micAnalyser = this.ctx.createAnalyser();
     this.micAnalyser.fftSize = 512;
     this.gate = this.ctx.createGain();
     this.gate.gain.value = 0;
     const out = this.ctx.createMediaStreamDestination();
-    src.connect(this.micAnalyser);
-    src.connect(this.gate).connect(out);
+    this.micSource.connect(this.micAnalyser);
+    this.micSource.connect(this.gate).connect(out);
     this.sendTrack = out.stream.getAudioTracks()[0];
     this.inVoice = true;
     this.joining = false;
     this.timer = window.setInterval(() => this.tick(), 60);
+    document.addEventListener('visibilitychange', this.onVisibility);
     this.hooks.send({ t: 'voice', join: true });
-    this.hooks.toast(opts.auto ? 'Voice is on. Tap 🎙️ to mute or turn it off.' : 'Joined voice chat');
-    setVoicePreference('on');
+    this.hooks.toast('Your mic is on.');
     this.hooks.changed();
     this.connectPeers();
     // Browsers may hold back sound until the page has been tapped; resume on the next tap.
     if (this.ctx && this.ctx.state !== 'running') this.resumeOnTap();
+  }
+
+  // ---------------------------------------------------------------- in the background
+
+  /**
+   * iPhones and iPads pause timers and Web Audio a few seconds after the page goes to the
+   * background, which froze the noise gate shut: you could still hear everyone, but they
+   * stopped hearing you. While the page is hidden we send the plain mic instead (the browser's
+   * own noise suppression still applies), and switch back to the gate when it's showing again.
+   */
+  private onVisibility = () => {
+    if (!this.inVoice || !this.mic) return;
+    if (document.visibilityState === 'hidden') this.sendRawMic(true);
+    else void this.backInFront();
+  };
+
+  /** Which track the peers get: the plain mic (page hidden) or the gated one. */
+  private sendRawMic(raw: boolean) {
+    const micTrack = this.mic?.getAudioTracks()[0] ?? null;
+    if (!micTrack || !this.sendTrack) return;
+    this.rawMic = raw;
+    // The plain mic also feeds the level meter, so it's only switched off while it's what we send.
+    micTrack.enabled = raw ? !this.selfMuted : true;
+    const track = raw ? micTrack : this.sendTrack;
+    for (const link of this.links.values()) {
+      for (const sender of link.pc.getSenders()) {
+        if (sender.track !== track && (sender.track?.kind ?? 'audio') === 'audio') void sender.replaceTrack(track).catch(() => {});
+      }
+    }
+  }
+
+  private async backInFront() {
+    await this.ctx?.resume().catch(() => {});
+    // The system can end the mic while the page is away (another app took it): open it again.
+    if (this.mic?.getAudioTracks()[0]?.readyState === 'ended') await this.reopenMic();
+    this.sendRawMic(false);
+    for (const link of this.links.values()) if (link.audio.srcObject && link.audio.paused) void link.audio.play().catch(() => {});
+  }
+
+  private async reopenMic() {
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+      this.mic?.getTracks().forEach((t) => t.stop());
+      this.mic = fresh;
+      this.micSource?.disconnect();
+      if (this.ctx && this.micAnalyser && this.gate) {
+        this.micSource = this.ctx.createMediaStreamSource(fresh);
+        this.micSource.connect(this.micAnalyser);
+        this.micSource.connect(this.gate);
+      }
+    } catch {
+      this.hooks.toast('Your mic stopped while the page was in the background. Tap Mute mic twice to turn it back on.');
+    }
   }
 
   private resumeOnTap() {
@@ -210,19 +242,20 @@ export class Voice {
     document.addEventListener('pointerdown', resume, true);
   }
 
-  /** Leave voice by choice; remembered, so the next room doesn't switch it back on. */
+  /** Turn the mic off completely (leave voice). Muting is setSelfMuted. */
   leave() {
     if (!this.inVoice) return;
-    setVoicePreference('off');
     this.hooks.send({ t: 'voice', join: false });
     this.teardown();
-    this.hooks.toast('Left voice chat');
+    this.hooks.toast('Your mic is off.');
     this.hooks.changed();
   }
 
   /** Close everything without telling the server (it already knows, e.g. on reconnect). */
   teardown() {
     this.inVoice = false;
+    this.rawMic = false;
+    document.removeEventListener('visibilitychange', this.onVisibility);
     clearInterval(this.timer);
     for (const alias of [...this.links.keys()]) this.dropLink(alias);
     this.mic?.getTracks().forEach((t) => t.stop());
@@ -237,6 +270,11 @@ export class Voice {
   setSelfMuted(muted: boolean) {
     this.selfMuted = muted;
     if (this.sendTrack) this.sendTrack.enabled = !muted;
+    // In the background the plain mic is what's sent, so mute that too.
+    if (this.rawMic) {
+      const micTrack = this.mic?.getAudioTracks()[0];
+      if (micTrack) micTrack.enabled = !muted;
+    }
     this.hooks.changed();
   }
 
@@ -308,7 +346,10 @@ export class Voice {
     audio.setAttribute('playsinline', '');
     audio.muted = this.muted.has(alias);
     const link: PeerLink = { pc, audio, analyser: null, pending: [], route: 'connecting', restarts: 0 };
-    if (this.sendTrack) pc.addTrack(this.sendTrack, new MediaStream([this.sendTrack]));
+    // Whatever we're sending right now: the gated mic, or the plain one while the page is hidden.
+    const micTrack = this.mic?.getAudioTracks()[0];
+    const out = this.rawMic && micTrack ? micTrack : this.sendTrack;
+    if (out) pc.addTrack(out, new MediaStream([out]));
     pc.onicecandidate = (e) => {
       if (!e.candidate) return;
       const c = e.candidate.toJSON();

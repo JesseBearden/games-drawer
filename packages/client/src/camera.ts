@@ -10,6 +10,11 @@ export const ZOOM_LEVELS = [
   { name: 'Close zoom', zoom: 1.9 },
 ] as const;
 
+/** World units of sky kept above the highest hill in the whole-battlefield view. */
+const SKY_ABOVE_HILLS = 150;
+/** The whole-battlefield view never shows less than this much height (world units). */
+const MIN_BAND = 420;
+
 export class Camera {
   x = 0;
   y = 0;
@@ -35,10 +40,19 @@ export class Camera {
   }
 
   /**
+   * The whole battlefield must always fit top to bottom: from a little sky above the highest
+   * hill (room for a tank, its name and the start of a shot) down past the deepest valley.
+   */
+  private wholeBand(deepest: number, highest: number) {
+    const b = this.contentBounds(deepest);
+    return { top: Math.max(b.top, Math.min(highest - SKY_ABOVE_HILLS, b.bottom - MIN_BAND)), bottom: b.bottom };
+  }
+
+  /**
    * bottomInset: screen pixels at the bottom covered by touch controls. The battlefield is
    * framed above them so no tank ends up hidden under a button.
    */
-  update(vw: number, vh: number, target: Point | null, deepest: number, dtMs: number, bottomInset = 0) {
+  update(vw: number, vh: number, target: Point | null, deepest: number, dtMs: number, bottomInset = 0, highest = deepest) {
     const W = this.cfg.worldWidth;
     const H = this.cfg.worldHeight;
     const b = this.contentBounds(deepest);
@@ -47,11 +61,13 @@ export class Camera {
     let x: number;
     let y: number;
     if (!this.following || !target) {
-      // Whole battlefield: always the full width, edge to edge. On short, wide phone screens
-      // that trims a little sky off the top; spare height (desktop) goes to the sky.
-      scale = vw / W;
-      x = 0;
-      y = Math.min(b.top, b.bottom - vh / scale);
+      // Whole battlefield: the full width, edge to edge, unless that would cut the hills or the
+      // valleys off (short, wide phone screens). Then it shrinks until they fit, and the ground
+      // past the map's edges (drawn dimmed) fills the sides. Spare height goes to the sky.
+      const band = this.wholeBand(deepest, highest);
+      scale = Math.min(vw / W, vh / (band.bottom - band.top));
+      x = -Math.max(0, vw / scale - W) / 2;
+      y = band.bottom - vh / scale;
     } else {
       // Zoomed views are based on the screen's width, so short, wide phone screens fill
       // edge to edge and trim empty sky rather than shrinking the whole map to fit.

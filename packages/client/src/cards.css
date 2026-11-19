@@ -1,0 +1,550 @@
+/*
+ * Hearts, Spades and Dominoes in the Cut Paper look. They share one table layout (room.css,
+ * .hearts-view); this file only changes how it looks: the blue mat, paper name tags, card-stock
+ * cards and dominoes, paper buttons and sheets. Layout and phone sizes stay in room.css.
+ * Rules start with #game so they win over room.css.
+ */
+
+/* Phones held upright have height to spare: bigger cards and tiles, so the corners and pips are
+   easy to read (the hand still overlaps the same way). */
+@media (max-width: 600px) and (min-height: 600px) {
+  #game .hearts-view {
+    --cw: clamp(56px, 21vw, 92px);
+    --tw: clamp(56px, 18vw, 84px);
+  }
+  #game .dominoes-view {
+    --dw: clamp(30px, 11.5vw, 52px);
+  }
+}
+
+/* The mat shows through (the old navy background goes). */
+#game[data-view='hearts'] .arena,
+#game[data-view='spades'] .arena,
+#game[data-view='dominoes'] .arena {
+  background: none;
+}
+#game .hearts-view {
+  color: var(--ink);
+  font-family: var(--font);
+}
+
+/* ------------------------------------------------------------------ name tags */
+
+#game .ht-seat {
+  border: 0;
+  border-radius: var(--radius);
+  padding: 7px 12px 8px;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+  transition:
+    transform 0.25s var(--settle),
+    box-shadow 0.25s;
+}
+/* Whose turn: sunflower paper, lifted off the mat. */
+#game .ht-seat.turn {
+  background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
+  transform: translateY(-3px);
+  box-shadow: var(--lift-2);
+}
+/* Talking bars only while that person talks. */
+#game .ht-seat .pc-talk {
+  display: none;
+}
+#game .ht-seat.speaking .pc-talk {
+  display: inline-flex;
+}
+#game .ht-seat.speaking .pc-talk i {
+  animation: pc-talk 0.7s ease-in-out infinite alternate;
+}
+#game .ht-seat.speaking .pc-talk i:nth-child(2) {
+  animation-delay: -0.25s;
+}
+#game .ht-seat.speaking .pc-talk i:nth-child(3) {
+  animation-delay: -0.5s;
+}
+#game .ht-name {
+  font-weight: 800;
+  font-size: 1rem;
+  gap: 6px;
+}
+#game .ht-tag {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--ink-soft);
+}
+#game .ht-seat.turn .ht-tag,
+#game .ht-seat.turn .ht-score {
+  color: var(--ink);
+}
+#game .ht-score {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+#game .ht-score i {
+  font-style: normal;
+  white-space: nowrap;
+}
+#game .ht-taken {
+  color: var(--card-red);
+  font-weight: 800;
+}
+#game .ht-badge {
+  color: var(--ink);
+  font-weight: 800;
+  margin-left: 2px;
+}
+/* The other players' cards: a small pile of cobalt backs with a card-stock edge, and the count. */
+#game .ht-backs {
+  align-items: center;
+  height: auto;
+  margin-top: 5px;
+}
+#game .ht-backs i {
+  width: 13px;
+  height: 18px;
+  margin-right: -8px;
+  border: 1.5px solid var(--card);
+  border-radius: 3px;
+  background: var(--cobalt) var(--cobalt-img) 0 0 / 120px;
+  box-shadow: 0 1px 1px rgb(17 40 117 / 0.25);
+}
+#game .ht-backs span {
+  margin-left: 14px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+#game .ht-seat.turn .ht-backs span {
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ the middle */
+
+#game .ht-status {
+  color: var(--ink);
+  text-shadow: none;
+  font-size: 1.05rem;
+}
+#game .ht-broken {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--card-red);
+  font-size: 0.85rem;
+}
+#game .ht-broken .suit {
+  width: 0.95em;
+  height: 0.95em;
+}
+#game .ht-action {
+  min-height: 48px;
+}
+/* Your name and the Scores button share a line, the same height. */
+#game .ht-mine {
+  align-items: stretch;
+}
+#game .ht-scores-btn {
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: 0.95rem;
+}
+
+/* ------------------------------------------------------------------ cards */
+
+#game .card {
+  border: 0;
+  border-radius: calc(var(--cw) * 0.08);
+  background: var(--card) var(--card-img) 0 0 / 120% auto;
+  color: inherit;
+  box-shadow: var(--lift-1);
+  overflow: hidden;
+}
+#game .card svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#game .card .pc-rank {
+  font: 800 60px var(--font);
+  letter-spacing: -0.04em;
+}
+/* Picked (passing) or lifted (first tap on a phone): up, on a bigger piece of cobalt. */
+#game .ht-hand .card.raised {
+  transform: translateY(-14px);
+  box-shadow:
+    0 0 0 3px var(--cobalt),
+    var(--lift-2);
+}
+#game .ht-hand .card.passing {
+  filter: saturate(0.5) brightness(0.8);
+}
+/* Can't play it now: greyed, as if under tracing paper. */
+#game .ht-hand.my-turn .card.illegal {
+  filter: saturate(0.35) brightness(0.85);
+}
+#game .ht-hand.my-turn .card.legal:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--lift-2);
+}
+/* Cards passed to you: a small sunflower "New" label stuck on. */
+#game .card.new::after {
+  bottom: 5%;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--sunflower) var(--sunflower-img) 0 0 / 200px;
+  color: var(--ink);
+  content: 'New';
+  font: 800 10px var(--font);
+  box-shadow: var(--lift-0);
+}
+/* The card that's winning the trick. */
+#game .card.played.winner {
+  box-shadow:
+    0 0 0 3px var(--sunflower),
+    var(--lift-2);
+}
+body.pad-mode #game .card.pad-cursor {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ the score sheet */
+
+#game .ht-overlay {
+  background: rgb(17 40 117 / 0.35);
+}
+#game .ht-panel {
+  width: min(560px, 100%);
+  padding: 20px;
+  border: 0;
+  border-radius: 18px;
+  color: var(--ink);
+}
+#game .ht-panel h2 {
+  font: 800 1.9rem/1.1 var(--font);
+  letter-spacing: -0.03em;
+  margin: 0 0 10px;
+}
+#game .ht-moon {
+  color: var(--ink);
+}
+#game .ht-table th {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+#game .ht-table td {
+  font-weight: 400;
+}
+/* Phones: names wrap only at their spaces, so the columns size to whole words and a short name
+   like "Jesse" is never squeezed to a letter or two per line. If a very long name still can't fit,
+   fitScoreTable lets just that name break mid-word. */
+@media (max-width: 600px) {
+  #game .ht-table th {
+    overflow-wrap: normal;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+  }
+  #game .ht-table th.ht-break {
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 379px) {
+  #game .ht-table th {
+    font-size: 0.75rem;
+  }
+}
+#game .ht-table td:first-child {
+  color: var(--ink-soft);
+}
+#game .ht-table .ht-last td {
+  color: var(--card-red);
+  font-weight: 800;
+}
+#game .ht-table .ht-total td {
+  border-top: 1.5px solid var(--rule);
+  font-weight: 800;
+}
+#game .ht-panel .pc-small {
+  margin: 10px 0 0;
+}
+#game .ht-panel .actions {
+  margin-top: 14px;
+}
+
+/* ------------------------------------------------------------------ Spades */
+
+#game .sp-score {
+  gap: 10px;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+#game .sp-score > span {
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-0);
+}
+#game .sp-score b {
+  color: var(--ink);
+}
+#game .sp-score small {
+  color: var(--ink-soft);
+}
+#game .sp-bids .pc-btn {
+  min-height: 44px;
+  padding: 6px 0;
+}
+#game .sp-bid,
+#game .sp-bid.nil {
+  color: var(--ink);
+  font-weight: 800;
+}
+#game .sp-bid.pending {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+#game .sp-partner {
+  display: block;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+/* Your team's tags are lilac (Spades' own paper), the other team's plain paper. */
+#game .ht-seat.sp-us:not(.turn) {
+  background: var(--lilac) var(--lilac-img) 0 0 / var(--paper-size);
+}
+#game .ht-seat.sp-us .ht-score,
+#game .ht-seat.sp-us .ht-tag,
+#game .ht-seat.sp-us .sp-partner {
+  color: var(--ink);
+}
+#game .sp-result .neg {
+  color: var(--card-red);
+}
+
+/* ------------------------------------------------------------------ Dominoes */
+
+/* Tiles are card stock (the shared #gd-stock pattern), navy pips, a brown dividing line. */
+#game .dm-face {
+  fill: url(#gd-stock) var(--card);
+  stroke: rgb(110 80 50 / 0.3);
+  stroke-width: 2;
+}
+#game .dm-tile line,
+#game .dm-ghost line {
+  stroke: #9b7f60;
+  stroke-width: 4;
+}
+#game .dm-pips {
+  fill: var(--card-black);
+}
+#game .dm-tile svg {
+  filter: drop-shadow(0 1.5px 1.5px rgb(17 40 117 / 0.3));
+}
+/* The tile just played: a sunflower edge. */
+#game .dm-placed.dm-last .dm-face {
+  fill: url(#gd-stock) var(--card);
+  stroke: var(--sunflower);
+  stroke-width: 9;
+}
+/* Where your picked tile can go: a dashed cobalt outline (no pulsing). */
+#game .dm-ghost {
+  border: 2.5px dashed var(--cobalt);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.55);
+  animation: none;
+}
+#game .dm-ghost svg {
+  opacity: 0.5;
+}
+#game .dm-ghost.pad-cursor,
+#game .dm-ghost:hover {
+  background: rgb(255 255 255 / 0.85);
+  border-style: solid;
+}
+#game .dm-empty,
+#game .dm-info {
+  color: var(--ink-soft);
+}
+/* "Liz +10": a sunflower chip of paper that floats up off the board. */
+#game .dm-pop {
+  padding: 4px 14px;
+  border-radius: var(--radius);
+  background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-2);
+  color: var(--ink);
+  font: 800 1.4rem var(--font);
+  text-shadow: none;
+}
+/* The board zooms (pinch, mouse wheel, or the buttons under it). Fingers on it move the board,
+   never the page. */
+#game .dm-board {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#game .dm-layout {
+  transform-origin: 0 0;
+}
+/* Clip, not scroll: focusing a spot must never scroll the board out from under the zoom. */
+#game .dm-board.zoomed {
+  overflow: hidden;
+  overflow: clip;
+  cursor: grab;
+}
+#game .dm-board.moving {
+  cursor: grabbing;
+}
+#game .dm-board.moving .dm-layout {
+  will-change: transform;
+}
+/* Under the board: Zoom out, the running total, Zoom in. The total stays in the middle; a button
+   that can't be used now keeps its place, unseen, so nothing shifts. */
+#game .dm-foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+#game .dm-foot .dm-info {
+  min-width: 0;
+}
+#game .dm-zoom-out {
+  justify-self: end;
+}
+#game .dm-zoom-in {
+  justify-self: start;
+}
+#game .dm-zoom {
+  min-height: 40px;
+  padding: 4px 14px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+/* Your tiles sit straight on the mat: ivory on blue needs no rack under it. */
+#game .dm-hand.my-turn .dm-mine.illegal .dm-face {
+  fill: #b9ab98;
+}
+#game .dm-hand.my-turn .dm-mine.illegal line {
+  stroke: #7d6c58;
+}
+#game .dm-hand.my-turn .dm-mine.illegal .dm-pips {
+  fill: #3a3d52;
+}
+#game .dm-mine.raised svg {
+  filter: drop-shadow(0 0 0 var(--cobalt)) drop-shadow(0 0 2px var(--cobalt)) drop-shadow(0 3px 3px rgb(17 40 117 / 0.3));
+}
+body.pad-mode #game .dm-mine.pad-cursor {
+  outline: 3px solid var(--ink);
+}
+#game .dm-wait {
+  color: var(--ink);
+}
+
+/* Phones held sideways: there's no height to spare for a row of names above the board and a row
+   of tiles below it. Everyone's name goes down the left in turn order (yours first) with Scores
+   under them, the board takes the middle, and your tiles sit in a block on the right, under your
+   thumb. Hearts and Spades keep their own layout. */
+@media (max-height: 460px) {
+  /* Hearts and Spades stack your name over Scores here, so they keep their own widths. */
+  #game .ht-mine {
+    align-items: flex-start;
+  }
+  #game .dominoes-view {
+    --dw: clamp(26px, 10.5dvh, 40px);
+  }
+  #game .dominoes-view .ht {
+    grid-template-columns: clamp(112px, 19vw, 170px) minmax(0, 1fr) auto;
+    grid-template-rows: repeat(5, auto) minmax(0, 1fr);
+    grid-template-areas:
+      'p0 center hand'
+      'p1 center hand'
+      'p2 center hand'
+      'p3 center hand'
+      'scores center hand'
+      '. center hand';
+    gap: 6px 12px;
+  }
+  /* Your own name and Scores become pieces of the column. */
+  #game .dominoes-view .ht-mine {
+    display: contents;
+  }
+  #game .dominoes-view .ht-pos-0 {
+    grid-area: p0;
+  }
+  #game .dominoes-view .ht-pos-1 {
+    grid-area: p1;
+  }
+  #game .dominoes-view .ht-pos-2 {
+    grid-area: p2;
+  }
+  #game .dominoes-view .ht-pos-3 {
+    grid-area: p3;
+  }
+  #game .dominoes-view .ht-seat {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 6px;
+    justify-self: stretch;
+    align-self: start;
+    min-width: 0;
+    max-width: none;
+    padding: 4px 10px 5px;
+  }
+  #game .dominoes-view .ht-name {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.875rem;
+  }
+  #game .dominoes-view .ht-nm {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #game .dominoes-view .ht-tag {
+    font-size: 0.6875rem;
+  }
+  /* Two lines a name, so four fit with Safari's address bar showing. The computer players'
+     names give them away; "Away" still shows. */
+  #game .dominoes-view .ht-bot {
+    display: none;
+  }
+  #game .dominoes-view .ht-score {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+  }
+  #game .dominoes-view .ht-scores-btn {
+    grid-area: scores;
+    min-height: 36px;
+    padding: 4px 8px;
+    font-size: 0.8125rem;
+  }
+  /* Your tiles: rows of four, in the middle of the right edge. */
+  #game .dominoes-view .dm-hand {
+    grid-area: hand;
+    align-self: center;
+  }
+  #game .dominoes-view .dm-hand-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, var(--dw));
+    grid-auto-rows: calc(var(--dw) * 2);
+    gap: 10px 7px;
+    height: auto;
+    padding: 12px 0 0;
+  }
+  #game .dominoes-view .dm-mine {
+    width: var(--dw);
+    min-width: 0;
+  }
+  #game .dm-zoom {
+    min-height: 34px;
+    padding: 3px 12px;
+    font-size: 0.8125rem;
+  }
+}

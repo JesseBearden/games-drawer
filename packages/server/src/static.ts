@@ -12,7 +12,7 @@ const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;
 export function pageMeta(pathname: string): { title: string; description: string } | null {
   const game = gameForPath(pathname);
   if (game) return { title: `${game.title} · Games Drawer`, description: game.tagline };
-  if (/^\/r\/[A-Za-z]+\/?$/.test(pathname)) return { title: 'Join my room · Games Drawer', description: 'Come hang out: little games, chat and voice. Tap to join.' };
+  if (/^\/r\/[A-Za-z]+\/?$/.test(pathname)) return { title: 'Join my table · Games Drawer', description: 'Come play a game with us. Tap to join.' };
   return null;
 }
 
@@ -116,7 +116,7 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
     let html = withPageMeta(fs.readFileSync(file, 'utf8'), pageMeta(decoded));
     if (host) {
       const local = /^(localhost|127\.|\[::1\])/.test(host);
-      html = html.replace('content="/og.png"', `content="${local ? 'http' : 'https'}://${host}/og.png"`);
+      html = html.replace('content="/art/og.jpg"', `content="${local ? 'http' : 'https'}://${host}/art/og.jpg"`);
     }
     res.writeHead(200, { 'content-type': TYPES['.html'], 'cache-control': 'no-cache', ...securityHeaders(req.headers.host) });
     res.end(req.method === 'HEAD' ? undefined : html);

@@ -60,6 +60,9 @@ export interface View {
   padOrigin?(): { x: number; y: number } | null;
   /** A panel on top of the view (like the scores) that the controller should stay inside. */
   padScope?(): HTMLElement | null;
+  /** Actions this game adds to the top of the menu (like Jigsaw's New puzzle). */
+  menuItems?(): { id: string; label: string }[];
+  onMenuItem?(id: string): void;
   /** Menu opened or closed: stop taking game input while it's open. */
   setPaused?(paused: boolean): void;
   resize?(): void;

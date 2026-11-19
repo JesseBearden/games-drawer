@@ -1,7 +1,8 @@
 import { CARD_SOUNDS } from './audio';
 import { suitOf, type Card, type GameServerMessage, type SpadesView } from '@tank/shared';
-import { cardHtml, SUIT_SYMBOL } from './heartsView';
-import { colorCss, escapeHtml } from './state';
+import { cardHtml, seatNameHtml, showHand } from './heartsView';
+import { suitSvg, SUIT_NAME, type Suit } from './paperArt';
+import { escapeHtml } from './state';
 import { focusForPad, type PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
 
@@ -14,7 +15,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 export class SpadesTable implements View {
   readonly landscape = false;
   readonly helpHtml =
-    '<p><b>Spades:</b> you and the player across are a team. Each of you bids how many tricks you’ll take (Nil means none). Follow suit if you can; spades beat everything but can’t be led until one has been played.</p><p>Make your team’s bid for 10 points a trick. Extra tricks are bags: 10 bags cost 100. First team to 500 wins.</p><p>On a phone, tap a card once to lift it and again to play it.</p>';
+    '<p>You and the player across are a team. Each of you bids how many tricks you’ll take (Nil means none). Follow suit if you can; spades beat everything but can’t be led until one has been played.</p><p>Make your team’s bid for 10 points a trick. Extra tricks are bags: 10 bags cost 100. First team to 500 wins.</p><p>On a phone, tap a card once to lift it and again to play it.</p>';
   private el = $('spades-view');
   private view: SpadesView | null = null;
   private lifted: Card | null = null;
@@ -40,7 +41,7 @@ export class SpadesTable implements View {
           <div class="sp-bids" hidden></div>
           <div class="ht-status" aria-live="polite">Dealing…</div>
         </div>
-        <div class="ht-mine"><div class="ht-seat ht-pos-0"></div><button class="ht-scores-btn" type="button">Scores</button></div>
+        <div class="ht-mine"><div class="ht-seat ht-pos-0"></div><button class="ht-scores-btn pc-btn pc-btn-plain" type="button">Scores</button></div>
         <div class="ht-hand"></div>
         <div class="ht-overlay" hidden></div>
       </div>`;
@@ -157,14 +158,11 @@ export class SpadesTable implements View {
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
-      let tag = '';
-      if (s.bot) tag = '<span class="ht-tag" title="Bot" aria-label="bot">🤖</span>';
-      if (s.away) tag = '<span class="ht-tag" title="Away: a bot is playing their cards" aria-label="away, a bot is playing">💤</span>';
-      const partner = v.seat !== null && seat === (v.seat + 2) % 4 ? '<span class="sp-partner">partner</span>' : '';
-      const bid = s.bid === null ? (v.phase === 'bidding' ? '<span class="sp-bid pending">bidding…</span>' : '') : `<span class="sp-bid${s.bid === 0 ? ' nil' : ''}">${s.bid === 0 ? 'Nil' : `Bid ${s.bid}`}</span>`;
+      const partner = v.seat !== null && seat === (v.seat + 2) % 4 ? '<span class="sp-partner">Partner</span>' : '';
+      const bid = s.bid === null ? (v.phase === 'bidding' ? '<span class="sp-bid pending">Bidding…</span>' : '') : `<span class="sp-bid${s.bid === 0 ? ' nil' : ''}">${s.bid === 0 ? 'Nil' : `Bid ${s.bid}`}</span>`;
       const won = v.phase === 'playing' || v.phase === 'handEnd' ? ` · ${s.tricks} won` : '';
-      el.innerHTML = `<div class="ht-name"><span class="dot" style="background:${colorCss(s.color)}"></span><span class="ht-nm">${escapeHtml(s.name)}</span></div>
-        <div class="ht-score">${bid}${won} ${tag}${partner}</div>`;
+      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}${partner}
+        <div class="ht-score">${bid}${won}</div>`;
       el.classList.toggle('turn', v.turn === seat);
       el.classList.toggle('sp-us', s.team === this.myTeam());
       if (s.alias) el.dataset.alias = s.alias;
@@ -192,7 +190,7 @@ export class SpadesTable implements View {
     if (myBidTurn) {
       const partnerBid = v.seats[(v.seat! + 2) % 4].bid;
       let html = '';
-      for (let n = 0; n <= 13; n++) html += `<button class="btn ${n === 0 ? 'btn-secondary' : 'btn-primary'}" type="button" data-bid="${n}"${this.pending ? ' disabled' : ''}>${n === 0 ? 'Nil' : n}</button>`;
+      for (let n = 0; n <= 13; n++) html += `<button class="pc-btn ${n === 0 ? 'pc-btn-plain' : 'pc-btn-main'}" type="button" data-bid="${n}"${this.pending ? ' disabled' : ''}>${n === 0 ? 'Nil' : n}</button>`;
       bids.innerHTML = html;
       bids.dataset.partner = partnerBid === null ? '' : partnerBid === 0 ? 'Partner bid nil' : `Partner bid ${partnerBid}`;
     }
@@ -208,7 +206,7 @@ export class SpadesTable implements View {
       if (v.trickWinner !== null) text = v.trickWinner === v.seat ? 'You take the trick' : `${escapeHtml(this.name(v.trickWinner))} takes the trick`;
       else if (v.turn === v.seat) text = this.shell.device.touch ? (this.lifted ? 'Tap it again to play' : 'Your turn: tap a card') : 'Your turn';
       else if (v.turn !== null) text = `Waiting for ${escapeHtml(this.name(v.turn))}…`;
-      if (v.spadesBroken) text += ` <span class="ht-broken">${SUIT_SYMBOL.S} broken</span>`;
+      if (v.spadesBroken) text += ` <span class="ht-broken">${suitSvg('S')} broken</span>`;
     } else if (v.phase === 'handEnd') text = 'Next hand coming up…';
     q<HTMLElement>('.ht-status').innerHTML = text;
 
@@ -220,15 +218,13 @@ export class SpadesTable implements View {
     const v = this.view!;
     const hand = this.el.querySelector('.ht-hand') as HTMLElement;
     const myTurn = v.phase === 'playing' && v.turn === v.seat && v.trickWinner === null;
-    let html = '';
-    for (const c of v.cards) {
+    showHand(hand, v.cards, (c) => {
       const cls: string[] = [];
       if (this.lifted === c) cls.push('raised');
       if (myTurn) cls.push(v.legal.includes(c) ? 'legal' : 'illegal');
       if (this.cursor === c) cls.push('pad-cursor');
-      html += cardHtml(c, cls.join(' '));
-    }
-    hand.innerHTML = html;
+      return cls.join(' ');
+    });
     hand.classList.toggle('my-turn', myTurn);
     this.layoutHand();
   }
@@ -258,7 +254,7 @@ export class SpadesTable implements View {
     const mine = this.myTeam();
     const teamName = (t: number) => (t === mine ? 'Us' : 'Them');
     const players = (t: number) => [t, t + 2].map((s) => escapeHtml(this.name(s))).join(' & ');
-    let html = '<div class="ht-panel">';
+    let html = '<div class="ht-panel pc-sheet">';
     if (v.phase === 'gameOver') {
       const weWon = v.winners.includes(mine) && v.seat !== null;
       html += `<h2>${weWon ? 'You win!' : v.winners.length > 1 ? 'A tie!' : `${players(v.winners[0])} win!`}</h2>`;
@@ -284,13 +280,13 @@ export class SpadesTable implements View {
       html += `<tr><td>Hand ${i + 1}</td><td>${row[mine]}</td><td>${row[1 - mine]}</td></tr>`;
     });
     html += `<tr class="ht-total"><td>Total</td><td>${v.teams[mine].score}</td><td>${v.teams[1 - mine].score}</td></tr></tbody></table>`;
-    html += `<p class="hint">First team to ${v.target} wins. Bags: us ${v.teams[mine].bags}, them ${v.teams[1 - mine].bags} (10 cost 100).</p>`;
+    html += `<p class="pc-small">First team to ${v.target} wins. Bags: us ${v.teams[mine].bags}, them ${v.teams[1 - mine].bags} (10 cost 100).</p>`;
     html += '<div class="actions">';
     if (v.phase === 'gameOver') {
-      if (v.seat !== null) html += '<button class="btn btn-primary" data-act="again" type="button">New game</button>';
-      if (this.shell.isPrivate) html += '<button class="btn btn-secondary" data-act="lobby" type="button">Back to lobby</button>';
+      if (v.seat !== null) html += '<button class="pc-btn pc-btn-main" data-act="again" type="button">New game</button>';
+      if (this.shell.isPrivate) html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
     } else if (this.scoresOpen) {
-      html += '<button class="btn btn-primary" data-act="close-scores" type="button">Close</button>';
+      html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }
     html += '</div></div>';
     box.innerHTML = html;
@@ -355,7 +351,7 @@ export class SpadesTable implements View {
   }
 
   private whyIllegal(v: SpadesView): string {
-    if (v.trick.length) return `You have to follow suit (${SUIT_SYMBOL[suitOf(v.trick[0].card)]}).`;
+    if (v.trick.length) return `You have to follow suit: play one of your ${SUIT_NAME[suitOf(v.trick[0].card) as Suit]}.`;
     return 'Spades can’t be led until one has been played.';
   }
 

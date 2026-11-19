@@ -8,6 +8,8 @@ import {
   canPlayPrivately,
   CHAT_FILTER_LABELS,
   type ChatFilterMode,
+  INVITE_TOKEN_ALPHABET,
+  INVITE_TOKEN_LENGTH,
   PROTOCOL_VERSION,
   Rng,
   uniqueName,
@@ -20,6 +22,7 @@ import {
   type MemberInfo,
   type RoomKind,
   type ServerMessage,
+  type TableInfo,
   type VoicePeer,
   type VoiceSettings,
 } from '@tank/shared';
@@ -76,6 +79,8 @@ export const GAME_SWITCH_COOLDOWN_MS = 1500;
 export const CAUGHT_LIMIT = 3;
 export const CAUGHT_WINDOW_MS = 60_000;
 export const CHAT_PAUSE_MS = 30_000;
+/** Invite links a room keeps (the oldest goes first). */
+export const MAX_INVITES = 40;
 
 interface Player extends Member {
   name: string;
@@ -145,6 +150,13 @@ export class Room {
   chatFilter: ChatFilterMode;
   private readonly cfg: GameConfig;
   private host: GameHost;
+  /** Invite links made here: token -> who made it (session) and the name it's for. */
+  private readonly invites = new Map<string, { session: string; for: string | null }>();
+  /** Whoever started the table (the first to join): named on the join page for a bare code. */
+  private starter: string | null = null;
+  private readonly inviteTimes = new Map<string, number[]>();
+  /** A game picked too soon after the last switch, waiting for the cooldown (see startGame). */
+  private pendingPick: { session: string; game: GameId } | null = null;
 
   constructor(
     readonly code: string,
@@ -335,6 +347,7 @@ export class Room {
       this.players.delete(session);
       return { ok: false, code: 'room-full', message: 'Room is full.' };
     }
+    this.starter ??= session;
     this.countPeople();
     this.emptySince = null;
     this.log('join', { pid: p.pid, device });
@@ -443,7 +456,13 @@ export class Room {
       return;
     }
     const now = this.deps.now();
-    if (now - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) return;
+    if (now - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) {
+      // Too soon after the last switch (say, a pick right after Switch game): hold the pick and
+      // start it when the wait is over, rather than ignore the tap. The latest pick wins.
+      this.pendingPick = { session: p.session, game: id };
+      return;
+    }
+    this.pendingPick = null;
     this.lastSwitch = now;
     this.game = this.makeGame(id);
     this.beginSession(id);
@@ -515,9 +534,59 @@ export class Room {
       case 'filter':
         this.setChatFilter(p, msg.mode);
         return;
+      case 'invite':
+        this.makeInvite(p, msg.for);
+        return;
       case 'hello':
         return;
     }
+  }
+
+  // ------------------------------------------------------------------ invites and the join page
+
+  /**
+   * An invite link from `p`, optionally for one named person. The link carries only a random
+   * token; who sent it and who it's for stay here, so the join page shows names the server
+   * vouches for. Tokens last as long as the room.
+   */
+  private makeInvite(p: Player, forName: string | null) {
+    if (this.kind !== 'private') return;
+    // At most 10 new links a minute each, so nobody can push everyone else's links out.
+    const now = this.deps.now();
+    const times = (this.inviteTimes.get(p.session) ?? []).filter((t) => now - t < 60_000);
+    if (times.length >= 10) return;
+    times.push(now);
+    this.inviteTimes.set(p.session, times);
+    const wanted = forName === null ? null : this.acceptableName(forName);
+    // One token per sender and name: inviting Liz twice gives the same link.
+    let token = [...this.invites].find(([, v]) => v.session === p.session && v.for === wanted)?.[0];
+    if (!token) {
+      if (this.invites.size >= MAX_INVITES) this.invites.delete(this.invites.keys().next().value!);
+      do {
+        token = '';
+        for (let i = 0; i < INVITE_TOKEN_LENGTH; i++) token += INVITE_TOKEN_ALPHABET[randomInt(INVITE_TOKEN_ALPHABET.length)];
+      } while (this.invites.has(token));
+      this.invites.set(token, { session: p.session, for: wanted });
+    }
+    p.conn?.send(JSON.stringify({ t: 'invite', token, for: wanted } satisfies ServerMessage));
+  }
+
+  /** What the join page shows for this table (and an invite token, if the link had one). */
+  tableInfo(token: string | null): TableInfo {
+    const invite = token ? this.invites.get(token) : undefined;
+    // The sender's current name (they may have changed it); if they've gone, whoever started the table.
+    const sender = invite ? this.players.get(invite.session) : undefined;
+    const starter = this.starter ? this.players.get(this.starter) : undefined;
+    const from = sender?.name ?? starter?.name ?? null;
+    return {
+      ok: true,
+      from,
+      for: invite?.for ?? null,
+      game: this.game?.id ?? null,
+      people: [...this.players.values()].filter((p) => p.conn).map((p) => p.name),
+      away: [...this.players.values()].filter((p) => !p.conn).map((p) => p.name),
+      full: this.openSlots() <= 0,
+    };
   }
 
   // ------------------------------------------------------------------ voice + reports
@@ -750,7 +819,17 @@ export class Room {
   step(): number {
     const start = performance.now();
     this.game?.step();
+    this.startPendingPick();
     return performance.now() - start;
+  }
+
+  /** A game picked during the switch cooldown starts once the cooldown is over. */
+  private startPendingPick() {
+    const pick = this.pendingPick;
+    if (!pick || this.deps.now() - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) return;
+    this.pendingPick = null;
+    const p = this.players.get(pick.session);
+    if (p?.conn && !this.game) this.startGame(p, pick.game);
   }
 
   stats() {

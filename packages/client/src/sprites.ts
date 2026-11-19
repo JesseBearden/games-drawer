@@ -25,35 +25,74 @@ const NAMES: SpriteName[] = [
   'windsock-calm',
 ];
 
+/** The paper sheets Tanks is made of (public/art/paper): sky, hills and the ground's layers. */
+export const PAPERS = ['sky', 'lilac', 'mint', 'grass', 'kraft', 'peach', 'butter', 'blush'] as const;
+export type PaperName = (typeof PAPERS)[number];
+
 export interface Sprites {
   img: Record<SpriteName, HTMLImageElement>;
   /** Tinted tank body and turret per palette colour. */
   bodies: HTMLCanvasElement[];
   turrets: HTMLCanvasElement[];
+  paper: Record<PaperName, HTMLImageElement>;
 }
 
-function load(name: string): Promise<HTMLImageElement> {
+function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load sprite ${name}`));
-    img.src = `/sprites/${name}.png`;
+    img.onerror = () => reject(new Error(`Failed to load ${src}`));
+    img.src = src;
   });
 }
 
 export async function loadSprites(): Promise<Sprites> {
-  const imgs = await Promise.all(NAMES.map(load));
+  const [imgs, papers] = await Promise.all([
+    Promise.all(NAMES.map((n) => loadImage(`/sprites/${n}.png`))),
+    Promise.all(PAPERS.map((n) => loadImage(`/art/paper/${n}.webp`))),
+  ]);
   const img = Object.fromEntries(NAMES.map((n, i) => [n, imgs[i]])) as Record<SpriteName, HTMLImageElement>;
+  const paper = Object.fromEntries(PAPERS.map((n, i) => [n, papers[i]])) as Record<PaperName, HTMLImageElement>;
+  setGroundPapers(paper);
   return {
     img,
     bodies: TANK_COLORS.map((_, i) => tint(img['tank-body'], i)),
     turrets: TANK_COLORS.map((_, i) => tint(img['tank-turret'], i)),
+    paper,
   };
 }
 
+/** The ground's papers as pixels (half size, the scale they're shown at), for TerrainRenderer. */
+export interface PaperPixels {
+  data: Uint8ClampedArray;
+  size: number;
+}
+let groundPapers: Record<PaperName, PaperPixels> | null = null;
+
+function setGroundPapers(paper: Record<PaperName, HTMLImageElement>) {
+  const size = 384;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  const out = {} as Record<PaperName, PaperPixels>;
+  for (const n of PAPERS) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(paper[n], 0, 0, size, size);
+    out[n] = { data: ctx.getImageData(0, 0, size, size).data, size };
+  }
+  groundPapers = out;
+}
+
+export function getGroundPapers() {
+  return groundPapers;
+}
+
 /**
- * Recolour the cyan parts of a tank sprite. Saturated cyan pixels take the palette hue;
- * dark outlines and grey wheels (low saturation) are left alone.
+ * Recolour the cyan paper of a tank sprite (scripts: the paper sprites draw the player-coloured
+ * parts in cyan #3ac8d6). Cyan pixels take the player's colour, keeping their light and dark
+ * (the paper grain and the lighter and darker pieces); the navy tread, cream wheels and the
+ * shadows are left alone.
  */
 function tint(src: HTMLImageElement, colorIndex: number): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -61,17 +100,18 @@ function tint(src: HTMLImageElement, colorIndex: number): HTMLCanvasElement {
   c.height = src.naturalHeight;
   const ctx = c.getContext('2d')!;
   ctx.drawImage(src, 0, 0);
-  if (colorIndex === 0) return c;
   const target = TANK_COLORS[colorIndex];
   const data = ctx.getImageData(0, 0, c.width, c.height);
   const d = data.data;
-  const BASE_LIGHT = 0.56;
+  /** The cyan's own lightness and saturation; the player's colour replaces them. */
+  const BASE_LIGHT = 0.53;
+  const BASE_SAT = 0.66;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
     const [h, s, l] = rgbToHsl(d[i], d[i + 1], d[i + 2]);
     if (s < 0.3 || h < 150 || h > 215) continue;
     const nl = Math.min(0.97, Math.max(0.05, (l / BASE_LIGHT) * target.light));
-    const ns = Math.min(1, s * target.sat);
+    const ns = Math.min(1, (s / BASE_SAT) * target.sat);
     const [r, g, b] = hslToRgb(target.hue, ns, nl);
     d[i] = r;
     d[i + 1] = g;

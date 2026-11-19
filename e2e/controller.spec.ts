@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { createRoom } from './helpers';
 
 // A pretend Xbox controller (standard mapping) the page reads through navigator.getGamepads().
 test.skip(({ isMobile }) => isMobile, 'controllers are tested on the desktop layout');
@@ -33,8 +34,9 @@ async function press(page: Page, name: keyof typeof BUTTON) {
       },
       [BUTTON[name], down],
     );
+  // About as long as a person holds a button (the page checks the controller once a frame).
   await set(true);
-  await page.waitForTimeout(60);
+  await page.waitForTimeout(90);
   await set(false);
   await page.waitForTimeout(60);
 }
@@ -50,14 +52,20 @@ async function moveUntil(page: Page, dir: 'up' | 'down' | 'left' | 'right', sele
 
 test('a controller gets you from the home page into Hearts and plays a hand', async ({ page }) => {
   await page.goto('/');
-  await moveUntil(page, 'down', '#create-private');
+  await moveUntil(page, 'down', '#home-start');
   await press(page, 'a');
-  await expect(page.locator('.lobby-view .room-code')).toBeVisible();
-
-  // In the lobby the d-pad moves between buttons; A starts the highlighted game.
-  await moveUntil(page, 'down', '[data-game="hearts"]');
+  await expect(page.locator('#page-start')).toBeVisible();
+  // Typing a name is for the keyboard; the d-pad picks the game and starts.
+  await page.locator('#start-name').fill('Pad');
+  await moveUntil(page, 'up', '#start-games input');
+  await moveUntil(page, 'right', 'input[value="hearts"]');
+  await press(page, 'a');
+  await expect(page.locator('input[value="hearts"]')).toBeChecked();
+  await moveUntil(page, 'down', '#start-form button[value="off"]');
   await press(page, 'a');
   await expect(page.locator('#hearts-view .ht-hand .card')).toHaveCount(13);
+  // Let the card pictures finish loading, as they would before a person picks up the controller.
+  await page.waitForTimeout(800);
 
   // Left/right highlights a card, A picks it, Y passes the three.
   for (let i = 0; i < 3; i++) {
@@ -90,9 +98,7 @@ test('a controller gets you from the home page into Hearts and plays a hand', as
 });
 
 test('in Tanks the left stick aims and sets power', async ({ page }) => {
-  await page.goto('/tanks');
-  await page.locator('#play-public').click();
-  await expect(page.locator('#game')).toHaveAttribute('data-view', 'tanks');
+  await createRoom(page, 'Stick', 'tanks');
   const angle = page.locator('#aim-angle');
   await expect(angle).not.toBeEmpty();
   const start = parseInt((await angle.textContent())!, 10);

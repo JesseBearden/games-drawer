@@ -1,0 +1,221 @@
+/*
+ * Jigsaw's controls in the Cut Paper look: the setup sheet, the picture tiles, the tool bar,
+ * the progress tag and the "Finished!" note. The puzzle pictures stay as they are; the board
+ * itself is the blue mat (jigsawView draws the frame as cream paper). Rules start with #game
+ * so they win over room.css.
+ */
+
+#game[data-view='jigsaw'] .arena {
+  background: none;
+}
+#game .jigsaw-view {
+  color: var(--ink);
+  font-family: var(--font);
+}
+
+/* ------------------------------------------------------------------ setup */
+
+#game .pz-setup-card {
+  padding: 22px 20px 20px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-2);
+  color: var(--ink);
+}
+#game .pz-setup-card h2,
+#game .pz-setup-card h3,
+#game .pz-setup-card h4 {
+  font-family: var(--font);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+#game .pz-setup-card h2 {
+  font-size: 1.9rem;
+}
+#game .pz-setup-card h3 {
+  font-size: 1.25rem;
+}
+#game .pz-setup-card h4 {
+  font-size: 1.05rem;
+}
+
+/* Choices (piece counts, tools): small white paper pills; the chosen one cobalt. */
+#game .pz-btn {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow:
+    0 0 0 2px var(--cobalt),
+    var(--lift-1);
+  color: var(--cobalt);
+  font: 800 1rem var(--font);
+}
+#game .pz-btn.picked,
+#game .pz-btn[aria-pressed='true'] {
+  background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
+  color: #fff;
+}
+@media (hover: hover) {
+  #game .pz-btn:hover {
+    box-shadow:
+      0 0 0 2px var(--cobalt),
+      var(--lift-2);
+  }
+}
+
+/* Pictures: each one a print on white paper; the chosen one on a bigger piece of cobalt. */
+#game .pz-image {
+  border: 0;
+  border-radius: 10px;
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+  font: 800 0.8rem var(--font);
+  transition:
+    transform 0.15s var(--settle),
+    box-shadow 0.15s;
+}
+#game .pz-image img {
+  border-radius: 6px;
+}
+#game .pz-image.picked {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 3px var(--cobalt),
+    var(--lift-2);
+}
+
+/* Start stays in reach: a strip of paper along the bottom of the sheet. */
+#game .pz-start-bar {
+  border-top: 1.5px solid var(--rule);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: 0 -6px 12px rgb(17 40 117 / 0.06);
+}
+#game .pz-start-bar .pc-small {
+  margin: 8px 0 0;
+}
+#game .pz-start-bar .pz-grid {
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+
+/* Puzzles to continue: notes on mat paper. */
+#game .pz-saves li {
+  background: var(--mat) var(--mat-img) 0 0 / var(--paper-size);
+  border-radius: 12px;
+  box-shadow: var(--lift-0);
+  color: var(--ink);
+}
+#game .pz-saves small {
+  color: var(--ink-soft);
+}
+#game .pz-saves .pc-btn {
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: 0.95rem;
+}
+#game .pz-forget {
+  width: auto;
+  height: 40px;
+  padding: 0 6px;
+  border-radius: 8px;
+  color: var(--cobalt);
+  font: 800 0.85rem var(--font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#game .pz-forget:hover,
+#game .pz-forget:focus-visible {
+  background: rgb(16 61 182 / 0.08);
+  color: var(--cobalt);
+}
+
+/* ------------------------------------------------------------------ playing */
+
+/* How far along: a paper tag at the top left. */
+#game .pz-status {
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+  font-weight: 400;
+}
+#game .pz-status b {
+  color: var(--ink);
+  font-weight: 800;
+}
+#game .pz-status span {
+  color: var(--ink-soft);
+}
+
+/* The tools: a strip of paper along the bottom. When it's short of room it wraps onto a second
+   row (nothing is ever hidden off the edge). */
+#game .pz-tools {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100% - 20px);
+  overflow: visible;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-2);
+}
+#game .pz-tools .pz-btn {
+  min-height: 42px;
+}
+/* Phones: the five tools share one row (a little smaller), stretched across the strip. */
+@media (max-width: 640px) {
+  #game .pz-tools {
+    flex-wrap: nowrap;
+    justify-content: center;
+    width: calc(100% - 16px);
+    max-width: none;
+    gap: 5px;
+    padding: 6px;
+    overflow: visible;
+  }
+  #game .pz-tools .pz-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px clamp(4px, 1.8vw, 10px);
+    font-size: clamp(0.8rem, 3.9vw, 0.95rem);
+    white-space: nowrap;
+  }
+}
+
+/* The finished picture, held up like a print. */
+#game .pz-preview {
+  border: 6px solid var(--white);
+  border-radius: 6px;
+  box-shadow: var(--lift-3);
+}
+
+#game .pz-loading,
+#game .pz-done {
+  border-radius: 16px;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-3);
+  color: var(--ink);
+  font-weight: 400;
+}
+#game .pz-loading {
+  font-weight: 800;
+}
+#game .pz-done b {
+  font: 800 1.5rem var(--font);
+  color: var(--ink);
+}
+
+/* The magnifier: a lens with a paper rim. */
+#game .pz-loupe {
+  box-shadow:
+    0 0 0 4px var(--white),
+    0 0 0 6px var(--cobalt),
+    var(--lift-3);
+}

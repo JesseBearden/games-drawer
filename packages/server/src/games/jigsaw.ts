@@ -255,7 +255,7 @@ export class JigsawGame implements ServerGame {
     if (this.state) this.saveNow();
     this.state = s;
     this.reset(s.doneAt !== null ? 'done' : 'playing');
-    const pct = Math.round(puzzleProgress(s.pieces) * 100);
+    const pct = Math.round(puzzleProgress(s.pieces, s.locked) * 100);
     this.host.systemChat(`${m.name} brought back a puzzle: ${s.title} (${pct}% done).`);
     this.host.log('jigsaw_resume', { id: s.id, by: m.pid });
   }
@@ -421,6 +421,6 @@ export class JigsawGame implements ServerGame {
   }
 
   stats() {
-    return { phase: this.phase, pieces: this.state?.pieces.length ?? 0, progress: this.state ? Math.round(puzzleProgress(this.state.pieces) * 100) : 0 };
+    return { phase: this.phase, pieces: this.state?.pieces.length ?? 0, progress: this.state ? Math.round(puzzleProgress(this.state.pieces, this.state.locked) * 100) : 0 };
   }
 }

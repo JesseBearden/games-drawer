@@ -1,6 +1,7 @@
 import { CARD_SOUNDS } from './audio';
 import { suitOf, type Card, type GameServerMessage, type HeartsView as TableView, type PassDir } from '@tank/shared';
-import { colorCss, escapeHtml } from './state';
+import { escapeHtml } from './state';
+import { cardFaceSvg, suitSvg, SUIT_NAME, type Rank, type Suit } from './paperArt';
 import type { PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
 
@@ -10,9 +11,53 @@ export const SUIT_SYMBOL: Record<string, string> = { C: '♣', D: '♦', H: '♥
 const RANK_LABEL = (c: Card) => (c[0] === 'T' ? '10' : c[0]);
 const PASS_WORD: Record<PassDir, string> = { left: 'left', right: 'right', across: 'across', none: '' };
 
+/** A playing card: card stock with the face printed on it (paperArt). */
 export function cardHtml(c: Card, extra = '') {
-  const s = suitOf(c);
-  return `<span class="card s-${s} ${extra}" data-card="${c}" aria-label="${RANK_LABEL(c)} of ${{ C: 'clubs', D: 'diamonds', H: 'hearts', S: 'spades' }[s]}"><span class="c-corner">${RANK_LABEL(c)}<br>${SUIT_SYMBOL[s]}</span><span class="c-big">${SUIT_SYMBOL[s]}</span></span>`;
+  return `<span class="${cardClass(c, extra)}" data-card="${c}">${cardFaceSvg(RANK_LABEL(c) as Rank, suitOf(c) as Suit)}</span>`;
+}
+
+const cardClass = (c: Card, extra: string) => `card s-${suitOf(c)} ${extra}`;
+
+/**
+ * Put a hand on screen. When it's the same cards as before (a pick, a lift, a cursor move),
+ * only their classes change: rebuilding every card face (and its portrait image) each time made
+ * every tap and controller press slow.
+ */
+export function showHand(hand: HTMLElement, cards: Card[], classes: (c: Card) => string) {
+  const els = [...hand.children] as HTMLElement[];
+  if (els.length === cards.length && els.every((el, i) => el.dataset.card === cards[i])) {
+    els.forEach((el, i) => {
+      const cls = cardClass(cards[i], classes(cards[i]));
+      if (el.className !== cls) el.className = cls;
+    });
+    return;
+  }
+  hand.innerHTML = cards.map((c) => cardHtml(c, classes(c))).join('');
+}
+
+/** A seat's name tag: talking bars, the name, and words for computer players and people who are away. */
+/**
+ * Score tables size their columns to whole names. Only when a very long name can't fit that way
+ * does that name break mid-word.
+ */
+export function fitScoreTable(root: HTMLElement) {
+  const table = root.querySelector<HTMLElement>('.ht-table');
+  const box = table?.parentElement;
+  if (!table || !box) return;
+  const heads = [...table.querySelectorAll<HTMLElement>('th')];
+  for (const h of heads) h.classList.remove('ht-break');
+  const cs = getComputedStyle(box);
+  const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  // Too wide: let the widest name break mid-word, then look again (rarely more than once).
+  for (let i = 0; i < heads.length && table.offsetWidth > room + 1; i++) {
+    const whole = heads.filter((h) => !h.classList.contains('ht-break'));
+    whole.reduce((a, b) => (b.offsetWidth > a.offsetWidth ? b : a)).classList.add('ht-break');
+  }
+}
+
+export function seatNameHtml(name: string, opts: { bot?: boolean; away?: boolean }) {
+  const note = opts.away ? '<span class="ht-tag ht-away">Away</span>' : opts.bot ? '<span class="ht-tag ht-bot">Computer</span>' : '';
+  return `<div class="ht-name"><span class="pc-talk"><i></i><i></i><i></i></span><span class="ht-nm">${escapeHtml(name)}</span></div>${note}`;
 }
 
 /**
@@ -22,7 +67,7 @@ export function cardHtml(c: Card, extra = '') {
 export class HeartsTable implements View {
   readonly landscape = false;
   readonly helpHtml =
-    '<p><b>Hearts:</b> pass 3 cards, then follow suit if you can. Hearts are 1 point each, the queen of spades 13. Take them all to shoot the moon. Lowest score when someone reaches 100 wins.</p><p>On a phone, tap a card once to lift it and again to play it.</p>';
+    '<p>Pass 3 cards, then follow suit if you can. Hearts are 1 point each, the queen of spades 13. Take them all to shoot the moon. Lowest score when someone reaches 100 wins.</p><p>On a phone, tap a card once to lift it and again to play it.</p>';
   private el = $('hearts-view');
   private view: TableView | null = null;
   private selected = new Set<Card>();
@@ -49,9 +94,9 @@ export class HeartsTable implements View {
             <div class="ht-slot ht-slot-0"></div><div class="ht-slot ht-slot-1"></div><div class="ht-slot ht-slot-2"></div><div class="ht-slot ht-slot-3"></div>
           </div>
           <div class="ht-status" aria-live="polite">Dealing…</div>
-          <button class="btn btn-primary ht-action" type="button" hidden></button>
+          <button class="pc-btn pc-btn-main ht-action" type="button" hidden></button>
         </div>
-        <div class="ht-mine"><div class="ht-seat ht-pos-0"></div><button class="ht-scores-btn" type="button">Scores</button></div>
+        <div class="ht-mine"><div class="ht-seat ht-pos-0"></div><button class="ht-scores-btn pc-btn pc-btn-plain" type="button">Scores</button></div>
         <div class="ht-hand"></div>
         <div class="ht-overlay" hidden></div>
       </div>`;
@@ -171,14 +216,12 @@ export class HeartsTable implements View {
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
-      let tag = '';
-      if (s.bot) tag = '<span class="ht-tag" title="Bot" aria-label="bot">🤖</span>';
-      if (s.away) tag = '<span class="ht-tag" title="Away: a bot is playing their cards" aria-label="away, a bot is playing">💤</span>';
-      const status = v.phase === 'passing' && s.passed ? '<span class="ht-badge"><span class="ht-long">passed </span>✓</span>' : '';
+      const status = v.phase === 'passing' && s.passed ? ' <span class="ht-badge">Passed</span>' : '';
       const taken = s.taken ? ` <span class="ht-taken">+${s.taken}<span class="ht-long"> this hand</span></span>` : '';
-      const backs = seat === v.seat ? '' : `<span class="ht-backs" aria-label="${s.cards} cards">${'<i></i>'.repeat(Math.min(s.cards, 13))}</span>`;
-      el.innerHTML = `<div class="ht-name"><span class="dot" style="background:${colorCss(s.color)}"></span><span class="ht-nm">${escapeHtml(s.name)}</span></div>
-        <div class="ht-score">${s.score} pts${taken} ${tag}${status}</div>${backs}`;
+      // A little pile of card backs, and how many.
+      const backs = seat === v.seat || !s.cards ? '' : `<span class="ht-backs">${'<i></i>'.repeat(Math.min(s.cards, 3))}<span>${s.cards} card${s.cards === 1 ? '' : 's'}</span></span>`;
+      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
+        <div class="ht-score">${s.score} pts${taken}${status}</div>${backs}`;
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
@@ -218,7 +261,7 @@ export class HeartsTable implements View {
     } else if (v.phase === 'handEnd') {
       text = 'Next hand coming up…';
     }
-    if (v.heartsBroken && v.phase === 'playing') text += ' <span class="ht-broken">♥ broken</span>';
+    if (v.heartsBroken && v.phase === 'playing') text += ` <span class="ht-broken">${suitSvg('H')} broken</span>`;
     status.innerHTML = text;
 
     this.renderHand();
@@ -229,8 +272,7 @@ export class HeartsTable implements View {
     const v = this.view!;
     const hand = this.el.querySelector('.ht-hand') as HTMLElement;
     const myTurn = v.phase === 'playing' && v.turn === v.seat && v.trickWinner === null;
-    let html = '';
-    for (const c of v.cards) {
+    showHand(hand, v.cards, (c) => {
       const cls: string[] = [];
       if (v.phase === 'passing' && !v.passing && this.selected.has(c)) cls.push('raised');
       if (v.passing?.includes(c)) cls.push('passing');
@@ -239,9 +281,8 @@ export class HeartsTable implements View {
       if (this.cursor === c) cls.push('pad-cursor');
       // Cards passed to you stay marked until you play your first card.
       if (v.received.includes(c) && v.seats[v.seat ?? 0].cards === 13) cls.push('new');
-      html += cardHtml(c, cls.join(' '));
-    }
-    hand.innerHTML = html;
+      return cls.join(' ');
+    });
     hand.classList.toggle('my-turn', myTurn);
     this.layoutHand();
   }
@@ -269,19 +310,19 @@ export class HeartsTable implements View {
     const show = v.phase === 'handEnd' || v.phase === 'gameOver' || this.scoresOpen;
     box.hidden = !show;
     if (!show) return;
-    let html = '<div class="ht-panel">';
+    let html = '<div class="ht-panel pc-sheet">';
     if (v.phase === 'gameOver') {
       const names = v.winners.map((i) => escapeHtml(this.name(i)));
       const youWon = v.seat !== null && v.winners.includes(v.seat);
       html += `<h2>${youWon ? 'You win!' : `${names.join(' & ')} ${v.winners.length > 1 ? 'win' : 'wins'}!`}</h2>`;
     } else if (v.phase === 'handEnd' && v.result) {
       html += `<h2>Hand ${v.hand} done</h2>`;
-      if (v.result.moon !== null) html += `<p class="ht-moon">🌙 ${escapeHtml(this.name(v.result.moon))} shot the moon!</p>`;
+      if (v.result.moon !== null) html += `<p class="ht-moon">${escapeHtml(this.name(v.result.moon))} shot the moon!</p>`;
     } else {
       html += '<h2>Scores</h2>';
     }
     html += '<table class="ht-table"><thead><tr><th></th>';
-    for (let s = 0; s < 4; s++) html += `<th><span class="dot" style="background:${colorCss(v.seats[s].color)}"></span>${escapeHtml(v.seats[s].name)}</th>`;
+    for (let s = 0; s < 4; s++) html += `<th>${escapeHtml(v.seats[s].name)}</th>`;
     html += '</tr></thead><tbody>';
     v.history.forEach((row, i) => {
       html += `<tr><td>Hand ${i + 1}</td>${row.map((n) => `<td>${n}</td>`).join('')}</tr>`;
@@ -291,16 +332,17 @@ export class HeartsTable implements View {
     }
     html += `<tr class="ht-total"><td>Total</td>${v.seats.map((s) => `<td>${s.score}</td>`).join('')}</tr>`;
     html += '</tbody></table>';
-    html += `<p class="hint">First to ${v.target} ends the game. Lowest score wins.</p>`;
+    html += `<p class="pc-small">First to ${v.target} ends the game. Lowest score wins.</p>`;
     html += '<div class="actions">';
     if (v.phase === 'gameOver') {
-      if (v.seat !== null) html += '<button class="btn btn-primary" data-act="again" type="button">New game</button>';
-      if (this.shell.isPrivate) html += '<button class="btn btn-secondary" data-act="lobby" type="button">Back to lobby</button>';
+      if (v.seat !== null) html += '<button class="pc-btn pc-btn-main" data-act="again" type="button">New game</button>';
+      if (this.shell.isPrivate) html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
     } else if (this.scoresOpen) {
-      html += '<button class="btn btn-primary" data-act="close-scores" type="button">Close</button>';
+      html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }
     html += '</div></div>';
     box.innerHTML = html;
+    fitScoreTable(box);
   }
 
   // ------------------------------------------------------------------ sounds
@@ -386,7 +428,7 @@ export class HeartsTable implements View {
   private whyIllegal(v: TableView, c: Card): string {
     if (v.trick.length) {
       const led = suitOf(v.trick[0].card);
-      if (v.cards.some((x) => suitOf(x) === led)) return `You have to follow suit (${SUIT_SYMBOL[led]}).`;
+      if (v.cards.some((x) => suitOf(x) === led)) return `You have to follow suit: play one of your ${SUIT_NAME[led as Suit]}.`;
       return 'No points on the first trick.';
     }
     if (v.cards.includes('2C') && c !== '2C') return 'The 2 of clubs leads the first trick.';

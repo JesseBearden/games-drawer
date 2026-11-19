@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   DEFAULT_CONFIG,
+  isInviteToken,
   isRoomCode,
   normalizeRoomCode,
   parseClientMessage,
@@ -14,6 +15,7 @@ import {
   type VoiceSettings,
   type ServerMessage,
   type Slot,
+  type TableInfo,
 } from '@tank/shared';
 import { ChatModerator } from './chat';
 import type { LogSink } from './eventlog';
@@ -182,6 +184,10 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
         res.writeHead(405, { allow: 'GET, HEAD' }).end();
         return;
       }
+      if (url.pathname === '/api/table') {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(tableLookup(url, clientIp(req, o.trustProxy))));
+        return;
+      }
       if (o.production) {
         serveStatic(o.clientDist, url.pathname, req, res);
         return;
@@ -195,6 +201,23 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   // Slow-request protection.
   server.headersTimeout = 10_000;
   server.requestTimeout = 15_000;
+
+  /**
+   * The join page's look at a table before joining: who's there, the game, who invited you. Wrong
+   * codes count with wrong codes at join, so this can't be used to hunt for open tables.
+   */
+  function tableLookup(url: URL, ip: string): TableInfo {
+    const now = Date.now();
+    if (failedJoins.count(ip, now) >= limits.failedJoinsPer5Min) return { ok: false, reason: 'busy' };
+    const code = normalizeRoomCode(url.searchParams.get('code') ?? '');
+    const room = isRoomCode(code) ? manager.rooms.get(code) : undefined;
+    if (!room || room.kind !== 'private' || room.closed) {
+      failedJoins.add(ip, now);
+      return { ok: false, reason: 'closed' };
+    }
+    const token = url.searchParams.get('i');
+    return room.tableInfo(isInviteToken(token) ? token : null);
+  }
 
   function stats() {
     let players = 0;

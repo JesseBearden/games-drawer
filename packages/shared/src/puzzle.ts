@@ -245,16 +245,22 @@ export interface PuzzleState {
   doneAt: number | null;
 }
 
-/** 0..1: how much of the puzzle is joined up (1 when it's one piece). */
-export function puzzleProgress(pieces: PieceSpot[]): number {
+/**
+ * 0..1: how much of the puzzle is in place: pieces joined to at least one other, or set in their
+ * spot in the frame (`locked` groups). 1 when it's all one piece.
+ */
+export function puzzleProgress(pieces: PieceSpot[], locked: readonly number[] = []): number {
   if (pieces.length <= 1) return 1;
-  const groups = new Set(pieces.map((p) => p.g)).size;
-  return (pieces.length - groups) / (pieces.length - 1);
+  const sizes = new Map<number, number>();
+  for (const p of pieces) sizes.set(p.g, (sizes.get(p.g) ?? 0) + 1);
+  let placed = 0;
+  for (const p of pieces) if ((sizes.get(p.g) ?? 0) > 1 || locked.includes(p.g)) placed++;
+  return placed / pieces.length;
 }
 
 /** Nothing joined and nothing in the frame yet: not worth saving. */
 export function puzzleUntouched(s: Pick<PuzzleState, 'pieces' | 'locked'>): boolean {
-  return s.locked.length === 0 && puzzleProgress(s.pieces) === 0;
+  return s.locked.length === 0 && puzzleProgress(s.pieces, s.locked) === 0;
 }
 
 /** A saved puzzle as the "Continue a puzzle" list shows it. */

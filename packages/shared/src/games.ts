@@ -130,7 +130,7 @@ export const GAMES: GameInfo[] = [
     aliases: ['puzzle', 'jigsaw-puzzle', 'jigsawpuzzle'],
     icon: '🧩',
     tagline: 'Build a jigsaw together: everyone works on the same table.',
-    blurb: 'Pick a picture and how many pieces, then build it together. It saves as you go.',
+    blurb: 'Choose a puzzle and how many pieces, then build it together. It saves as you go.',
     howTo: [
       'Drag pieces around the table. When two fit, they snap together and move as one.',
       'Pinch or scroll to zoom, and drag the empty table to look around.',

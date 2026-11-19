@@ -5,8 +5,8 @@ import { colorCss, type ClientTank, type Effect, type GameState } from './state'
 
 const DEG = Math.PI / 180;
 
-/** Turret sprite pivot (dome centre, on the barrel's axis) in sprite pixels. */
-const TURRET_PIVOT = { x: 32, y: 24 };
+/** Turret sprite pivot (dome centre, on the barrel's axis) in sprite pixels (the paper sprites are 2x). */
+const TURRET_PIVOT = { x: 64, y: 48 };
 
 export interface LocalAim {
   angle: number;
@@ -27,12 +27,16 @@ export class Renderer {
     private cfg: GameConfig,
   ) {
     this.ctx = canvas.getContext('2d')!;
-    this.far = mountains(cfg.worldWidth * 1.3, 520, 3, ['#4d5fd6', '#5466da'], 0.55);
-    this.near = mountains(cfg.worldWidth * 1.15, 460, 9, ['#3d4dc4', '#4555c9'], 0.7);
+    // Torn-paper hills behind the battlefield: lilac far away, mint nearer.
+    this.far = mountains(cfg.worldWidth * 1.3, 520, 3, sprites.paper.lilac, 'rgba(255, 255, 255, 0.35)', 0.55);
+    this.near = mountains(cfg.worldWidth * 1.15, 460, 9, sprites.paper.mint, null, 0.7);
+    this.skyPattern = this.ctx.createPattern(sprites.paper.sky, 'repeat');
     for (let i = 0; i < 7; i++) {
       this.clouds.push({ x: Math.random() * cfg.worldWidth, y: 60 + Math.random() * 220, s: 0.6 + Math.random() * 0.8, v: 0.6 + Math.random() * 0.6 });
     }
   }
+
+  private skyPattern: CanvasPattern | null;
 
   resize() {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -58,12 +62,15 @@ export class Renderer {
     const S = cam.scale;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    // Sky
-    const sky = ctx.createLinearGradient(0, 0, 0, vh);
-    sky.addColorStop(0, '#2a55e6');
-    sky.addColorStop(0.55, '#4f6ae6');
-    sky.addColorStop(1, '#7a6fe0');
-    ctx.fillStyle = sky;
+    // Sky: a sheet of sky paper (shown at half its pixels, like the page's paper), washed lighter.
+    ctx.fillStyle = '#85bee3';
+    ctx.fillRect(0, 0, vw, vh);
+    if (this.skyPattern) {
+      this.skyPattern.setTransform(new DOMMatrix([0.5, 0, 0, 0.5, 0, 0]));
+      ctx.fillStyle = this.skyPattern;
+      ctx.fillRect(0, 0, vw, vh);
+    }
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
     ctx.fillRect(0, 0, vw, vh);
 
     // World transform
@@ -81,16 +88,14 @@ export class Renderer {
       ctx.setTransform(this.dpr * S, 0, 0, this.dpr * S, (-cam.x * S + shakeX) * this.dpr, (-cam.y * S + shakeY) * this.dpr);
     world();
 
-    // Clouds drift with the wind.
-    ctx.globalAlpha = 0.18;
+    // Paper clouds drift with the wind (the smoke puff, at the old sprite's size).
     for (const c of this.clouds) {
       c.x += (g.wind * 1.5 + 4) * c.v * (dt / 1000);
       if (c.x > cfg.worldWidth + 150) c.x = -150;
       if (c.x < -150) c.x = cfg.worldWidth + 150;
       const img = this.sprites.img.smoke;
-      ctx.drawImage(img, c.x, c.y, img.width * c.s * 1.6, img.height * c.s);
+      ctx.drawImage(img, c.x, c.y, img.width * 0.5 * c.s * 1.6, img.height * 0.5 * c.s);
     }
-    ctx.globalAlpha = 1;
 
     // Parallax mountains
     const W = cfg.worldWidth;
@@ -112,7 +117,7 @@ export class Renderer {
       ctx.drawImage(tv, 0, 0, 1, H2, -3000, 0, 3000, H2);
       ctx.drawImage(tv, W2 - 1, 0, 1, H2, W2, 0, 3000, H2);
       ctx.drawImage(tv, 0, H2 - 2, W2, 1, -3000, H2, W2 + 6000, 3000);
-      ctx.fillStyle = 'rgba(10, 6, 30, 0.35)';
+      ctx.fillStyle = 'rgba(17, 40, 117, 0.25)';
       ctx.fillRect(-3000, lt, 3000, H2 - lt + 3000);
       ctx.fillRect(W2, rt, 3000, H2 - rt + 3000);
       ctx.fillRect(0, H2, W2, 3000);
@@ -157,7 +162,7 @@ export class Renderer {
         for (let i = 1; i < sh.trail.length; i++) {
           const a = sh.trail[i - 1];
           const b = sh.trail[i];
-          ctx.strokeStyle = `rgba(255, 150, 70, ${(i / sh.trail.length) * 0.75})`;
+          ctx.strokeStyle = `rgba(239, 89, 67, ${(i / sh.trail.length) * 0.6})`;
           ctx.lineWidth = (1 + (i / sh.trail.length) * 2.5) / Math.max(0.6, S);
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
@@ -227,7 +232,7 @@ export class Renderer {
         case 'shield': {
           const tank = g.tanks.get(e.tank);
           if (!tank) break;
-          ctx.strokeStyle = `rgba(150, 230, 255, ${1 - t})`;
+          ctx.strokeStyle = `rgba(16, 61, 182, ${0.8 * (1 - t)})`;
           ctx.lineWidth = 4 / S;
           ctx.beginPath();
           ctx.arc(tank.x, tank.y - 12, 28 + t * 10, 0, Math.PI * 2);
@@ -257,7 +262,7 @@ export class Renderer {
     // ---------------------------------------------------------------- screen space
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const labelSize = Math.round(Math.max(12, Math.min(16, 15 * Math.sqrt(S))));
-    ctx.font = `${labelSize}px 'Lilita One', system-ui, sans-serif`;
+    ctx.font = `800 ${labelSize}px 'Atkinson Hyperlegible Next', system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     // Work out every label first, then nudge overlapping ones upward so tanks parked close
@@ -274,7 +279,8 @@ export class Renderer {
         this.drawOffscreen(t, p, vw, vh);
         continue;
       }
-      const label = `${g.speaking.has(t.info.id) ? '🔊 ' : ''}${t.info.level}${t.info.away ? ' 💤' : ''}`;
+      // The level; "away" when they've dropped out. (Talking shows as bars beside it.)
+      const label = `${t.info.level}${t.info.away ? ' away' : ''}`;
       // Bounty: a gold "+N" when killing this tank is worth more than one level.
       const bounty = levelsForKill(cfg, t.info.kills);
       const tag = bounty > 1 ? ` +${bounty}` : '';
@@ -290,35 +296,50 @@ export class Renderer {
       }
       placed.push(l);
     }
+    ctx.lineJoin = 'round';
     for (const { t, x, y, label, tag, lw, tw } of placed) {
       const p = { x, y };
       const lx = p.x - tw / 2;
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = 'rgba(20, 16, 50, 0.85)';
+      // Ink on a paper-coloured edge: readable on the sky and on the hills.
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(255, 252, 245, 0.95)';
       ctx.strokeText(label, lx, p.y);
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = '#112875';
       ctx.fillText(label, lx, p.y);
       if (tag) {
+        // Bounty: ink on a sunflower edge.
         ctx.textAlign = 'left';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#ffcb2d';
         ctx.strokeText(tag, lx + lw / 2, p.y);
-        ctx.fillStyle = '#ffd23a';
+        ctx.fillStyle = '#112875';
         ctx.fillText(tag, lx + lw / 2, p.y);
         ctx.textAlign = 'center';
       }
+      if (g.speaking.has(t.info.id)) {
+        // Talking: three small cobalt bars to the left of the label.
+        const bx = lx - lw / 2 - 12;
+        for (let i = 0; i < 3; i++) {
+          const h = 5 + 6 * Math.abs(Math.sin(now / 140 + i * 1.3));
+          ctx.fillStyle = 'rgba(255, 252, 245, 0.95)';
+          ctx.fillRect(bx + i * 4 - 1, p.y - labelSize * 0.4 - h / 2 - 1, 4, h + 2);
+          ctx.fillStyle = '#103db6';
+          ctx.fillRect(bx + i * 4, p.y - labelSize * 0.4 - h / 2, 2.5, h);
+        }
+      }
       if (t.info.id === g.myTankId) {
-        // Local tank marker: a chevron that does not rely on colour.
+        // Your tank: a cobalt chevron on a paper edge (doesn't rely on the tank's colour).
         const cy = p.y - labelSize - 4 + Math.sin(now / 220) * 2;
         ctx.beginPath();
         ctx.moveTo(p.x - 8, cy - 5);
         ctx.lineTo(p.x, cy + 3);
         ctx.lineTo(p.x + 8, cy - 5);
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = 'rgba(20, 16, 50, 0.85)';
-        ctx.lineJoin = 'round';
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = 'rgba(255, 252, 245, 0.95)';
         ctx.lineCap = 'round';
         ctx.stroke();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = '#103db6';
         ctx.stroke();
       }
     }
@@ -345,9 +366,9 @@ export class Renderer {
       const t = (now - e.t0) / e.dur;
       const p = cam.toScreen({ x: e.x, y: e.y });
       ctx.globalAlpha = 1 - t * t;
-      ctx.font = `18px 'Lilita One', system-ui, sans-serif`;
+      ctx.font = `800 18px 'Atkinson Hyperlegible Next', system-ui, sans-serif`;
       ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(40, 20, 0, 0.8)';
+      ctx.strokeStyle = 'rgba(17, 40, 117, 0.85)';
       ctx.strokeText(e.text, p.x, p.y - 30 * t);
       ctx.fillStyle = e.color;
       ctx.fillText(e.text, p.x, p.y - 30 * t);
@@ -485,8 +506,9 @@ export class Renderer {
     // (Carried and parachuting tanks are protected too; the helicopter and chute signal that.)
     if (t.info.protectedUntil > g.renderTick && (t.phase === 'ground' || t.phase === 'slide' || t.phase === 'air')) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 200);
-      ctx.strokeStyle = `rgba(160, 235, 255, ${0.45 + 0.35 * pulse})`;
-      ctx.fillStyle = 'rgba(160, 235, 255, 0.12)';
+      // A cobalt bubble (the old pale cyan disappeared against the paper sky).
+      ctx.strokeStyle = `rgba(16, 61, 182, ${0.35 + 0.3 * pulse})`;
+      ctx.fillStyle = 'rgba(16, 61, 182, 0.08)';
       ctx.lineWidth = 2.5 / S;
       ctx.beginPath();
       ctx.arc(t.x, t.y - 13, 27, 0, Math.PI * 2);
@@ -516,7 +538,7 @@ export class Renderer {
       const dx = Math.cos(angle * DEG);
       const dy = -Math.sin(angle * DEG);
       ctx.setLineDash([4 / S, 5 / S]);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.strokeStyle = 'rgba(17, 40, 117, 0.7)';
       ctx.lineWidth = 2 / S;
       ctx.beginPath();
       ctx.moveTo(tip.x, tip.y);
@@ -527,11 +549,17 @@ export class Renderer {
   }
 }
 
-/** Muted background mountain silhouette, generated once. */
-function mountains(width: number, height: number, seed: number, colors: [string, string], roughness: number) {
+/**
+ * A torn-paper hill line behind the battlefield, generated once: the shape filled with a sheet
+ * of paper (optionally washed lighter for distance), a ragged top edge with a pale line of torn
+ * fibres, and a soft shadow so it sits in front of what's behind it.
+ */
+function mountains(width: number, height: number, seed: number, paper: HTMLImageElement, wash: string | null, roughness: number) {
   const c = document.createElement('canvas');
   c.width = Math.round(width / 2);
-  c.height = Math.round(height / 2);
+  // The paper carries on well below the hill line, so the ground never dips below its bottom.
+  const bottom = height + 900;
+  c.height = Math.round(bottom / 2);
   const ctx = c.getContext('2d')!;
   ctx.scale(0.5, 0.5);
   const pts: number[] = [];
@@ -550,17 +578,38 @@ function mountains(width: number, height: number, seed: number, colors: [string,
     const s = t * t * (3 - 2 * t);
     const v = peaks[i] + (peaks[Math.min(n, i + 1)] - peaks[i]) * s;
     const ridge = Math.abs(Math.sin(x * 0.004 + seed)) * 0.35;
-    pts.push(height * (0.15 + (1 - v * roughness - ridge * 0.6) * 0.55));
+    // A little ragged, like a torn edge.
+    const tear = (rand() - 0.5) * 7;
+    pts.push(height * (0.15 + (1 - v * roughness - ridge * 0.6) * 0.55) + tear);
   }
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, colors[0]);
-  grad.addColorStop(1, colors[1]);
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.moveTo(0, height);
-  pts.forEach((y, i) => ctx.lineTo(i * 6, y));
-  ctx.lineTo(width, height);
-  ctx.closePath();
+  const shape = () => {
+    ctx.beginPath();
+    ctx.moveTo(0, bottom);
+    pts.forEach((y, i) => ctx.lineTo(i * 6, y));
+    ctx.lineTo(width, bottom);
+    ctx.closePath();
+  };
+  // Paper: the sheet drawn at its own scale (this canvas is half size, drawn back at 2x).
+  const pattern = ctx.createPattern(paper, 'repeat');
+  shape();
+  ctx.save();
+  ctx.shadowColor = 'rgba(17, 40, 117, 0.22)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = -2;
+  ctx.fillStyle = pattern ?? '#c6b5dc';
   ctx.fill();
+  ctx.restore();
+  if (wash) {
+    shape();
+    ctx.fillStyle = wash;
+    ctx.fill();
+  }
+  // Torn fibres along the top.
+  ctx.beginPath();
+  pts.forEach((y, i) => (i ? ctx.lineTo(i * 6, y + 2) : ctx.moveTo(0, y + 2)));
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.lineWidth = 4;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
   return c;
 }

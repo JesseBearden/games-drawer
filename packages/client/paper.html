@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Cut Paper sample sheet</title>
+    <!-- Dev-only page (like sfx-lab.html): every piece of the Cut Paper look in one place. Not part of the build. -->
+    <link rel="icon" href="/art/drawer.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link id="font-css" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;800&display=swap" />
+    <link rel="stylesheet" href="/src/paper.css" />
+    <style>
+      .sheet {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+        gap: 40px 32px;
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 0 16px 64px;
+        align-items: start;
+      }
+      .sheet > header {
+        grid-column: 1 / -1;
+      }
+      .frame {
+        display: grid;
+        gap: 18px;
+        align-content: start;
+      }
+      .frame > h2.label {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 800;
+        color: var(--ink-soft);
+      }
+      .wide {
+        grid-column: 1 / -1;
+      }
+      .hero {
+        height: clamp(130px, 30vw, 190px);
+        overflow: hidden;
+        border-radius: 16px;
+      }
+      .hero img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .center {
+        text-align: center;
+      }
+      .center p {
+        margin: 12px auto 4px;
+        max-width: 32ch;
+      }
+      .code-row {
+        display: flex;
+        gap: 10px;
+      }
+      .code-row .pc-input {
+        flex: 1;
+        min-width: 0;
+      }
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+      .back {
+        justify-self: start;
+        min-height: 40px;
+        padding: 6px 0;
+        font-weight: 400;
+        text-decoration: none;
+      }
+      .table {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: var(--lift-1);
+      }
+      .table .mat {
+        display: grid;
+        grid-template-areas: '. top .' 'left board right' '. say .';
+        grid-template-columns: 1fr auto 1fr;
+        gap: 14px 8px;
+        padding: 18px 10px 14px;
+        place-items: center;
+      }
+      .table .mat .pc-tag {
+        min-width: 0;
+      }
+      .board {
+        grid-area: board;
+        display: grid;
+        place-items: center;
+        gap: 2px;
+      }
+      .board .row {
+        display: flex;
+        gap: 2px;
+        align-items: center;
+      }
+      .say {
+        grid-area: say;
+        margin: 0;
+        color: var(--cobalt);
+        font-weight: 800;
+      }
+      .hand {
+        padding: 12px 12px 16px;
+        display: grid;
+        gap: 10px;
+      }
+      .hand header {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 800;
+      }
+      .hand header em {
+        font-style: normal;
+        color: var(--cobalt);
+      }
+      .tiles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+      }
+      .cards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        align-items: end;
+      }
+      .fan {
+        display: flex;
+        justify-content: center;
+        padding-top: 18px;
+      }
+      .fan .pc-card {
+        --w: 74px;
+        margin-left: -34px;
+      }
+      .fan .pc-card:first-child {
+        margin-left: 0;
+      }
+      .fonts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .fonts a {
+        color: var(--cobalt);
+        font-weight: 800;
+      }
+      .fonts a[aria-current] {
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .deck {
+        display: grid;
+        grid-template-columns: repeat(13, 1fr);
+        gap: 10px 8px;
+        padding: 16px;
+        border-radius: 16px;
+        box-shadow: var(--lift-1);
+      }
+      .deck .pc-card {
+        --w: 100%;
+        border-radius: 7px;
+      }
+      @media (max-width: 900px) {
+        .deck {
+          grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+        }
+      }
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+        gap: 12px;
+      }
+      .swatches div {
+        height: 72px;
+        border-radius: var(--radius);
+        box-shadow: var(--lift-1);
+        display: grid;
+        place-items: end start;
+        padding: 6px 10px;
+        font-size: 0.85rem;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body class="pc-page">
+    <main class="sheet">
+      <header>
+        <a class="pc-brand" href="/paper.html"><img src="/art/drawer.svg" alt="" />Games Drawer</a>
+        <p class="pc-small">Cut Paper sample sheet. Font: <span class="fonts" id="fonts"></span></p>
+      </header>
+
+      <!-- 0. The deck -->
+      <section class="frame wide" id="decks">
+        <h2 class="label">The deck</h2>
+        <div class="deck paper-mat" id="deck"></div>
+      </section>
+
+      <!-- 1. Landing -->
+      <section class="frame">
+        <h2 class="label">Home</h2>
+        <div class="pc-hero"><img src="/art/together.webp" alt="" /></div>
+        <div class="center">
+          <h1 class="pc-h1">Play a game together.</h1>
+          <p class="pc-lead">Talk and play at your own private table. Just you and the people you invite, up to four in all.</p>
+        </div>
+        <button class="pc-btn pc-btn-main pc-btn-big pc-btn-wide">Start a table</button>
+        <label class="pc-field" for="code">Have a table code?</label>
+        <div class="code-row">
+          <input id="code" class="pc-input pc-input-code" maxlength="5" placeholder="5 letters" autocomplete="off" />
+          <button class="pc-btn pc-btn-plain">Join</button>
+        </div>
+      </section>
+
+      <!-- 2. Invited -->
+      <section class="frame">
+        <h2 class="label">From an invite link</h2>
+        <button class="pc-link back">← Back</button>
+        <div class="pc-hero"><img src="/art/together.webp" alt="" /></div>
+        <h1 class="pc-h2">Jesse invited you to play</h1>
+        <p class="pc-lead" style="margin: 0">Join Jesse for Jigsaw.</p>
+        <div class="pc-namerow"><b>Your name</b><span>Liz</span><button class="pc-link">Change</button></div>
+        <div class="stack">
+          <button class="pc-btn pc-btn-main pc-btn-big pc-btn-wide">Join with mic on</button>
+          <button class="pc-btn pc-btn-plain pc-btn-wide">Join with mic off</button>
+        </div>
+      </section>
+
+      <!-- 3. Start a table -->
+      <section class="frame">
+        <h2 class="label">Starting a table</h2>
+        <button class="pc-link back">← Back</button>
+        <h1 class="pc-h2">Start a table</h1>
+        <h2 class="pc-h3">Choose a game</h2>
+        <div class="pc-choices" id="choices"></div>
+        <label class="pc-field">Your name<input class="pc-input" placeholder="Your first name" /></label>
+        <div class="stack">
+          <button class="pc-btn pc-btn-main pc-btn-big pc-btn-wide">Start with mic on</button>
+          <button class="pc-btn pc-btn-plain pc-btn-wide">Start with mic off</button>
+        </div>
+      </section>
+
+      <!-- 4. At the table -->
+      <section class="frame">
+        <h2 class="label">At the table (Dominoes)</h2>
+        <div class="table paper-mat">
+          <div class="bar pc-toolbar">
+            <button class="pc-btn pc-btn-main">Mute mic</button>
+            <button class="pc-btn pc-btn-plain">Messages <span class="pc-badge">2</span></button>
+            <button class="pc-btn pc-btn-plain">Invite</button>
+            <button class="pc-btn pc-btn-plain">Menu</button>
+          </div>
+          <div class="mat">
+            <div class="pc-tag" style="grid-area: top"><b>Agent Fudge</b><span><i>5 pts ·</i> <i>6 tiles</i></span><span class="pc-note">Computer</span></div>
+            <div class="pc-tag is-turn is-talking" style="grid-area: left"><b><span class="pc-talk"><i></i><i></i><i></i></span>Liz</b><span><i>20 pts ·</i> <i>5 tiles</i></span></div>
+            <div class="board" id="board"></div>
+            <div class="pc-tag is-away" style="grid-area: right"><b>Sam</b><span><i>20 pts ·</i> <i>6 tiles</i></span><span class="pc-note">Away</span></div>
+            <p class="say">Liz's turn</p>
+          </div>
+          <div class="hand paper-kraft">
+            <header><span>Jesse · You</span><em>Next: you</em></header>
+            <div class="tiles" id="hand"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Cards -->
+      <section class="frame">
+        <h2 class="label">Cards</h2>
+        <div class="cards" id="cards"></div>
+        <h2 class="label">A hand on a phone (tap lifts a card)</h2>
+        <div class="fan" id="fan"></div>
+      </section>
+
+      <!-- 6. Messages and alerts -->
+      <section class="frame">
+        <h2 class="label">Messages</h2>
+        <div class="pc-messages">
+          <div class="pc-note-list">
+            <div class="pc-msg"><b>Liz</b>Who has the double six?</div>
+            <div class="pc-msg mine">Not me!</div>
+            <div class="pc-msg"><b>Sam</b>brb, getting coffee</div>
+          </div>
+          <div class="code-row">
+            <input class="pc-input" placeholder="Write a message" />
+            <button class="pc-btn pc-btn-main">Send</button>
+          </div>
+        </div>
+        <h2 class="label">Something needs you</h2>
+        <div class="pc-alert"><span style="flex: 1">Your mic is blocked.</span><button class="pc-btn pc-btn-plain">Show me how</button></div>
+        <div class="pc-toolbar" style="padding: 0">
+          <button class="pc-btn pc-btn-alert">Unmute mic</button>
+          <button class="pc-btn pc-btn-plain">Leave table</button>
+        </div>
+        <h2 class="label">Papers</h2>
+        <div class="swatches">
+          <div class="paper-paper">Paper</div>
+          <div class="paper-mat">Mat</div>
+          <div class="paper-cobalt">Cobalt</div>
+          <div class="paper-sunflower">Sunflower</div>
+          <div class="paper-tomato">Tomato</div>
+          <div class="paper-grass">Grass</div>
+          <div class="paper-sky">Sky</div>
+          <div class="paper-mint">Mint</div>
+          <div class="paper-butter">Butter</div>
+          <div class="paper-lilac">Lilac</div>
+          <div class="paper-peach">Peach</div>
+          <div class="paper-blush">Blush</div>
+          <div class="paper-kraft">Kraft</div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/paperSample.ts"></script>
+  </body>
+</html>

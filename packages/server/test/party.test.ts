@@ -125,6 +125,24 @@ describe('private rooms are parties', () => {
     expect(a.room.game?.id).toBe('tanks');
   });
 
+  it('a pick made right after Switch game waits out the cooldown instead of being lost', () => {
+    const { mgr, clock } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
+    clock.now += GAME_SWITCH_COOLDOWN_MS;
+    a.room.handle('session-aaaa', { t: 'lobby' });
+    expect(a.room.game).toBeNull();
+    // Picked straight away: held for now…
+    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    expect(a.room.game).toBeNull();
+    a.room.step();
+    expect(a.room.game).toBeNull();
+    // …and started once the cooldown is over.
+    clock.now += GAME_SWITCH_COOLDOWN_MS;
+    a.room.step();
+    expect(a.room.game?.id).toBe('hearts');
+  });
+
   it('public rooms always play tanks', () => {
     const { mgr } = setup();
     const lookup = mgr.resolve({ kind: 'public' }, 'session-aaaa');

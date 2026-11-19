@@ -136,7 +136,7 @@ function forget(ids: string[]) {
 export class JigsawTable implements View {
   readonly landscape = false;
   readonly helpHtml =
-    '<p><b>Jigsaw:</b> drag pieces around the table; when two fit together they snap and move as one. A group dropped where it belongs locks into the frame.</p><p>Scroll or pinch to zoom, drag the empty table to look around. <b>Edges</b> hides the middle pieces (just for you), <b>Tidy</b> spreads loose pieces back around the edges.</p><p>On a touch screen, a magnifier above your finger shows the piece you’re dragging. The magnifier button turns it off.</p><p>The puzzle saves as you go: pick it again any time under “Continue a puzzle”.</p>';
+    '<p>Drag pieces around the table; when two fit together they snap and move as one. A group dropped where it belongs locks into the frame.</p><p>Scroll or pinch to zoom, drag the empty table to look around. <b>Edges</b> hides the middle pieces (just for you), <b>Tidy</b> spreads loose pieces back around the edges.</p><p>On a touch screen, a magnifier above your finger shows the piece you’re dragging. The magnifier button turns it off.</p><p>The puzzle saves as you go: pick it again any time under “Continue a puzzle”.</p>';
   private el = $('jigsaw-view');
   private phase: PuzzlePhase = 'setup';
   private state: PuzzleState | null = null;
@@ -208,12 +208,11 @@ export class JigsawTable implements View {
         <div class="pz-tools">
           <button class="pz-btn" type="button" data-pz="picture" aria-pressed="false">Picture</button>
           <button class="pz-btn" type="button" data-pz="edges" aria-pressed="false">Edges</button>
-          <button class="pz-btn pz-touch" type="button" data-pz="loupe" aria-pressed="${this.magnifier}" aria-label="Magnifier" title="Magnifier"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2.6" /><path d="M15 15l5.5 5.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg><span class="pz-wide"> Magnifier</span></button>
+          <button class="pz-btn pz-touch" type="button" data-pz="loupe" aria-pressed="${this.magnifier}">Magnifier</button>
           <button class="pz-btn" type="button" data-pz="tidy">Tidy</button>
           <button class="pz-btn" type="button" data-pz="fit" aria-label="Fit the table on screen">Fit</button>
           <button class="pz-btn pz-zoom" type="button" data-pz="zoom-in" aria-label="Zoom in">＋</button>
           <button class="pz-btn pz-zoom" type="button" data-pz="zoom-out" aria-label="Zoom out">－</button>
-          <button class="pz-btn" type="button" data-pz="setup">New<span class="pz-wide"> puzzle</span></button>
         </div>
         <img class="pz-preview" alt="The finished picture" hidden />
         <div class="pz-loading" hidden>Cutting pieces…</div>
@@ -349,7 +348,7 @@ export class JigsawTable implements View {
       html += '<h3>Continue a puzzle</h3><ul class="pz-saves">';
       for (const s of [...this.saves].sort((a, b) => b.updatedAt - a.updatedAt)) {
         const when = new Date(s.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
-        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${s.pieces} pieces · ${s.done ? 'finished' : `${Math.round(s.progress * 100)}% done`} · ${when}</small></span><button type="button" class="btn btn-secondary" data-resume="${s.id}">${s.done ? 'Look again' : 'Continue'}</button><button type="button" class="pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">✕</button></li>`;
+        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${s.pieces} pieces · ${s.done ? 'finished' : `${Math.round(s.progress * 100)}% done`} · ${when}</small></span><button type="button" class="pc-btn pc-btn-plain" data-resume="${s.id}">${s.done ? 'Look again' : 'Continue'}</button><button type="button" class="pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">Remove</button></li>`;
       }
       html += '</ul><h3>Or start a new one</h3>';
     }
@@ -358,16 +357,16 @@ export class JigsawTable implements View {
       const g = gridFor(img.width, img.height, n);
       html += `<button type="button" class="pz-btn${n === this.pickCount ? ' picked' : ''}" data-count="${n}" title="${g.cols * g.rows} pieces">${n}</button>`;
     }
-    html += '</div><h4>Pick a picture</h4><div class="pz-images">';
+    html += '</div><h4>Choose a puzzle</h4><div class="pz-images">';
     for (const i of PUZZLE_IMAGES) {
       html += `<button type="button" class="pz-image${i.id === img.id ? ' picked' : ''}" data-image="${i.id}"><img src="${i.thumb}" alt="" loading="lazy" /><span>${escapeHtml(i.title)}</span></button>`;
     }
     // The grid has to fit the picture, so the real count is close to the one picked.
     const grid = gridFor(img.width, img.height, this.pickCount);
     html += '</div><div class="pz-start-bar">';
-    html += `<p class="hint pz-grid"><b>${escapeHtml(img.title)}</b>: ${grid.cols * grid.rows} pieces, ${grid.cols} across and ${grid.rows} down.</p>`;
-    html += '<button type="button" class="btn btn-primary btn-big pz-start" data-pz="start">Start puzzle</button>';
-    html += `<p class="hint">Anyone in the room can pick. ${escapeHtml(img.credit)}.</p></div></div>`;
+    html += `<p class="pc-small pz-grid"><b>${escapeHtml(img.title)}</b>: ${grid.cols * grid.rows} pieces, ${grid.cols} across and ${grid.rows} down.</p>`;
+    html += '<button type="button" class="pc-btn pc-btn-main pc-btn-big pz-start" data-pz="start">Start puzzle</button>';
+    html += `<p class="pc-small">Anyone at the table can pick. ${escapeHtml(img.credit)}.</p></div></div>`;
     (this.el.querySelector('.pz-setup') as HTMLElement).innerHTML = html;
   }
 
@@ -389,7 +388,7 @@ export class JigsawTable implements View {
   private updateStatus() {
     const s = this.state;
     if (!s) return;
-    (this.el.querySelector('.pz-pct') as HTMLElement).textContent = `${Math.round(puzzleProgress(s.pieces) * 100)}%`;
+    (this.el.querySelector('.pz-pct') as HTMLElement).textContent = `${Math.round(puzzleProgress(s.pieces, s.locked) * 100)}%`;
     (this.el.querySelector('.pz-count') as HTMLElement).textContent = `${s.pieces.length} pieces · ${s.title}`;
   }
 
@@ -399,7 +398,7 @@ export class JigsawTable implements View {
     box.hidden = this.phase !== 'done' || !s;
     if (box.hidden || !s) return;
     const minutes = Math.max(1, Math.round(((s.doneAt ?? s.updatedAt) - s.createdAt) / 60_000));
-    box.innerHTML = `<b>Finished!</b> ${s.pieces.length} pieces in ${minutes} minute${minutes === 1 ? '' : 's'}. <button type="button" class="btn btn-primary" data-pz="setup">New puzzle</button>`;
+    box.innerHTML = `<b>Finished!</b> ${s.pieces.length} pieces in ${minutes} minute${minutes === 1 ? '' : 's'}. <button type="button" class="pc-btn pc-btn-main" data-pz="setup">New puzzle</button>`;
   }
 
   // ------------------------------------------------------------------ cutting the pieces
@@ -564,12 +563,26 @@ export class JigsawTable implements View {
     this.invalidate();
   }
 
-  /** The zoom that shows the whole table between the toolbars. */
+  /**
+   * The room the status tag (top) and the tools strip (bottom) take over the table, measured
+   * (the strip wraps onto two rows on phones), plus a little air. HUD is the least it allows.
+   */
+  private hud() {
+    const c = this.canvas.getBoundingClientRect();
+    const status = this.el.querySelector('.pz-status')?.getBoundingClientRect();
+    const tools = this.el.querySelector('.pz-tools')?.getBoundingClientRect();
+    const top = status?.height ? Math.max(HUD.top, status.bottom - c.top + 10) : HUD.top;
+    const bottom = tools?.height ? Math.max(HUD.bottom, c.bottom - tools.top + 10) : HUD.bottom;
+    return { top, bottom, side: HUD.side };
+  }
+
+  /** The zoom that shows the whole table between the status tag and the tools. */
   private fitScale() {
     const s = this.state!;
     const b = tableBounds(s.width, s.height, s.cols, s.rows);
-    const w = Math.max(1, this.canvas.clientWidth - HUD.side * 2);
-    const h = Math.max(1, this.canvas.clientHeight - HUD.top - HUD.bottom);
+    const hud = this.hud();
+    const w = Math.max(1, this.canvas.clientWidth - hud.side * 2);
+    const h = Math.max(1, this.canvas.clientHeight - hud.top - hud.bottom);
     return Math.min(w / (b.maxX - b.minX), h / (b.maxY - b.minY));
   }
 
@@ -598,8 +611,9 @@ export class JigsawTable implements View {
       const max = hi + after / k - view / k;
       return min <= max ? Math.min(max, Math.max(min, pos)) : (min + max) / 2;
     };
-    this.cam.x = axis(this.cam.x, b.minX, b.maxX, HUD.side, HUD.side, this.canvas.clientWidth);
-    this.cam.y = axis(this.cam.y, b.minY, b.maxY, HUD.top, HUD.bottom, this.canvas.clientHeight);
+    const hud = this.hud();
+    this.cam.x = axis(this.cam.x, b.minX, b.maxX, hud.side, hud.side, this.canvas.clientWidth);
+    this.cam.y = axis(this.cam.y, b.minY, b.maxY, hud.top, hud.bottom, this.canvas.clientHeight);
   }
 
   private fit() {
@@ -687,12 +701,14 @@ export class JigsawTable implements View {
       ctx.lineWidth = 2;
       ctx.strokeStyle = '#fff';
       ctx.stroke();
-      ctx.font = '700 13px Nunito, system-ui, sans-serif';
-      ctx.fillStyle = '#fff';
-      ctx.shadowColor = 'rgba(0,0,0,0.6)';
-      ctx.shadowBlur = 4;
+      // Their name in ink with a paper-coloured edge, readable on the mat and on pieces.
+      ctx.font = '800 13px "Atkinson Hyperlegible Next", system-ui, sans-serif';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(255, 252, 245, 0.95)';
+      ctx.strokeText(member.name, x + 11, y + 4);
+      ctx.fillStyle = '#112875';
       ctx.fillText(member.name, x + 11, y + 4);
-      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
     }
     if (fading) this.invalidate();
@@ -706,12 +722,14 @@ export class JigsawTable implements View {
   private drawTable(ctx: CanvasRenderingContext2D, zoom: number, dpr: number, view: { x0: number; y0: number; x1: number; y1: number }) {
     const s = this.state!;
     const b = tableBounds(s.width, s.height, s.cols, s.rows);
-    ctx.fillStyle = 'rgba(10, 16, 50, 0.35)';
+    // On the blue mat (the page shows through): the area pieces can go a shade darker, and the
+    // frame where the finished picture goes a sheet of cream paper with a dashed ink edge.
+    ctx.fillStyle = 'rgba(17, 40, 117, 0.06)';
     ctx.fillRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.fillStyle = 'rgba(255, 252, 245, 0.8)';
     ctx.fillRect(0, 0, s.width, s.height);
     ctx.setLineDash([8 / zoom, 6 / zoom]);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.strokeStyle = 'rgba(17, 40, 117, 0.4)';
     ctx.lineWidth = 2 / zoom;
     ctx.strokeRect(0, 0, s.width, s.height);
     ctx.setLineDash([]);
@@ -805,7 +823,7 @@ export class JigsawTable implements View {
     // The first time, say what it is (it's a surprise otherwise).
     if (!el.classList.contains('on') && !stored(MAGNIFIER_HINT_KEY)) {
       store(MAGNIFIER_HINT_KEY, '1');
-      this.shell.toast('That’s the magnifier: it shows the piece under your finger. 🔍 below turns it off.');
+      this.shell.toast('That’s the magnifier: it shows the piece under your finger. The Magnifier button turns it off.');
     }
     const size = v.r * 2;
     const px = Math.round(size * dpr);
@@ -822,7 +840,7 @@ export class JigsawTable implements View {
     el.classList.add('on');
     const g = this.loupeCtx;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#1a2260';
+    g.fillStyle = '#e5eff6'; // the mat
     g.fillRect(0, 0, px, px);
     const k = v.zoom * dpr;
     g.setTransform(k, 0, 0, k, (v.r - v.bx * v.zoom) * dpr, (v.r - v.by * v.zoom) * dpr);
@@ -1015,7 +1033,8 @@ export class JigsawTable implements View {
       return t * t;
     };
     const vx = (depth(r.width - x, zx) - depth(x, zx)) * EDGE_SPEED;
-    const vy = (depth(r.height - HUD.bottom - y, zy) - depth(y - HUD.top, zy)) * EDGE_SPEED;
+    const hud = this.hud();
+    const vy = (depth(r.height - hud.bottom - y, zy) - depth(y - hud.top, zy)) * EDGE_SPEED;
     return vx || vy ? [vx, vy] : null;
   }
 
@@ -1118,17 +1137,29 @@ export class JigsawTable implements View {
         return this.zoomAt(r.width / 2, r.height / 2, 1.35);
       case 'zoom-out':
         return this.zoomAt(r.width / 2, r.height / 2, 1 / 1.35);
-      case 'setup': {
-        const s = this.state;
-        const ask =
-          s && puzzleUntouched(s)
-            ? 'Put this puzzle away? Nothing’s been placed yet, so it won’t be kept.'
-            : 'Put this puzzle away? It’s saved, so anyone here can continue it later.';
-        if (this.phase === 'done' || confirm(ask)) this.shell.sendGame({ t: 'pz-setup' });
-        return;
-      }
+      case 'setup':
+        return this.newPuzzle();
     }
   };
+
+  /** Menu: New puzzle, while a puzzle is out. */
+  menuItems() {
+    return this.phase !== 'setup' && this.state ? [{ id: 'new-puzzle', label: 'New puzzle' }] : [];
+  }
+
+  onMenuItem(id: string) {
+    if (id === 'new-puzzle') this.newPuzzle();
+  }
+
+  /** Put this puzzle away (it's saved) and go back to picking one. */
+  private newPuzzle() {
+    const s = this.state;
+    const ask =
+      s && puzzleUntouched(s)
+        ? 'Put this puzzle away? Nothing’s been placed yet, so it won’t be kept.'
+        : 'Put this puzzle away? It’s saved, so anyone here can continue it later.';
+    if (this.phase === 'done' || confirm(ask)) this.shell.sendGame({ t: 'pz-setup' });
+  }
 
   dispose() {
     cancelAnimationFrame(this.raf);

@@ -2,13 +2,21 @@ import { CARD_SOUNDS } from './audio';
 import { DOMINOES_RULES, type DominoesView, type GameServerMessage, type Move, type TileId } from '@tank/shared';
 import { bounds, ghostSpot, layoutSpots, limitsFor, tileSvg, type TileSpot } from './dominoLayout';
 import { focusForPad, type PadPress } from './gamepad';
-import { colorCss, escapeHtml } from './state';
+import { escapeHtml } from './state';
+import { fitScoreTable, seatNameHtml } from './heartsView';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** Biggest a board unit (half a domino) gets, in pixels, before the layout fills the table. */
 const MAX_UNIT = 40;
+/** Zooming in goes until half a domino is this big (and always at least ZOOM_MIN_MAX times). */
+const ZOOM_UNIT = 64;
+const ZOOM_MIN_MAX = 1.6;
+/** Each tap of Zoom in or Zoom out (or a controller shoulder button). */
+const ZOOM_STEP = 1.5;
+/** A finger or mouse has to move this far (px) before it drags the board instead of tapping. */
+const DRAG_SLOP = 8;
 
 /**
  * Dominoes (All Fives) on the shared card-table layout: opponents around the edge, the board
@@ -18,7 +26,7 @@ const MAX_UNIT = 40;
 export class DominoesTable implements View {
   readonly landscape = false;
   readonly helpHtml =
-    `<p><b>Dominoes (All Fives):</b> play a tile that matches an open end. After you play, if the open ends add up to a multiple of 5, you score that many. Nothing fits? You pass (or draw from the boneyard, when there is one).</p><p>Go out first to score everyone’s leftover pips, rounded to the nearest 5. First to ${DOMINOES_RULES.target} wins.</p><p><b>Controller:</b> left/right picks a tile, A plays it (left/right then chooses where), B cancels.</p>`;
+    `<p>All Fives: play a tile that matches an open end. After you play, if the open ends add up to a multiple of 5, you score that many. Nothing fits? You pass (or draw from the boneyard, when there is one).</p><p>Go out first to score everyone’s leftover pips, rounded to the nearest 5. First to ${DOMINOES_RULES.target} wins.</p><p>Board hard to read? Pinch it or tap <b>Zoom in</b>, then drag to look around.</p><p><b>Controller:</b> left/right picks a tile, A plays it (left/right then chooses where), B cancels. The shoulder buttons zoom.</p>`;
   private el = $('dominoes-view');
   private view: DominoesView | null = null;
   private selected: TileId | null = null;
@@ -33,6 +41,21 @@ export class DominoesTable implements View {
   private speaking = new Set<string>();
   private cursor: TileId | null = null;
   private observer = new ResizeObserver(() => this.renderBoard());
+  /** Board zoom: a scale and offset (px) on top of the fitted layout. 1 shows the whole board. */
+  private zoom = 1;
+  private panX = 0;
+  private panY = 0;
+  /** The fitted board: its box and how big half a domino is, before zooming. */
+  private boxW = 0;
+  private boxH = 0;
+  private fitUnit = MAX_UNIT;
+  private hasTiles = false;
+  /** Fingers (or the mouse) on the board, and the pinch or drag they started. */
+  private pointers = new Map<number, { x: number; y: number }>();
+  private gesture: { x: number; y: number; dist: number; zoom: number; panX: number; panY: number } | null = null;
+  private dragging = false;
+  /** Right after a drag or pinch, the click it ends with isn't a tap. */
+  private noClickUntil = 0;
 
   constructor(private shell: ShellApi) {
     this.el.hidden = false;
@@ -44,17 +67,32 @@ export class DominoesTable implements View {
         <div class="ht-center">
           <div class="dm-board"><div class="dm-layout"></div><div class="dm-pop" hidden></div></div>
           <div class="ht-status" aria-live="polite">Shuffling…</div>
-          <div class="dm-info"></div>
-          <button class="btn btn-primary ht-action dm-draw" type="button" hidden></button>
-          <button class="btn btn-primary ht-action dm-back" type="button" data-act="scores" hidden>Back to scores</button>
+          <div class="dm-foot">
+            <button class="pc-btn pc-btn-plain dm-zoom dm-zoom-out" type="button" data-zoom="out">Zoom out</button>
+            <div class="dm-info"></div>
+            <button class="pc-btn pc-btn-plain dm-zoom dm-zoom-in" type="button" data-zoom="in">Zoom in</button>
+          </div>
+          <button class="pc-btn pc-btn-main ht-action dm-draw" type="button" hidden></button>
         </div>
-        <div class="ht-mine"><div class="ht-seat ht-pos-0"></div><button class="ht-scores-btn" type="button">Scores</button></div>
+        <div class="ht-mine"><div class="ht-seat ht-pos-0"></div><button class="ht-scores-btn pc-btn pc-btn-plain" type="button">Scores</button></div>
         <div class="ht-hand dm-hand"></div>
         <div class="ht-overlay" hidden></div>
       </div>`;
     this.el.addEventListener('click', this.onClick);
-    this.observer.observe(this.el.querySelector('.dm-board')!);
+    const board = this.board();
+    board.addEventListener('pointerdown', this.onPointerDown);
+    board.addEventListener('pointermove', this.onPointerMove);
+    board.addEventListener('pointerup', this.onPointerUp);
+    board.addEventListener('pointercancel', this.onPointerUp);
+    board.addEventListener('wheel', this.onWheel, { passive: false });
+    // Safari on iPhone and iPad zooms the whole page on a pinch unless told not to.
+    board.addEventListener('gesturestart', this.stopPageZoom);
+    this.observer.observe(board);
     shell.sfx.preloadSounds(CARD_SOUNDS);
+  }
+
+  private board() {
+    return this.el.querySelector('.dm-board') as HTMLElement;
   }
 
   onGameMessage(m: GameServerMessage) {
@@ -65,6 +103,8 @@ export class DominoesTable implements View {
     this.readySent = false;
     // A hand just ended (or the next began): show the scores first.
     if (!prev || prev.phase !== m.view.phase) this.boardPeek = false;
+    // A new hand starts with the whole (empty) board in view.
+    if (!prev || prev.hand !== m.view.hand) this.zoom = 1;
     if (this.selected && !m.view.tiles.includes(this.selected)) this.selected = null;
     if (m.view.turn !== m.view.seat) this.ghostIndex = -1;
     this.sounds(prev, m.view);
@@ -105,11 +145,8 @@ export class DominoesTable implements View {
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
-      let tag = '';
-      if (s.bot) tag = '<span class="ht-tag" title="Bot" aria-label="bot">🤖</span>';
-      if (s.away) tag = '<span class="ht-tag" title="Away: a bot is playing their tiles" aria-label="away, a bot is playing">💤</span>';
-      el.innerHTML = `<div class="ht-name"><span class="dot" style="background:${colorCss(s.color)}"></span><span class="ht-nm">${escapeHtml(s.name)}</span></div>
-        <div class="ht-score">${s.score} pts · ${s.tiles} tile${s.tiles === 1 ? '' : 's'} ${tag}</div>`;
+      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
+        <div class="ht-score"><i>${s.score} pts ·</i> <i>${s.tiles} tile${s.tiles === 1 ? '' : 's'}</i></div>`;
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
@@ -137,7 +174,12 @@ export class DominoesTable implements View {
     draw.hidden = !(myTurn && v.mustDraw);
     draw.disabled = this.pending;
     draw.textContent = `Draw a tile (${v.boneyard} left)`;
-    q<HTMLButtonElement>('.dm-back').hidden = !(this.boardPeek && v.phase !== 'playing');
+    // One button next to your name: Scores, or (looking at the board after a hand) Back to scores.
+    const back = this.boardPeek && v.phase !== 'playing';
+    const scoresBtn = q<HTMLButtonElement>('.ht-scores-btn');
+    scoresBtn.textContent = back ? 'Back to scores' : 'Scores';
+    scoresBtn.classList.toggle('pc-btn-main', back);
+    scoresBtn.classList.toggle('pc-btn-plain', !back);
 
     this.renderHand(myTurn);
     this.renderBoard();
@@ -175,6 +217,10 @@ export class DominoesTable implements View {
     const unitsW = b.maxX - b.minX + 1;
     const unitsH = b.maxY - b.minY + 1;
     const unit = Math.min(MAX_UNIT, box.width / unitsW, box.height / unitsH);
+    this.boxW = box.width;
+    this.boxH = box.height;
+    this.fitUnit = unit;
+    this.hasTiles = spots.length > 0;
     const ox = (box.width - (b.maxX - b.minX) * unit) / 2 - b.minX * unit;
     const oy = (box.height - (b.maxY - b.minY) * unit) / 2 - b.minY * unit;
     const placeStyle = (s: TileSpot) => {
@@ -192,7 +238,132 @@ export class DominoesTable implements View {
       .join('');
     if (!spots.length && !ghosts.length) html = '<p class="dm-empty">The first tile goes here.</p>';
     (board.querySelector('.dm-layout') as HTMLElement).innerHTML = html;
+    this.applyZoom();
   }
+
+  // ------------------------------------------------------------------ zoom
+
+  private maxZoom() {
+    return Math.max(ZOOM_MIN_MAX, ZOOM_UNIT / this.fitUnit);
+  }
+
+  /** Zoom to z, keeping the board point under (px, py) (board pixels) where it is. */
+  private zoomAt(px: number, py: number, z: number) {
+    z = Math.min(this.maxZoom(), Math.max(1, z));
+    this.panX = px - ((px - this.panX) / this.zoom) * z;
+    this.panY = py - ((py - this.panY) / this.zoom) * z;
+    this.zoom = z;
+    this.applyZoom();
+  }
+
+  private zoomStep(dir: 'in' | 'out') {
+    this.zoomAt(this.boxW / 2, this.boxH / 2, dir === 'in' ? this.zoom * ZOOM_STEP : this.zoom / ZOOM_STEP);
+  }
+
+  /** Puts the zoom on the board (kept inside it: no panning off into nothing) and shows the right buttons. */
+  private applyZoom() {
+    const board = this.board();
+    if (!board) return;
+    if (!this.hasTiles) this.zoom = 1;
+    this.zoom = Math.min(this.maxZoom(), this.zoom);
+    if (this.zoom < 1.02) {
+      this.zoom = 1;
+      this.panX = this.panY = 0;
+    }
+    this.panX = Math.min(0, Math.max(this.boxW * (1 - this.zoom), this.panX));
+    this.panY = Math.min(0, Math.max(this.boxH * (1 - this.zoom), this.panY));
+    const zoomed = this.zoom > 1;
+    (board.querySelector('.dm-layout') as HTMLElement).style.transform = zoomed ? `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})` : '';
+    board.classList.toggle('zoomed', zoomed);
+    // Hidden buttons keep their room, so the board doesn't jump when they come and go.
+    const show = (sel: string, on: boolean) => {
+      const b = this.el.querySelector(sel) as HTMLButtonElement;
+      b.style.visibility = on ? '' : 'hidden';
+      b.disabled = !on;
+    };
+    show('.dm-zoom-in', this.hasTiles && this.zoom < this.maxZoom() - 0.01);
+    show('.dm-zoom-out', zoomed);
+  }
+
+  private stopPageZoom = (e: Event) => e.preventDefault();
+
+  /** Where the pointers are, in board pixels: their middle, and how far apart the first two are. */
+  private pointerSpread() {
+    const r = this.board().getBoundingClientRect();
+    const pts = [...this.pointers.values()];
+    const x = pts.reduce((n, p) => n + p.x, 0) / pts.length - r.left;
+    const y = pts.reduce((n, p) => n + p.y, 0) / pts.length - r.top;
+    const dist = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
+    return { x, y, dist };
+  }
+
+  private startGesture() {
+    const { x, y, dist } = this.pointerSpread();
+    this.gesture = { x, y, dist, zoom: this.zoom, panX: this.panX, panY: this.panY };
+  }
+
+  private onPointerDown = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    this.startGesture();
+  };
+
+  private onPointerMove = (e: PointerEvent) => {
+    const g = this.gesture;
+    if (!g || !this.pointers.has(e.pointerId)) return;
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const now = this.pointerSpread();
+    if (this.pointers.size >= 2 && g.dist > 0) {
+      // Pinch: zoom by how far the fingers spread, keeping the spot between them under them.
+      this.startDrag(e);
+      const z = Math.min(this.maxZoom(), Math.max(1, (g.zoom * now.dist) / g.dist));
+      this.panX = now.x - ((g.x - g.panX) / g.zoom) * z;
+      this.panY = now.y - ((g.y - g.panY) / g.zoom) * z;
+      this.zoom = z;
+      this.applyZoom();
+      return;
+    }
+    // One finger (or the mouse) moves a zoomed-in board around.
+    if (this.zoom <= 1) return;
+    if (!this.dragging && Math.hypot(now.x - g.x, now.y - g.y) < DRAG_SLOP) return;
+    this.startDrag(e);
+    this.panX = g.panX + now.x - g.x;
+    this.panY = g.panY + now.y - g.y;
+    this.applyZoom();
+  };
+
+  private startDrag(e: PointerEvent) {
+    if (this.dragging) return;
+    this.dragging = true;
+    this.board().classList.add('moving');
+    try {
+      this.board().setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer may already be gone.
+    }
+  }
+
+  private onPointerUp = (e: PointerEvent) => {
+    if (!this.pointers.delete(e.pointerId)) return;
+    if (this.dragging) this.noClickUntil = performance.now() + 400;
+    if (this.pointers.size) {
+      // A finger lifted mid-pinch: the other one carries on dragging from here.
+      this.startGesture();
+      return;
+    }
+    this.gesture = null;
+    this.dragging = false;
+    this.board().classList.remove('moving');
+  };
+
+  /** Mouse wheel or trackpad pinch: zoom around the pointer. */
+  private onWheel = (e: WheelEvent) => {
+    if (!this.hasTiles) return;
+    e.preventDefault();
+    const dy = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+    const r = this.board().getBoundingClientRect();
+    this.zoomAt(e.clientX - r.left, e.clientY - r.top, this.zoom * Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.002)));
+  };
 
   private renderOverlay() {
     const v = this.view!;
@@ -200,7 +371,7 @@ export class DominoesTable implements View {
     const show = v.phase === 'playing' ? this.scoresOpen : !this.boardPeek;
     box.hidden = !show;
     if (!show) return;
-    let html = '<div class="ht-panel">';
+    let html = '<div class="ht-panel pc-sheet">';
     const res = v.result;
     if (v.phase === 'gameOver') {
       const youWon = v.seat !== null && v.winners.includes(v.seat);
@@ -221,32 +392,33 @@ export class DominoesTable implements View {
       }</p>`;
     }
     html += '<table class="ht-table"><thead><tr><th></th>';
-    for (let s = 0; s < 4; s++) html += `<th><span class="dot" style="background:${colorCss(v.seats[s].color)}"></span>${escapeHtml(v.seats[s].name)}</th>`;
+    for (let s = 0; s < 4; s++) html += `<th>${escapeHtml(v.seats[s].name)}</th>`;
     html += '</tr></thead><tbody>';
     v.history.forEach((row, i) => {
       html += `<tr><td>Hand ${i + 1}</td>${row.map((n) => `<td>${n}</td>`).join('')}</tr>`;
     });
     html += `<tr class="ht-total"><td>Total</td>${v.seats.map((s) => `<td>${s.score}</td>`).join('')}</tr></tbody></table>`;
-    html += `<p class="hint">First to ${v.target} wins.</p>`;
+    html += `<p class="pc-small">First to ${v.target} wins.</p>`;
     if (v.phase === 'handEnd') {
       const wait = this.waitText();
       if (wait) html += `<p class="dm-wait">${wait}</p>`;
     }
     html += '<div class="actions">';
     if (v.phase === 'gameOver') {
-      if (v.seat !== null) html += '<button class="btn btn-primary" data-act="again" type="button">New game</button>';
-      html += '<button class="btn btn-secondary" data-act="board" type="button">See the board</button>';
-      if (this.shell.isPrivate) html += '<button class="btn btn-secondary" data-act="lobby" type="button">Back to lobby</button>';
+      if (v.seat !== null) html += '<button class="pc-btn pc-btn-main" data-act="again" type="button">New game</button>';
+      html += '<button class="pc-btn pc-btn-plain" data-act="board" type="button">See the board</button>';
+      if (this.shell.isPrivate) html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
     } else if (v.phase === 'handEnd') {
       if (v.seat !== null && !v.ready.includes(v.seat)) {
-        html += `<button class="btn btn-primary" data-act="ready" type="button"${this.readySent ? ' disabled' : ''}>Ready for hand ${v.hand + 1}</button>`;
+        html += `<button class="pc-btn pc-btn-main" data-act="ready" type="button"${this.readySent ? ' disabled' : ''}>Ready for hand ${v.hand + 1}</button>`;
       }
-      html += '<button class="btn btn-secondary" data-act="board" type="button">See the board</button>';
+      html += '<button class="pc-btn pc-btn-plain" data-act="board" type="button">See the board</button>';
     } else if (this.scoresOpen) {
-      html += '<button class="btn btn-primary" data-act="close-scores" type="button">Close</button>';
+      html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }
     html += '</div></div>';
     box.innerHTML = html;
+    fitScoreTable(box);
   }
 
   /** Players at the table we're waiting on before the next hand (not bots, not anyone away). */
@@ -301,6 +473,10 @@ export class DominoesTable implements View {
 
   private onClick = (e: Event) => {
     const t = e.target as HTMLElement;
+    // The end of a drag or pinch on the board isn't a tap on a tile.
+    if (performance.now() < this.noClickUntil && t.closest('.dm-board')) return;
+    const zoom = t.closest<HTMLElement>('[data-zoom]')?.dataset.zoom;
+    if (zoom === 'in' || zoom === 'out') return this.zoomStep(zoom);
     const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
     if (act === 'again') return this.shell.sendGame({ t: 'again' });
     if (act === 'lobby') return this.shell.toLobby();
@@ -383,6 +559,10 @@ export class DominoesTable implements View {
       return true;
     }
     if (this.padScope()) return false;
+    if (b === 'lb' || b === 'rb') {
+      this.zoomStep(b === 'rb' ? 'in' : 'out');
+      return true;
+    }
     if (b === 'y') {
       this.draw();
       return true;
@@ -432,7 +612,7 @@ export class DominoesTable implements View {
       return true;
     }
     if (b === 'up') {
-      const btn = this.el.querySelector<HTMLElement>('.dm-draw:not([hidden]), .dm-back:not([hidden]), .ht-scores-btn');
+      const btn = this.el.querySelector<HTMLElement>('.dm-draw:not([hidden]), .ht-scores-btn');
       if (btn) focusForPad(btn);
       return true;
     }
@@ -465,6 +645,13 @@ export class DominoesTable implements View {
   dispose() {
     this.observer.disconnect();
     this.el.removeEventListener('click', this.onClick);
+    const board = this.board();
+    board.removeEventListener('pointerdown', this.onPointerDown);
+    board.removeEventListener('pointermove', this.onPointerMove);
+    board.removeEventListener('pointerup', this.onPointerUp);
+    board.removeEventListener('pointercancel', this.onPointerUp);
+    board.removeEventListener('wheel', this.onWheel);
+    board.removeEventListener('gesturestart', this.stopPageZoom);
     this.el.hidden = true;
     this.el.innerHTML = '';
   }

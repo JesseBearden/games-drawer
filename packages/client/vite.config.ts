@@ -20,6 +20,7 @@ export default defineConfig({
       '/ws': { target: 'ws://localhost:8787', ws: true },
       '/stats': { target: 'http://localhost:8787' },
       '/admin': { target: 'http://localhost:8787' },
+      '/api': { target: 'http://localhost:8787' },
     },
   },
   preview: {

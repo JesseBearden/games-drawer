@@ -134,9 +134,18 @@ export class Gamepads {
 
 const FOCUSABLE = 'button, a[href], input, select, [tabindex="0"]';
 
+/**
+ * Where an element is on screen. A choice tile's radio button is hidden inside its label (the
+ * whole tile is what you see), so it's placed by the tile.
+ */
+function box(el: HTMLElement) {
+  const label = el.tagName === 'INPUT' ? el.closest('label') : null;
+  return (label ?? el).getBoundingClientRect();
+}
+
 function visible(el: HTMLElement) {
   if ((el as HTMLButtonElement).disabled || el.closest('[hidden]')) return false;
-  const r = el.getBoundingClientRect();
+  const r = box(el);
   return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
 }
 
@@ -153,14 +162,14 @@ export function moveFocus(scope: HTMLElement, dir: 'up' | 'down' | 'left' | 'rig
     focusForPad(items[0]);
     return true;
   }
-  const rc = current?.getBoundingClientRect();
+  const rc = current ? box(current) : undefined;
   const ox = rc ? rc.left + rc.width / 2 : from!.x;
   const oy = rc ? rc.top + rc.height / 2 : from!.y;
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
   for (const el of items) {
     if (el === current) continue;
-    const r = el.getBoundingClientRect();
+    const r = box(el);
     const dx = r.left + r.width / 2 - ox;
     const dy = r.top + r.height / 2 - oy;
     const along = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy;

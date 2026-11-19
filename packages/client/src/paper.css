@@ -1,0 +1,654 @@
+/*
+ * Cut Paper: the shared look for every page and game. The rules behind it are in DESIGN.md.
+ * Every coloured shape is a piece of paper: its colour, its own paper texture, and a shadow that
+ * shows what it's sitting on. Light always comes from above.
+ *
+ * The papers are the project's own seamless sheets in public/art/paper/ (one per colour,
+ * 768 px tiles shown at 384 CSS px, so the grain is crisp on high-density screens). Each one has
+ * a flat colour underneath that shows until its texture arrives.
+ */
+
+:root {
+  /* Signal colours: these keep one meaning each (DESIGN.md, "Colours"). */
+  --cobalt: #103db6; /* the main thing to tap */
+  --sunflower: #ffcb2d; /* whose turn it is */
+  --tomato: #ef5943; /* something is off: mic off, unread, leaving */
+
+  /* Base. */
+  --paper: #fffcf5; /* the page and most pieces */
+  --white: #fefefd; /* outlined buttons: white, so they never read as the page on itself */
+  --mat: #e5eff6; /* the table a game is played on */
+  --ink: #112875; /* text */
+  --ink-soft: #46558a; /* secondary text on paper, white or mat (5.5:1 or better) */
+  --rule: #c9cfdf; /* thin divider lines */
+
+  /* More paper: use these freely (game colours, panels, scenery, player colours). */
+  --grass: #478653;
+  --sky: #85bee3;
+  --mint: #b7ddc8;
+  --butter: #f7e3a2;
+  --lilac: #c6b5dc;
+  --peach: #f2bd96;
+  --blush: #ebb7bf;
+  --kraft: #bb926a;
+
+  --paper-size: 384px;
+  --paper-img: url('/art/paper/paper.webp');
+  --white-img: url('/art/paper/white.webp');
+  --mat-img: url('/art/paper/mat.webp');
+  --cobalt-img: url('/art/paper/cobalt.webp');
+  --sunflower-img: url('/art/paper/sunflower.webp');
+  --tomato-img: url('/art/paper/tomato.webp');
+  --grass-img: url('/art/paper/grass.webp');
+  --sky-img: url('/art/paper/sky.webp');
+  --mint-img: url('/art/paper/mint.webp');
+  --butter-img: url('/art/paper/butter.webp');
+  --lilac-img: url('/art/paper/lilac.webp');
+  --peach-img: url('/art/paper/peach.webp');
+  --blush-img: url('/art/paper/blush.webp');
+  --kraft-img: url('/art/paper/kraft.webp');
+
+  /* Playing cards and dominoes: cream card stock (from the card mock), classic red and navy-black. */
+  --card: #fbf4e7;
+  --card-img: url('/art/card-stock.webp');
+  --card-red: #d4351f;
+  --card-red-light: #ec5a3e;
+  --card-black: #1d2443;
+  --card-black-light: #34406e;
+
+  /* Shadows: one light source above, ink-tinted (never black). */
+  --lift-0: 0 1px 0 rgb(17 40 117 / 0.16);
+  --lift-1: 0 1px 1px rgb(17 40 117 / 0.2), 0 2px 6px rgb(17 40 117 / 0.1);
+  --lift-2: 0 2px 2px rgb(17 40 117 / 0.18), 0 7px 16px rgb(17 40 117 / 0.16);
+  --lift-3: 0 4px 4px rgb(17 40 117 / 0.16), 0 16px 32px rgb(17 40 117 / 0.2);
+  --cut-in: inset 0 2px 3px rgb(17 40 117 / 0.16), inset 0 0 0 1.5px var(--ink-soft);
+
+  --font: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius: 12px;
+  --tap: 48px; /* smallest thing you can tap */
+  --settle: cubic-bezier(0.25, 1.4, 0.5, 1); /* paper dropping into place, with a tiny settle */
+}
+
+/* ------------------------------------------------------------------ the page */
+
+.pc-page {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  color: var(--ink);
+  font: 400 1.125rem/1.5 var(--font);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+.pc-page *,
+.pc-page *::before,
+.pc-page *::after {
+  box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------------ type */
+
+.pc-h1,
+.pc-h2,
+.pc-h3 {
+  margin: 0;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.pc-h1 {
+  font-size: clamp(2.5rem, 7vw, 4.5rem);
+}
+.pc-h2 {
+  font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+}
+.pc-h3 {
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+.pc-lead {
+  font-size: clamp(1.125rem, 2.2vw, 1.3rem);
+  text-wrap: balance;
+}
+.pc-small {
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+/* ------------------------------------------------------------------ brand */
+
+.pc-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  color: var(--ink);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.pc-brand img {
+  width: 44px;
+  height: 40px;
+  filter: drop-shadow(0 1px 1px rgb(17 40 117 / 0.25));
+}
+
+/* A picture sitting straight on the page: cut out (a transparent image), so the paper shows
+   around it. (Blending a white background away doesn't work in iPad Safari's scrolling pages.)
+   It keeps its own shape and is never cropped. */
+.pc-hero {
+  aspect-ratio: 1536 / 522;
+}
+.pc-hero img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ------------------------------------------------------------------ buttons */
+
+/* Things you tap are pieces stuck on top (they cast a shadow). */
+.pc-btn {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 10px 22px;
+  border: 0;
+  border-radius: var(--radius);
+  font: 800 1.0625rem/1.2 var(--font);
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--lift-1);
+  transition:
+    transform 0.12s var(--settle),
+    box-shadow 0.12s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* The main button: cobalt paper. */
+.pc-btn-main {
+  background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
+  color: #fff;
+}
+/* Everything else: white paper on a slightly bigger piece of cobalt (the outline is paper too). */
+.pc-btn-plain {
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  color: var(--cobalt);
+  box-shadow:
+    0 0 0 2px var(--cobalt),
+    var(--lift-1);
+}
+/* Something is off (mic muted, leave): tomato paper. */
+.pc-btn-alert {
+  background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
+  color: #fff;
+}
+.pc-btn-wide {
+  width: 100%;
+}
+.pc-btn-big {
+  min-height: 60px;
+  font-size: 1.2rem;
+  padding-inline: 28px;
+}
+@media (hover: hover) {
+  .pc-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--lift-2);
+  }
+  .pc-btn-plain:hover:not(:disabled) {
+    box-shadow:
+      0 0 0 2px var(--cobalt),
+      var(--lift-2);
+  }
+}
+/* Pressed: the piece is pushed flat onto the page. */
+.pc-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: var(--lift-0);
+}
+.pc-btn-plain:active:not(:disabled) {
+  box-shadow:
+    0 0 0 2px var(--cobalt),
+    var(--lift-0);
+}
+.pc-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.pc-btn:focus-visible,
+.pc-input:focus-visible,
+.pc-choice:has(input:focus-visible),
+.pc-link:focus-visible,
+body.pad-mode .pc-choice:has(input:focus) {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.pc-link {
+  appearance: none;
+  min-height: var(--tap);
+  padding: 8px 4px;
+  border: 0;
+  background: none;
+  color: var(--cobalt);
+  font: 800 1.0625rem var(--font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* A count on a button (unread messages): a small tomato dot of paper stuck on its corner. */
+.pc-btn .pc-badge {
+  position: absolute;
+  top: -9px;
+  right: -7px;
+}
+.pc-badge {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 12px;
+  background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
+  color: #fff;
+  font-size: 0.85rem;
+  line-height: 24px;
+  text-align: center;
+  box-shadow: var(--lift-0);
+}
+
+/* ------------------------------------------------------------------ typing */
+
+/* Things you type into are cut out of the page (the shadow falls inside). */
+.pc-field {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+.pc-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--cut-in);
+  color: var(--ink);
+  font: 400 1.125rem var(--font);
+}
+.pc-input::placeholder {
+  color: #6f7ba3;
+}
+.pc-input-code {
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+.pc-input-code::placeholder {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* "Your name  Liz  Change": a name we already know, shown as a line rather than a box. */
+.pc-namerow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  border-block: 1.5px solid var(--rule);
+}
+.pc-namerow b {
+  flex: none;
+}
+.pc-namerow span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ choosing a game */
+
+.pc-choices {
+  display: grid;
+  /* Two across on a phone, so the start buttons stay on the first screen. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+}
+/* Each game is its own paper colour (add class paper-<colour>), so the tiles stand apart from the page. */
+.pc-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 8px 10px 8px 8px;
+  line-height: 1.2;
+  border-radius: var(--radius);
+  background: var(--sky) var(--sky-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 1.125rem;
+  cursor: pointer;
+  transition:
+    transform 0.15s var(--settle),
+    box-shadow 0.15s;
+}
+.pc-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.pc-choice img {
+  width: 52px;
+  height: 52px;
+  flex: none;
+}
+/* On coloured paper, small text stays full ink (soft ink is too faint on the deeper colours). */
+.pc-choice small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+/* Picked: lifted, on a bigger piece of cobalt, with a tick. */
+.pc-choice:has(input:checked) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 3px var(--cobalt),
+    var(--lift-2);
+}
+.pc-choice:has(input:checked)::after {
+  content: '';
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--cobalt)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 20px no-repeat;
+  box-shadow: var(--lift-1);
+}
+
+/* ------------------------------------------------------------------ at the table */
+
+/* The in-game bar: words, not icons. */
+.pc-toolbar {
+  display: flex;
+  gap: clamp(5px, 1.6vw, 8px);
+  padding: 8px;
+}
+/* Four worded buttons still fit on a small (360 px) phone: text and padding shrink a little. */
+.pc-toolbar .pc-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-inline: clamp(6px, 2.2vw, 12px);
+  font-size: clamp(0.875rem, 3.9vw, 1rem);
+  white-space: nowrap;
+}
+
+/* A player's name tag: its own piece of paper on the mat. */
+.pc-tag {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 140px;
+  padding: 10px 16px 11px;
+  border-radius: var(--radius);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  transition:
+    transform 0.25s var(--settle),
+    box-shadow 0.25s;
+}
+.pc-tag b {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.125rem;
+}
+.pc-tag span {
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+/* Facts ("20 pts", "5 tiles") never split in the middle when a tag is narrow. */
+.pc-tag span i {
+  font-style: normal;
+  white-space: nowrap;
+}
+.pc-tag .pc-note {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--ink-soft);
+}
+/* Whose turn it is: sunflower paper, lifted off the mat. */
+.pc-tag.is-turn {
+  background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
+  transform: translateY(-3px);
+  box-shadow: var(--lift-2);
+}
+.pc-tag.is-turn span,
+.pc-tag.is-turn .pc-note {
+  color: var(--ink);
+}
+/* Away (dropped or in another tab): the tag is still there but faded. */
+.pc-tag.is-away {
+  opacity: 0.55;
+}
+
+/* Talking: three small bars that move while someone speaks. */
+.pc-talk {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+}
+.pc-talk i {
+  width: 3px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--cobalt);
+}
+.is-talking .pc-talk i {
+  animation: pc-talk 0.7s ease-in-out infinite alternate;
+}
+/* On a name tag the bars only appear while that person talks; in a list they stay, faint. */
+.pc-tag:not(.is-talking) .pc-talk {
+  display: none;
+}
+:not(.is-talking) > .pc-talk {
+  opacity: 0.3;
+}
+.is-talking .pc-talk i:nth-child(2) {
+  animation-delay: -0.25s;
+}
+.is-talking .pc-talk i:nth-child(3) {
+  animation-delay: -0.5s;
+}
+@keyframes pc-talk {
+  to {
+    height: 16px;
+  }
+}
+
+/* A playing card: cream card stock with the face printed on it (paperArt.cardFaceSvg).
+   The stock tile is quilted from the user's own card mock (exact colour and grain) and sized to
+   the card, so the grain looks the same on a small phone card and a big desktop one. */
+.pc-card {
+  --w: 96px;
+  position: relative;
+  display: inline-block;
+  width: var(--w);
+  aspect-ratio: 5 / 7;
+  border-radius: calc(var(--w) * 0.08);
+  background: var(--card) var(--card-img) 0 0 / 120% auto;
+  box-shadow: var(--lift-1);
+  transition:
+    transform 0.2s var(--settle),
+    box-shadow 0.2s;
+}
+.pc-card svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pc-card .pc-rank {
+  font: 800 60px var(--font);
+  letter-spacing: -0.04em;
+}
+/* The back: a border of card stock around a cobalt panel (paperArt.cardBackHtml). */
+.pc-back-panel {
+  position: absolute;
+  inset: 7%;
+  overflow: hidden;
+  border-radius: calc(var(--w) * 0.05);
+  background: var(--cobalt) var(--cobalt-img) 0 0 / 200px;
+}
+/* Lifted (picked on a phone, or a card you can play when hovered). */
+.pc-card.is-up {
+  transform: translateY(-14px);
+  box-shadow: var(--lift-3);
+}
+/* Can't be played right now: greyed, as if under a sheet of tracing paper. */
+.pc-card.is-dim {
+  filter: saturate(0.35) brightness(0.9);
+}
+
+/* A domino: card stock with the pips printed on (paperArt.dominoSvg). */
+.pc-domino {
+  --u: 40px; /* one square half */
+  display: inline-block;
+  width: calc(var(--u) * 2);
+  height: var(--u);
+  border-radius: calc(var(--u) * 0.14);
+  background: var(--card) var(--card-img) 0 0 / calc(var(--u) * 3) auto;
+  box-shadow: var(--lift-1);
+}
+.pc-domino.v {
+  width: var(--u);
+  height: calc(var(--u) * 2);
+}
+.pc-domino svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pc-domino .pd-pips {
+  fill: var(--card-black);
+}
+.pc-domino .pd-line {
+  stroke: #9b7f60;
+  stroke-width: 3;
+}
+.pc-domino.is-picked {
+  box-shadow:
+    0 0 0 3px var(--cobalt),
+    var(--lift-2);
+  transform: translateY(-3px);
+}
+
+/* Messages: little notes on a sheet of sky paper (never paper-coloured notes on the page itself).
+   Yours are cobalt, everyone else's are paper. */
+.pc-messages {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--sky) var(--sky-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+}
+.pc-note-list {
+  display: grid;
+  gap: 10px;
+}
+.pc-msg {
+  max-width: 85%;
+  justify-self: start;
+  padding: 8px 14px 10px;
+  border-radius: 4px var(--radius) var(--radius) var(--radius);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  overflow-wrap: anywhere;
+}
+.pc-msg b {
+  display: block;
+  font-size: 0.85rem;
+}
+.pc-msg.mine {
+  justify-self: end;
+  border-radius: var(--radius) 4px var(--radius) var(--radius);
+  background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
+  color: #fff;
+}
+
+/* A strip that needs your attention (mic blocked, someone left): tomato paper. */
+.pc-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: var(--lift-1);
+}
+.pc-alert .pc-btn-plain {
+  color: var(--tomato);
+  box-shadow: var(--lift-1);
+}
+
+/* A panel that pops up over everything (menus, invites): paper, held above the page. */
+.pc-sheet {
+  border-radius: 18px;
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-3);
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ papers
+   Put any piece on any paper: class="paper-mint". These come last so they win over a
+   component's default paper. Light text goes on the dark ones (cobalt, tomato, grass). */
+.paper-paper { background: var(--paper) var(--paper-img) 0 0 / var(--paper-size); }
+.paper-white { background: var(--white) var(--white-img) 0 0 / var(--paper-size); }
+.paper-mat { background: var(--mat) var(--mat-img) 0 0 / var(--paper-size); }
+.paper-cobalt { background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size); color: #fff; }
+.paper-sunflower { background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size); color: var(--ink); }
+.paper-tomato { background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size); color: #fff; }
+.paper-grass { background: var(--grass) var(--grass-img) 0 0 / var(--paper-size); color: #fff; }
+.paper-sky { background: var(--sky) var(--sky-img) 0 0 / var(--paper-size); }
+.paper-mint { background: var(--mint) var(--mint-img) 0 0 / var(--paper-size); }
+.paper-butter { background: var(--butter) var(--butter-img) 0 0 / var(--paper-size); }
+.paper-lilac { background: var(--lilac) var(--lilac-img) 0 0 / var(--paper-size); }
+.paper-peach { background: var(--peach) var(--peach-img) 0 0 / var(--paper-size); }
+.paper-blush { background: var(--blush) var(--blush-img) 0 0 / var(--paper-size); }
+.paper-kraft { background: var(--kraft) var(--kraft-img) 0 0 / var(--paper-size); }
+.paper-card { background: var(--card) var(--card-img) 0 0 / var(--paper-size); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-page *,
+  .pc-page *::before,
+  .pc-page *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* The shared SVG patterns (index.html) take no room. */
+.svg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}

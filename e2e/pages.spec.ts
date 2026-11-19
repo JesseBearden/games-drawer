@@ -1,54 +1,72 @@
 import { expect, test } from './fixtures';
 import { E2E_ADMIN_PASSWORD } from './testPassword';
-import { at, watchErrors } from './helpers';
+import { at, createRoom, enterName, newPlayer, watchErrors } from './helpers';
 
-test('the home page lists the games, and each game has its own page @smoke', async ({ page }) => {
+test('home: start a table or type a code; starting lists the games @smoke', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto(at('/'));
   await expect(page).toHaveTitle('Games Drawer');
-  await expect(page.locator('.game-tile')).toHaveCount(5);
-  // Tanks and Jigsaw are open to everyone; the card and tile games are still being finished:
-  // private rooms only, with an Under construction sign.
-  for (const id of ['tanks', 'jigsaw']) await expect(page.locator(`[data-play="${id}"]`)).toBeVisible();
-  for (const slug of ['hearts', 'spades', 'dominoes']) {
-    const tile = page.locator(`.game-tile:has(a[href="/${slug}"])`);
-    await expect(tile.locator('.gt-tag')).toHaveText('Private rooms');
-    await expect(tile.locator('.uc-chip')).toHaveText('🚧 Under construction');
-  }
-  for (const id of ['hearts', 'spades', 'dominoes']) await expect(page.locator(`[data-play="${id}"]`)).toHaveCount(0);
-  await expect(page.locator('.game-tile:has(a[href="/jigsaw"]) .uc-chip')).toHaveCount(0);
-  await expect(page.locator('#create-private')).toHaveText('Start a private room');
+  await expect(page.locator('#page-home h1')).toHaveText('Play a game together.');
+  await expect(page.locator('#code-input')).toBeVisible();
 
-  // Tapping a game opens its page, without reloading.
-  await page.locator('.game-tile a[href="/hearts"]').click();
-  await expect(page).toHaveURL(/\/hearts/);
-  await expect(page.locator('#gp-title')).toHaveText('Hearts');
-  await expect(page).toHaveTitle('Hearts · Games Drawer');
-  await expect(page.locator('#gp-howto li')).toHaveCount(3);
-  await expect(page.locator('#gp-construction')).toBeVisible();
-  await expect(page.locator('#play-public')).toBeHidden();
+  // Start a table: the games as paper tiles, the unfinished ones marked, Jigsaw picked to begin with.
+  await page.locator('#home-start').click();
+  await expect(page).toHaveURL(/\/start$/);
+  await expect(page.locator('#start-games .pc-choice')).toHaveCount(5);
+  for (const id of ['hearts', 'spades', 'dominoes']) await expect(page.locator(`#start-games label:has(input[value="${id}"]) small`)).toHaveText('Work in Progress');
+  for (const id of ['jigsaw', 'tanks']) await expect(page.locator(`#start-games label:has(input[value="${id}"]) small`)).toHaveCount(0);
+  await expect(page.locator('input[value="jigsaw"]')).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Start with mic on' })).toBeVisible();
 
-  // Back to all games, and the browser's back button returns to the game's page.
-  await page.locator('#back-home').click();
-  await expect(page.locator('#home-head')).toBeVisible();
+  // No name yet: it asks for one, right there.
+  await page.getByRole('button', { name: 'Start with mic off' }).click();
+  await expect(page.locator('#landing-error')).toHaveText('Type your name first, so everyone knows who you are.');
+  await expect(page.locator('#landing-error')).toBeInViewport();
+
+  // Back, and the browser's back button returns to the start page.
+  await page.locator('#page-start .entry-home').click();
+  await expect(page.locator('#page-home')).toBeVisible();
   await page.goBack();
-  await expect(page.locator('#gp-title')).toHaveText('Hearts');
+  await expect(page.locator('#page-start')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-test('old and long addresses land on the game’s page', async ({ page }) => {
+test('a game’s own address starts a table with that game picked; unknown ones go home', async ({ page }) => {
   await page.goto(at('/tankyouforbeingafriend'));
   await expect(page).toHaveURL(/\/tanks(\?|$)/);
-  await expect(page.locator('#gp-title')).toContainText('Tank You');
+  await expect(page.locator('input[value="tanks"]')).toBeChecked();
+  await page.goto(at('/dominoes'));
+  await expect(page.locator('input[value="dominoes"]')).toBeChecked();
   await page.goto(at('/not-a-game'));
   await expect(page).toHaveURL(/\/(\?|$)/);
-  await expect(page.locator('#home-head')).toBeVisible();
+  await expect(page.locator('#page-home')).toBeVisible();
 });
 
-test('a room that has closed says so right where you tried to join, on screen', async ({ page }) => {
-  // The game server's answer to a dead code, played here instead: real wrong codes count against
-  // this computer's limit on guesses, which would lock the other tests out of their rooms.
-  // (It answers after a moment, like a slow connection.)
+test('a code that’s too short, or a table that has closed, says so on screen', async ({ page }) => {
+  // The server's answer for a dead code, played here: real wrong codes count against this
+  // computer's limit on guesses, which would lock the other tests out of their tables.
+  await page.route('**/api/table**', (route) => route.fulfill({ json: { ok: false, reason: 'closed' } }));
+  await page.goto(at('/'));
+  await page.locator('#code-input').fill('bcd');
+  await page.locator('#code-form button').click();
+  const error = page.locator('#landing-error');
+  await expect(error).toHaveText('Table codes are 5 letters.');
+  await expect(page.locator('#code-form + #landing-error')).toHaveCount(1);
+  // Fixing the code clears it.
+  await page.locator('#code-input').fill('bcdf');
+  await expect(error).toBeHidden();
+
+  await page.locator('#code-input').fill('bcdfg');
+  await page.locator('#code-form button').click();
+  await expect(page).toHaveURL(/\/r\/BCDFG/);
+  await expect(page.locator('#join-title')).toHaveText('This table has closed');
+  await expect(page.locator('#join-form')).toBeHidden();
+  await expect(page.locator('#join-home')).toHaveText('Back to home');
+  await expect(page.locator('#join-home')).toHaveClass(/pc-btn-main/);
+});
+
+test('if joining fails, the reason shows under the join buttons', async ({ page }) => {
+  await page.route('**/api/table**', (route) => route.fulfill({ json: { ok: true, from: 'Gus', for: null, game: 'jigsaw', people: ['Gus'], away: [], full: false } }));
   const why = 'That room has closed or the code is wrong.';
   await page.routeWebSocket(/\/ws/, (ws) =>
     ws.onMessage((m) => {
@@ -56,71 +74,113 @@ test('a room that has closed says so right where you tried to join, on screen', 
       setTimeout(() => {
         ws.send(JSON.stringify({ t: 'error', code: 'not-found', message: why }));
         ws.close({ code: 4004, reason: 'not-found' });
-      }, 900);
+      }, 600);
     }),
   );
-  await page.goto(at('/'));
-  await page.locator('#code-input').fill('bcdfg');
-  await page.locator('#code-form button').click();
-  const error = page.locator('#landing-error');
-  // While it tries: "Joining room…" right there; then the answer takes its place.
-  const below = page.locator('#home-actions .section-title');
-  await expect(error).toHaveText('Joining room BCDFG…');
-  await expect(error).toHaveClass(/pending/);
-  await expect(error).toHaveText(why);
-  await expect(error).not.toHaveClass(/pending/);
-  await expect(error).toBeInViewport();
-  await expect(page.locator('#code-form + #landing-error')).toHaveCount(1);
-  await page.waitForTimeout(300);
-  const y = (await below.boundingBox())!.y;
-  // Trying again: the old answer stays (faded) instead of vanishing, then the new one arrives,
-  // and everything below ends up where it was.
-  await page.locator('#code-form button').click();
-  await expect(error).toBeVisible();
-  await expect(error).toHaveClass(/retrying|pending/);
-  await expect(error).toHaveText('Joining room BCDFG…');
-  await expect(error).toHaveText(why);
-  await expect(error).not.toHaveClass(/retrying|pending/);
-  await page.waitForTimeout(300);
-  expect((await below.boundingBox())!.y).toBeCloseTo(y, 0);
-  // Fixing the code clears it.
-  await page.locator('#code-input').fill('bcdf');
-  await expect(error).toBeHidden();
-
-  // An old invite link: the reason shows under its Join button.
   await page.goto(at('/r/BCDFG'));
-  await page.locator('#join-invite').click();
-  await expect(error).toHaveText(why);
+  // Gus invited you and is there: one line says it all.
+  await expect(page.locator('#join-title')).toHaveText('Join Gus for a puzzle');
+  await expect(page.locator('#join-detail')).toBeHidden();
+  await enterName(page, 'join', 'Ivy');
+  await page.getByRole('button', { name: 'Join with mic off' }).click();
+  const error = page.locator('#landing-error');
+  // "room" is a "table" on the page.
+  await expect(error).toHaveText('That table has closed or the code is wrong.');
   await expect(error).toBeInViewport();
-  await expect(page.locator('#invite-panel + #landing-error')).toHaveCount(1);
-  await expect(page.locator('#join-invite')).toBeEnabled();
+  await expect(page.locator('#join-form + #landing-error')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Join with mic off' })).toBeEnabled();
 });
 
-test('Play now on the Jigsaw page puts you at a public table @smoke', async ({ page }) => {
-  await page.goto(at('/jigsaw'));
-  await expect(page.locator('#gp-construction')).toBeHidden();
-  await page.locator('#name-input').fill('Hal');
-  await page.locator('#play-public').click();
-  await expect(page.locator('#game')).toHaveAttribute('data-view', 'jigsaw');
-  // Public tables are shared, so someone may already be building one: either is fine.
-  await expect(page.locator('.pz-setup-card, .pz-play canvas').first()).toBeVisible();
-  await expect(page).toHaveURL(/\/jigsaw/);
-  // Public tables have no invite button (that's for private rooms).
-  await expect(page.locator('#btn-share')).toBeHidden();
+test('before joining you see everyone at the table, kept up to date', async ({ page }) => {
+  let people = ['Jesse', 'Sam', 'Mory'];
+  let away: string[] = [];
+  await page.route('**/api/table**', (route) => route.fulfill({ json: { ok: true, from: 'Jesse', for: null, game: 'jigsaw', people, away, full: false } }));
+  await page.goto(at('/r/BCDFG'));
+  const title = page.locator('#join-title');
+  const detail = page.locator('#join-detail');
+  await expect(title).toHaveText('Join Jesse, Sam and Mory for a puzzle');
+  await expect(title.locator('b')).toHaveText(['Jesse', 'Sam', 'Mory']);
+  // Someone arrives while you're deciding: the page catches up by itself.
+  people = ['Jesse', 'Sam', 'Mory', 'Pat'];
+  await expect(title).toHaveText('Join Jesse, Sam, Mory and Pat for a puzzle', { timeout: 12_000 });
+  // Jesse steps away: who invited you, then who's there. Names are shown as text, never as page code.
+  people = ['<img src=x onerror=alert(1)>'];
+  await expect(title).toHaveText('Jesse invited you to play', { timeout: 12_000 });
+  await expect(detail).toHaveText('Join <img src=x onerror=alert(1)> for a puzzle.');
+  await expect(detail.locator('img')).toHaveCount(0);
+  // Someone who dropped out still holds a seat: they're named too.
+  people = ['Jesse'];
+  away = ['Sam'];
+  await expect(title).toHaveText('Join Jesse for a puzzle', { timeout: 12_000 });
+  await expect(detail).toHaveText('Sam stepped away and may come back.');
 });
 
-test('Play with friends opens a private room already playing that game', async ({ page }) => {
-  await page.goto(at('/hearts'));
-  await page.locator('#name-input').fill('Fay');
-  await page.locator('#play-friends').click();
-  await expect(page.locator('#game')).toHaveAttribute('data-view', 'hearts');
-  await expect(page).toHaveURL(/\/r\/[A-Z]{5}/);
+test('an invite made for someone by name fills it in for them @smoke', async ({ page: host, browser }) => {
+  // Catch the link instead of opening the phone's share sheet.
+  await host.addInitScript(() => {
+    const nav = navigator as Navigator & { __shared?: ShareData };
+    nav.share = async (d?: ShareData) => {
+      nav.__shared = d;
+    };
+    nav.canShare = () => true;
+  });
+  const code = await createRoom(host, 'Holly');
+  await host.locator('#btn-share').click();
+  await expect(host.locator('#invite-code')).toHaveText(code);
+  await host.locator('#invite-name').fill('Liz');
+  await host.locator('#invite-send').click();
+  await expect(host.locator('#invite')).toBeHidden();
+  const shared = await host.evaluate(() => (navigator as Navigator & { __shared?: ShareData }).__shared!);
+  expect(shared.text).toContain('Liz, come play');
+  expect(shared.url).toMatch(new RegExp(`/r/${code}\\?i=[a-z2-9]{8}$`));
+
+  const friend = await newPlayer(browser, host);
+  await friend.goto(at(new URL(shared.url!).pathname + new URL(shared.url!).search));
+  await expect(friend.locator('#join-title')).toHaveText('Join Holly for a puzzle');
+  await expect(friend.locator('#join-name-shown')).toHaveText('Liz');
+  await friend.getByRole('button', { name: 'Join with mic off' }).click();
+  await expect(friend.locator('#game')).toHaveAttribute('data-view', 'jigsaw');
+  await expect(host.locator('#chat-log')).toContainText('Liz joined');
+  await friend.context().close();
+});
+
+test('the bar: Help explains the game, Messages shows only while closed, and leaving goes home', async ({ page }) => {
+  await createRoom(page, 'Fay', 'hearts');
   await expect(page.locator('#btn-share')).toBeVisible();
-  // Leaving the room goes back home.
+  // Help: how to play the game on screen.
+  await page.locator('#btn-help').click();
+  await expect(page.locator('#help-title')).toHaveText('How to play Hearts');
+  await expect(page.locator('#help-body')).toContainText('Pass 3 cards');
+  await page.locator('#help-close').click();
+  await expect(page.locator('#help')).toBeHidden();
+  // Messages: the bar's button opens it and hides; the panel's Close brings the button back.
+  const btn = page.locator('#btn-chat');
+  if (await btn.isVisible()) await btn.click();
+  await expect(page.locator('#chat-input')).toBeVisible();
+  await expect(btn).toBeHidden();
+  await page.locator('#chat-collapse').click();
+  await expect(btn).toBeVisible();
   await page.locator('#btn-menu').click();
   await page.locator('#menu-leave').click();
-  await expect(page.locator('#home-head')).toBeVisible();
+  await expect(page.locator('#page-home')).toBeVisible();
   await expect(page).toHaveURL(/\/(\?|$)/);
+});
+
+test('on a phone that can’t go full screen, Full screen explains the home screen icon', async ({ page }) => {
+  // Like an iPhone: web pages can't go full screen.
+  await page.addInitScript(() => {
+    Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false });
+    Object.defineProperty(Document.prototype, 'webkitFullscreenEnabled', { get: () => false });
+  });
+  await createRoom(page, 'Fern', 'jigsaw');
+  await page.locator('#btn-menu').click();
+  await page.locator('#btn-fullscreen').click();
+  const help = page.locator('#home-help');
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('Add to Home Screen');
+  await expect(page.locator('#menu')).toBeHidden();
+  await page.locator('#home-help-close').click();
+  await expect(help).toBeHidden();
 });
 
 test('the admin page asks for its password, then shows who plays what', async ({ page }) => {

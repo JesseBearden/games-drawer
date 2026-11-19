@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, newPlayer, test } from './fixtures';
-import { at, createRoom, watchErrors } from './helpers';
+import { at, createRoom, joinByInvite, watchErrors } from './helpers';
 import { PUZZLE_IMAGES } from '../packages/shared/src/puzzle';
 
 /**
@@ -72,8 +72,7 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
 test('Jigsaw in a private room: build it together, put it away and pick it up again', async ({ page, browser }, info) => {
   const errors = watchErrors(page);
   const seen = watchPuzzle(page);
-  const code = await createRoom(page, 'Pip');
-  await page.locator('[data-game="jigsaw"]').click();
+  const code = await createRoom(page, 'Pip', 'jigsaw');
   await expect(page.locator('#game')).toHaveAttribute('data-view', 'jigsaw');
   const view = page.locator('#jigsaw-view');
 
@@ -92,9 +91,7 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
   // A friend joins and sees the same table.
   const friend = await newPlayer(browser, page);
   // (They land straight in the puzzle, not the lobby.)
-  await friend.goto(at(`/r/${code}`));
-  await friend.locator('#name-input').fill('Rue');
-  await friend.locator('#join-invite').click();
+  await joinByInvite(friend, code, 'Rue');
   await expect(friend.locator('#game')).toHaveAttribute('data-view', 'jigsaw');
   const fview = friend.locator('#jigsaw-view');
   await expect(fview.locator('.pz-play')).toBeVisible();
@@ -107,8 +104,8 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
   const ph = st.height / st.rows;
   const [p0, p1] = st.pieces;
   await drag(page, await onScreen(page, p1.x + pw / 2, p1.y + ph / 2), await onScreen(page, p0.x + pw * 1.55, p0.y + ph * 0.45));
-  await expect(view.locator('.pz-pct')).toHaveText('2%');
-  await expect(fview.locator('.pz-pct')).toHaveText('2%');
+  await expect(view.locator('.pz-pct')).toHaveText('4%');
+  await expect(fview.locator('.pz-pct')).toHaveText('4%');
   expect(st.pieces[1].g).toBe(st.pieces[0].g);
 
   // Drag the top-right corner piece into the middle of the frame (far from where it belongs,
@@ -131,20 +128,22 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
 
   // Put it away; it shows up under "Continue a puzzle" and comes back as it was.
   page.once('dialog', (d) => d.accept());
-  await view.locator('.pz-tools [data-pz="setup"]').click();
+  await page.locator('#btn-menu').click();
+  await page.locator('#menu [data-menu-item="new-puzzle"]').click();
   await expect(view.locator('.pz-setup')).toBeVisible();
   await expect(view.locator('.pz-saves li')).toHaveCount(1);
-  await expect(view.locator('.pz-saves')).toContainText('54 pieces · 2% done');
+  await expect(view.locator('.pz-saves')).toContainText('54 pieces · 4% done');
   await page.screenshot({ path: info.outputPath('continue.png') });
   await view.locator('[data-resume]').click();
   await expect(view.locator('.pz-loading')).toBeHidden();
   await expect.poll(() => opaqueAt(page, to.x, to.y)).toBe(true);
-  await expect(view.locator('.pz-pct')).toHaveText('2%');
+  await expect(view.locator('.pz-pct')).toHaveText('4%');
   await expect(fview.locator('.pz-play')).toBeVisible();
 
   // Put away again, then take it off the list (it asks first, since it's started).
   page.once('dialog', (d) => d.accept());
-  await view.locator('.pz-tools [data-pz="setup"]').click();
+  await page.locator('#btn-menu').click();
+  await page.locator('#menu [data-menu-item="new-puzzle"]').click();
   await expect(view.locator('.pz-saves li')).toHaveCount(1);
   let asked = '';
   page.once('dialog', (d) => {
@@ -165,8 +164,7 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
 
 test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page }, info) => {
   const errors = watchErrors(page);
-  await createRoom(page, 'Tot');
-  await page.locator('[data-game="jigsaw"]').click();
+  await createRoom(page, 'Tot', 'jigsaw');
   const view = page.locator('#jigsaw-view');
   await expect(view.locator('.pz-image')).toHaveCount(PUZZLE_IMAGES.length);
   await view.locator('[data-image="toy-shop"]').click();
@@ -186,7 +184,8 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
     asked = d.message();
     void d.accept();
   });
-  await view.locator('.pz-tools [data-pz="setup"]').click();
+  await page.locator('#btn-menu').click();
+  await page.locator('#menu [data-menu-item="new-puzzle"]').click();
   await expect(view.locator('.pz-setup')).toBeVisible();
   expect(asked).toContain('won’t be kept');
   await expect(view.locator('.pz-image')).toHaveCount(PUZZLE_IMAGES.length);
@@ -195,8 +194,7 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
 });
 
 test('holding a piece at the edge of the screen scrolls the table', async ({ page }, info) => {
-  await createRoom(page, 'Edge');
-  await page.locator('[data-game="jigsaw"]').click();
+  await createRoom(page, 'Edge', 'jigsaw');
   const view = page.locator('#jigsaw-view');
   await view.locator('[data-count="100"]').click();
   await view.locator('.pz-start').click();
@@ -240,8 +238,7 @@ test('holding a piece at the edge of the screen scrolls the table', async ({ pag
 });
 
 test('looking around stops at the edge of the table', async ({ page }) => {
-  await createRoom(page, 'Pan');
-  await page.locator('[data-game="jigsaw"]').click();
+  await createRoom(page, 'Pan', 'jigsaw');
   const view = page.locator('#jigsaw-view');
   await view.locator('[data-count="50"]').click();
   await view.locator('.pz-start').click();
@@ -260,9 +257,11 @@ test('looking around stops at the edge of the table', async ({ page }) => {
   for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 600);
   // Zoom in, then try to drag far past each corner of the table.
   for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -500);
+  const toolsTop = (await view.locator('.pz-tools').boundingBox())!.y - box.y;
   const corners = [
     { dx: 1, dy: 1, check: { x: 40, y: 90 } },
-    { dx: -1, dy: -1, check: { x: box.width - 40, y: box.height - 100 } },
+    // The table stops just above the tools strip (which wraps onto two rows on a phone).
+    { dx: -1, dy: -1, check: { x: box.width - 40, y: toolsTop - 20 } },
   ];
   for (const { dx, dy, check } of corners) {
     // Start the drag on bare table, not a piece.
@@ -290,8 +289,7 @@ test('looking around stops at the edge of the table', async ({ page }) => {
 test('a finger dragging a piece gets a magnifier above it, and the piece stays under the finger', async ({ page }, info) => {
   test.skip(info.project.name !== 'phone', 'touch only');
   const seen = watchPuzzle(page);
-  await createRoom(page, 'Thumb');
-  await page.locator('[data-game="jigsaw"]').click();
+  await createRoom(page, 'Thumb', 'jigsaw');
   const view = page.locator('#jigsaw-view');
   await view.locator('[data-count="50"]').click();
   await view.locator('.pz-start').click();

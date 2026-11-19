@@ -24,13 +24,13 @@ const PAD_ACTIONS: Partial<Record<PadButton, Action>> = {
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const EMPTY_HEART =
-  '<svg viewBox="0 0 64 58" aria-hidden="true"><path d="M32 52 C14 40 5 30 5 18 C5 10 11 5 18 5 C24 5 29 9 32 13 C35 9 40 5 46 5 C53 5 59 10 59 18 C59 30 50 40 32 52 Z" fill="rgba(20,26,74,0.35)" stroke="#fff" stroke-width="5" stroke-linejoin="round"/></svg>';
+  '<svg viewBox="0 0 64 58" aria-hidden="true"><path d="M32 52 C14 40 5 30 5 18 C5 10 11 5 18 5 C24 5 29 9 32 13 C35 9 40 5 46 5 C53 5 59 10 59 18 C59 30 50 40 32 52 Z" fill="rgba(17,40,117,0.12)" stroke="#112875" stroke-opacity=".45" stroke-width="4" stroke-dasharray="6 5" stroke-linejoin="round"/></svg>';
 
 /** The artillery game: battlefield canvas, HUD and controls. */
 export class TankView implements View {
   readonly landscape = true;
   readonly helpHtml =
-    '<p><b>Desktop:</b> ←/→ aim, ↑/↓ power, Space fire, A/D move (from level 4), Tab scores.</p><p><b>Controller:</b> left stick or d-pad aims and sets power, A fires, bumpers or triggers drive, View shows scores.</p><p><b>Drop:</b> any game key or button releases you from the helicopter.</p>';
+    '<p>Aim, set your power and fire. The wind bends every shot, so watch the windsock. Each knock-out levels you up; level 10 wins.</p><p><b>Phone or tablet:</b> the buttons on screen aim, set power and fire.</p><p><b>Computer:</b> ←/→ aim, ↑/↓ power, Space fire, A/D move (from level 4), Tab scores.</p><p><b>Controller:</b> left stick or d-pad aims and sets power, A fires, bumpers or triggers drive, View shows scores.</p><p><b>Drop:</b> any game key or button releases you from the helicopter.</p>';
   state: GameState | null = null;
   private renderer: Renderer | null = null;
   camera: Camera | null = null;
@@ -260,9 +260,15 @@ export class TankView implements View {
       const me = g.me;
       const target = me && me.phase !== 'dead' ? { x: me.x, y: me.y } : null;
       let deepest = 0;
-      for (const c of g.terrain.cols) if (c[0] > deepest) deepest = c[0];
+      let highest = Infinity;
+      for (const c of g.terrain.cols) {
+        if (c[0] > deepest) deepest = c[0];
+        if (c[0] < highest) highest = c[0];
+      }
+      // Riding in the helicopter (or floating down): keep it in view, to see where you'll land.
+      if (me && (me.phase === 'carried' || me.phase === 'chute')) highest = Math.min(highest, me.y);
       // On touch screens the corner control pads cover roughly the bottom 70px.
-      this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.shell.device.touch ? 70 : 0);
+      this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.shell.device.touch ? 70 : 0, Number.isFinite(highest) ? highest : deepest);
       this.renderer.draw(g, this.camera, { angle: this.input.angle, power: this.input.power }, now);
       this.updateAmbience();
       this.updateHud(g);
@@ -320,7 +326,7 @@ export class TankView implements View {
       const fireState = phase === 'carried' ? 'drop' : info.shellsInFlight > 0 || !(phase === 'ground' || phase === 'slide') ? 'busy' : 'ready';
       this.set('fire', fireState, () => {
         const btn = $<HTMLButtonElement>('fire-btn');
-        btn.textContent = fireState === 'drop' ? 'DROP' : 'FIRE';
+        btn.textContent = fireState === 'drop' ? 'Drop' : 'Fire';
         btn.classList.toggle('drop', fireState === 'drop');
         btn.disabled = fireState === 'busy';
       });
@@ -371,12 +377,12 @@ export class TankView implements View {
     const g = this.state;
     if (!g) return;
     const rows = [...g.tanks.values()].sort((a, b) => b.info.level - a.info.level || b.info.kills - a.info.kills);
-    let html = '<table><thead><tr><th>Tank</th><th>LV</th><th>Kills</th><th>Lives</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Tank</th><th>Level</th><th>Kills</th><th>Lives</th></tr></thead><tbody>';
     for (const t of rows) {
       const i = t.info;
       const lives = deathsAllowed(g.cfg, i) - i.deaths;
-      const who = i.controller === 'bot' ? (i.away ? ' <small>(away)</small>' : ' <small>(bot)</small>') : '';
-      html += `<tr class="${i.id === g.myTankId ? 'me' : ''}"><td><span class="dot" style="background:${colorCss(i.color)}"></span>${escapeHtml(i.name)}${who}</td><td>${i.level}</td><td>${i.kills}</td><td>${'♥'.repeat(Math.max(0, lives))}</td></tr>`;
+      const who = i.controller === 'bot' ? (i.away ? ' <small>(away)</small>' : ' <small>(computer)</small>') : '';
+      html += `<tr class="${i.id === g.myTankId ? 'me' : ''}"><td><span class="dot" style="background:${colorCss(i.color)}"></span>${escapeHtml(i.name)}${who}</td><td>${i.level}</td><td>${i.kills}</td><td>${Math.max(0, lives)}</td></tr>`;
     }
     html += '</tbody></table>';
     $('scores').innerHTML = html;

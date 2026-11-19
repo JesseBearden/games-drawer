@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-16_
+_Last updated: 2026-11-18_
 
 ## Getting set up
 
@@ -13,33 +13,127 @@ _Last updated: 2026-11-16_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
-## Home page and game pages (new)
+## Cut Paper, step 1: the way in (new)
 
-- [ ] http://localhost:5173 is now the Games Drawer home page: your name, Start a private room,
-      a room code box, and the list of games.
-- [ ] Each game has its own page: `/tanks`, `/hearts`, `/spades`, `/dominoes`, `/jigsaw`.
-      `/tankyouforbeingafriend` lands on `/tanks`. The phone's back button moves between them.
-- [ ] Only **Tanks** and **Jigsaw** have **Play now** (a public game anyone can join). Hearts,
-      Spades and Dominoes are private rooms only: their cards on the home page and in the room's
-      game picker say "🚧 Under construction", and their pages have a caution-tape banner and
-      only Play with friends.
-- [ ] **Play now** on the Jigsaw page puts you at a shared public table (two browsers on Play
-      now land on the same puzzle). Public games keep the strict chat filter and no voice.
-- [ ] Leaving a public game returns you to that game's page; leaving a private room goes home.
-- [ ] On the phone, type an old room code and tap Join (or open an old invite link and tap Join
-      room): "That room has closed or the code is wrong." shows right under it, on screen.
-      Changing the code clears it. (Long pop-up notes now wrap instead of running off a phone's
-      screen too.)
-- [ ] When a room closes on you (or you tap Join again): the message doesn't vanish and pop back
-      any more. If the answer takes a moment, "Joining room ABCDE…" shows in that same spot and
-      turns into the answer there; a longer answer grows smoothly instead of shoving the page.
-- [ ] Reloading the page (or the dev server restarting) no longer flashes a plain white page
-      first.
-- [ ] New random names are a title and a snack ("Captain Pancake"). The dice picks a new one.
-      Bots in Tanks keep the tank puns; card-game bots use the new names.
-- [ ] Add to Home Screen on the phone: the icon says Games Drawer, and Hearts works upright.
+The site now looks like cut paper, and the way in is new. The games themselves still have their
+old look until steps 2–4.
 
-## Tanks (Play → public battle)
+- [ ] **Home** (`/`): the hands-and-puzzle picture (never cut off now, and no white box behind it on the iPad), and **Start a table** on screen without scrolling,, "Play a game together.", **Start a table**,
+      and a box for a table code. Try it on the phone, the iPad and the computer.
+- [ ] **Start a table** (and the join page): **Back to home** is a button under the others now,
+      not a link at the top.
+- [ ] **Start a table**: the five games on their own colors (Jigsaw picked to start), your name,
+      then **Start with mic on** or **Start with mic off**. The first time, the name box is
+      empty: tapping Start without a name asks for one right there. The dice picks a silly name.
+      After that your name shows as a line with **Change**.
+- [ ] A game's own address picks that game: `/dominoes`, `/tanks` (and
+      `/tankyouforbeingafriend`).
+- [ ] **A code**: type a table's 5 letters on Home and tap Join. A wrong or old code says "This
+      table has closed" with just **Back to home**.
+- [ ] **Who's there, before you join**: the join page's heading names everyone at the table
+      ("Join Jesse, Sam and Mory for a puzzle"), so you can back out first. If whoever invited you
+      has stepped away, it says "Jesse invited you to play" with who's there underneath. Leave it
+      open while someone else joins or leaves: the list catches up within about 8 seconds.
+- [ ] **Invite**, then type a name (the box suggests Penny; try your mom's), then **Send the invite**: the phone's share
+      sheet opens with "Liz, come play a game with us!" and the link. On a computer the link is
+      copied. Opening that link on another device shows "Jesse invited you to play" with **Liz**
+      already filled in, so it's one tap to join. A link with no name works too (they type theirs).
+- [ ] The invite sheet also shows the table code, for reading out over the phone.
+- [ ] **The bar**: Mute mic, Invite, Help and Menu in the middle; **Messages** at the right end.
+      Messages only shows while the Messages panel is closed (the panel has its own Close). On a
+      computer Messages starts open; on a phone or an iPad held upright it starts closed.
+- [ ] **Help**: how to play the game on screen, in plain paragraphs, plus the keyboard keys.
+- [ ] **Menu** (no "Menu" heading now): Switch game and Leave table at the top, then the Mic part (who's talking, mute
+      someone just for you, turn your mic off), your name, sound, **Full screen** on its own,
+      and the message filter (three separate buttons now). The table code is no longer in the
+      menu; it's in the Invite sheet, for reading out over the phone.
+- [ ] **Messages** are easier to read: a lighter sheet of sky paper and bigger text.
+- [ ] **Switch game** shows the game picker on the blue mat, with who's at the table. Picking one
+      takes everyone there.
+- [ ] **Messages**: little paper notes on a blue sheet. Yours are blue on the right.
+- [ ] Leaving the table goes back Home.
+- [ ] Public play is set aside for now: no Play now anywhere.
+- [ ] Link previews (iMessage etc.) use the new share card. Add to Home Screen uses the drawer icon.
+
+## Cut Paper, steps 2–4: the games (new)
+
+Every game now has the paper look. Try each one on the phone (both ways up), the iPad and the
+computer:
+
+- [ ] **Hearts and Spades**: ivory card stock (lighter than before) with the cut-paper royals, on the blue mat. Name
+      tags are paper; whose turn it is turns yellow and lifts. Computer players say "Computer".
+      The others' hands show a little pile of card backs and "13 cards". On a phone held upright
+      the cards are bigger than before; tell me if they're too big or too small.
+- [ ] **Spades**: your team's tags are lilac; the bid buttons are paper; "Us" and "Them" are
+      little paper tags.
+- [ ] **Dominoes**: the tiles are card stock with navy pips, your hand sits straight on the
+      blue (the brown rack is gone), the tile just played has a yellow edge, and where you can play is a dashed blue
+      outline (it doesn't pulse any more). Points scored pop up on a yellow paper chip.
+- [ ] **Score sheets** (all three): paper sheets; "Back to lobby" is now **Switch game**.
+- [ ] **Jigsaw tools on a phone**: Picture, Edges, Magnifier, Tidy and Fit on one row. **New
+      puzzle** moved to the top of the Menu (above Switch game) while a puzzle is out.
+- [ ] **Full screen on a phone**: on the iPhone, Menu → Full screen opens "Play full screen" with the
+      steps to add Games Drawer to your home screen (Android shows its own steps). Open it from the
+      new home screen icon: it's full screen, and the Full screen button is gone from the menu.
+- [ ] **Menu, Help and Invite** always open at the top, even if you scrolled down last time.
+- [ ] **Jigsaw percentage**: a piece set in its spot in the frame counts now (it showed 0% before).
+      The percentage is pieces in place: joined to another, or set in the frame.
+- [ ] **Jigsaw starting view**: the whole table fits between the progress tag and the tools strip,
+      so no pieces start hidden under the tools (on the iPad with Messages open, too).
+- [ ] **Jigsaw**: the setup is a paper sheet with paper picture tiles; the board is the blue mat
+      with a cream frame where the picture goes; the tools are a paper strip. On a phone the
+      tools wrap onto two rows instead of running off the screen. Other people's pointers show
+      their names in ink.
+- [ ] **Tanks**: paper sky and clouds, torn-paper hills, and ground made of thick strips of red
+      clay paper under a thicker strip of grass, each strip shadowed by the one above. Craters show pale torn edges. The tanks, helicopter,
+      parachute, shells, explosions and smoke are all paper now, and the player colors are the
+      site's paper colors (blue, red, yellow, green first).
+- [ ] **Tanks screen**: lives, wind and aim are paper tags; Fire is a red paper button (yellow
+      for Spread and Drop); the labels say "Angle", "Power", "Fire" instead of capitals. On a
+      sideways phone the wind tag sits under the lives tag.
+- [ ] **Tanks on a phone held sideways** (new): the whole battlefield fits, from the hilltops to
+      the deepest valley. Your tank never sits below the bottom edge any more (it did in Safari
+      with its address bar showing). When the screen is too short to show it all at full width,
+      the map shrinks to fit and the ground past its edges shows, dimmed, at the sides. While
+      you're riding in the helicopter, the view keeps the helicopter in sight so you can pick
+      your drop. Tell me if the tanks get too small.
+- [ ] Tanks held upright says "Turn your iPad sideways to play" on the iPad ("phone" on a
+      phone, "tablet" on other tablets).
+- [ ] **The folding bar** (Tanks, phone held sideways): the bar is folded away and the battle
+      runs to the top of the screen. The little tab with a down arrow in the top right corner
+      pulls the bar down; the tab then hangs under it, pointing up, to push it back. Using
+      anything on the bar folds it again (Mute mic waits a moment so you see it change), and so
+      does touching the battlefield. A red dot on the tab means a new message. iPad and computer
+      keep the bar as it was. While folded, you can't see at a glance whether your mic is on;
+      tell me if that's a problem.
+- [ ] The knock-out notes say it in words ("Liz hit Sam") instead of emoji, with each name
+      underlined in its tank's color.
+
+## Mic (new; needs the https dev server; two devices)
+
+The mic is chosen on the way in now, so the old "Games Drawer is better with conversation"
+pop-up is gone.
+
+- [ ] **Start/Join with mic on**: the browser asks for the mic right when you tap it, and you're
+      at the table with the mic on. The bar's first button says **Mute mic**; tap it and it
+      turns red: **Unmute mic**.
+- [ ] **With mic off**: the button is red, **Turn on mic**. The game picker has a red "Your mic
+      is off" strip too.
+- [ ] Tap **Don't Allow** when the browser asks: the button stays **Turn on mic**, and tapping
+      it opens "Your mic is blocked", with steps for iPhone/iPad, Android and computers.
+- [ ] **The iPad fix**: with the mic on, switch to another app (or the home screen) for a
+      minute while someone else talks to you. Before, they stopped hearing you after a few
+      seconds. Now they should still hear you while you're away, and everything should carry on
+      when you come back. Please try this one and tell me how it goes.
+- [ ] On the iPhone: with the mic on, can you hear people straight away, or only after tapping
+      the screen once?
+
+Still to try from before:
+
+- [ ] Toggling Wi-Fi or briefly locking the phone: voice comes back by itself.
+- [ ] Game sound or echo leaking into your mic: try with and without headphones.
+
+## Tanks
 
 Phone layout is confirmed good. Still worth noticing over a few games:
 
@@ -51,13 +145,6 @@ Phone layout is confirmed good. Still worth noticing over a few games:
 - [ ] Players with more than 3 / 6 / 9 kills show a gold +2 / +3 / +4 bounty tag.
 - [ ] A win posts "X won!" in chat, the screen just says who won, and the nuke fills the whole screen.
 - [ ] The iPhone lock-ups from last time don't come back.
-
-## Private rooms and the lobby
-
-Confirmed on the PC. Left to try:
-
-- [ ] Invite opens the phone's share sheet, and a friend somewhere else can join from the link
-      (needs the hosted site).
 
 ## Hearts
 
@@ -76,10 +163,9 @@ Confirmed on the PC. Left to try:
       while you're still choosing, and they get to pick their own 3 cards. (You reported this.)
 - [ ] On a phone, Menu → Leave works during Hearts (the cards used to cover it).
 
-## Spades (new; private rooms only, under construction)
+## Spades (work in progress)
 
-Pick it in a private room's lobby, or use Play with friends on gamesdrawer.com/spades. Once
-you're happy with it, I'll open it to public games too (a one-word change).
+Pick it on Start a table (or open /spades).
 
 - [ ] You and the player across are a team ("partner" on their name); the first two people in
       a room are opponents, and a third person partners the first.
@@ -91,39 +177,13 @@ you're happy with it, I'll open it to public games too (a one-word change).
 - [ ] The bots feel fair. In simulations they make their bids about 79% of the time, and a game
       to 500 takes about 10 hands.
 
-## Voice (needs the https dev server; two devices)
-
-New: voice is on by default in private rooms.
-
-- [ ] The first time you're in a private room, a "Games Drawer is better with conversation"
-      screen pops up. **Turn on voice** asks for the mic and joins.
-- [ ] Next private room: no question, you're straight into voice (a note says how to mute).
-- [ ] Leave voice (🎙️ → Leave voice), or answer **No thanks**: later rooms stay quiet and
-      don't ask again. The 🎙️ button still joins whenever you want.
-- [ ] Public games never ask (voice is only in private rooms).
-- [ ] Out of voice is hard to miss: whenever you're not in voice in a private room (No thanks, you
-      left, or the browser blocked the mic), the 🎙️ button is red with a crossed-out mic and
-      pulses a few times, and the lobby has a red "You're not in voice chat" card with Join.
-      If the browser blocked the mic (tap Don't Allow to try it), the card and the voice panel
-      say so and how to fix it. Joining voice turns it all back to normal. (On the plain http
-      dev server a phone can't do voice at all, so it stays red there: use dev:https.)
-- [ ] On the iPhone: after the automatic join, can you hear people straight away, or only after
-      tapping the screen once? (Safari is the strictest about sound without a tap.)
-
-Joining, speaking markers and switching games are confirmed. Left to try:
-
-- [ ] Toggling Wi-Fi or briefly locking the phone: voice comes back by itself.
-- [ ] "Mute me" and muting another player both work.
-- [ ] The voice panel shows each person's link (connecting, relayed, or couldn't connect).
-- [ ] Game sound or echo leaking into your mic: try with and without headphones.
-
-## Dominoes (new; private rooms only, under construction)
+## Dominoes (work in progress)
 
 Your family's rules: double-six set, 4 players, 7 tiles each (all 28 dealt, so no boneyard), and
 first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts. Bigger sets
 (double-nine, double-twelve), 5/6/7 tiles and other player counts are for later.
 
-- [ ] Pick Dominoes in a private room (or Play with friends on gamesdrawer.com/dominoes).
+- [ ] Pick Dominoes on Start a table (or open /dominoes).
 - [ ] Whoever holds the 6-6 leads it in the first hand; after that the last hand's winner leads.
 - [ ] Tap a tile: green spots show where it can go. Tap a spot to play it there, or tap the tile
       again when there's only one place.
@@ -138,9 +198,26 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       mid-hand.
 - [ ] When a hand ends, the scores come up and stay up: nothing moves on until every person at
       the table taps "Ready for hand 2" (bots and anyone who dropped out don't hold it up).
-      "See the board" shows the finished board; "Back to scores" (or the Scores button) goes
-      back. The scores say who's ready and who you're still waiting for. Try it with two people.
+      "See the board" shows the finished board, and the Scores button next to your name
+      turns into a blue "Back to scores" (just the one button, on that line). The scores say who's ready and who you're still waiting for. Try it with two people.
 - [ ] After the game ends, "See the board" works there too.
+- [ ] Phone held upright: your name and Scores are side by side, the same height.
+- [ ] Phone held sideways (new layout): everyone's names down the left, yours first, in turn
+      order, with Scores under them; the board in the middle; your tiles in rows of four on the
+      right. Try it with Safari's address bar showing too: Scores and the "Ends add up to" line
+      should both be on screen. The computer players lose their "Computer" line here to make
+      room. Tell me if the tiles are too small, or if Scores belongs somewhere else.
+- [ ] Hearts and Spades upright: your name and Scores are the same height there too.
+- [ ] **Zoom** (new): once there's a tile on the board, **Zoom in** shows under it, with
+      "Ends add up to" in the middle; **Zoom out** appears once you've zoomed. Try on the phone
+      and iPad: pinch the board to zoom, and drag with one finger to look around. Dragging never
+      plays a tile; tapping a spot while zoomed in still plays it. On the computer, the mouse
+      wheel (or a trackpad pinch) zooms around the pointer, and you can drag the board. A new
+      hand starts zoomed all the way out. Safari shouldn't zoom the whole page when you pinch the
+      board. Controller: the shoulder buttons zoom.
+- [ ] **Score sheets on a phone** (all three games): names stay whole ("Jesse" no longer splits
+      into "Jes / se"); two-word names wrap at the space. Only a very long single word (like a
+      20-letter name) breaks, and only that one.
 - [ ] As the table fills up, everything shrinks to fit (phone held either way, and computer).
       The east and west lines both bend down at the edges, like the sides of a table, and the
       spinner's up and down lines run straight. Nothing overlaps (you saw an overlap after a
@@ -149,7 +226,7 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       hand after the first? What does a blocked hand (nobody can play) score? Right now the
       lowest hand scores everyone else's pips, rounded to 5.
 
-## Jigsaw puzzle (public and private rooms)
+## Jigsaw puzzle
 
 Up to 4 people build one puzzle together; no bots. 50 pictures: Penny Pickles, your sailboat,
 and 48 public-domain or CC0 photos and paintings.
@@ -161,7 +238,7 @@ and 48 public-domain or CC0 photos and paintings.
 - [ ] Start a puzzle with Sailboat. It's portrait (taller than wide), unlike the rest, so check
       the pieces and the frame look right at 100 pieces.
 
-- [ ] Pick Jigsaw in a private room (or Play with friends on gamesdrawer.com/jigsaw). Choose a
+- [ ] Pick Jigsaw on Start a table (or open /jigsaw). Choose a
       picture and 6, 20, 50, 100, 250, 500 or 1000 pieces (6 and 20 are for little kids). The
       real count is sometimes a little off (54 for 50) so the pieces come out square; the line
       under the buttons says exactly.
@@ -207,7 +284,7 @@ and 48 public-domain or CC0 photos and paintings.
       out Send with a "Keep Games Drawer chat family friendly" note. Clean words bring it back.
 - [ ] Private rooms start on **Hide**: swear words reach everyone as ****.
 - [ ] Menu → Chat filter switches between None, Hide and Block; anyone can change it, chat says
-      who did, and the lobby shows the current setting.
+      who did, and the Menu shows the current setting.
 - [ ] Slurs stay blocked even on None.
 - [ ] Harmless words that used to be caught now go through: cockpit, cumin, shiitake, flame
       retardant, booby trap. Tell me any others you hit and I'll add them to the allow list.
@@ -241,8 +318,7 @@ Tank sounds are confirmed good. Left to try:
       you chose. (Your password's hash is in `.env.local`, which git ignores; the password itself
       isn't stored anywhere.) A wrong password says so; five wrong in a row locks sign-in for 15
       minutes.
-- [ ] Play a game in a private room for a few minutes with two tabs, chat a bit, go back to the
-      lobby, then reload /admin (numbers refresh each minute): the game shows person-hours, time
+- [ ] Play a game at a table for a few minutes with two tabs, chat a bit, Switch game, then reload /admin (numbers refresh each minute): the game shows person-hours, time
       with 2+ people, and chat per person-hour. Today / 7 / 30 / 90 days switch the range.
 - [ ] Sign out works, and the page stays signed in for a week otherwise.
 
@@ -254,8 +330,8 @@ The deploy pipeline is built and tested here, but its first real run needs the A
       and www.gamesdrawer.com lands on gamesdrawer.com.
 - [ ] Start a game, then push a change: your game keeps going on the old version until it
       ends, and a room created after the deploy gets the new one.
-- [ ] Voice relay: open a private room link with `?relay=1` on the end on two phones using cell
+- [ ] Voice relay: open a table link with `?relay=1` on the end on two phones using cell
       data. Each person in the voice panel should show "(relayed)".
-- [ ] A friend in another house joins a private room and you talk while playing.
+- [ ] A friend in another house joins your table and you talk while playing.
 - [ ] Admin page: put the password's hash in Parameter Store (command in deploy/README.md),
       deploy, then sign in at gamesdrawer.com/admin from your phone.

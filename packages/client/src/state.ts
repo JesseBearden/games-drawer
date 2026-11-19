@@ -314,7 +314,8 @@ export class GameState {
         if (e.tank === me) this.ui.sound('myDeath', undefined, { delay: 0.35 });
         const victim = this.nameSpan(e.tank);
         const killer = e.killer !== null ? this.nameSpan(e.killer) : '';
-        const how = { direct: '💥', fall: '⬇️', blast: '☢️', environment: '' }[e.cause];
+        // In words (no emoji: DESIGN.md).
+        const how = { direct: 'hit', fall: 'knocked off', blast: 'blew up', environment: 'got' }[e.cause];
         if (e.killer !== null) this.ui.feed(`${killer} ${how} ${victim}`);
         else this.ui.feed(`${victim} ${e.fallDistance ? 'took a long fall' : 'blew up'}`);
         if (e.tank === me) {
@@ -339,7 +340,7 @@ export class GameState {
         this.effects.push({ kind: 'explosion', x: e.x, y: e.y, r: 36, t0: now, dur: 600, big: true });
         this.effects.push({ kind: 'heliWreck', x: e.x, y: e.y, vx: 60, vy: -80, dir: 1, t0: now, dur: 2200 });
         this.ui.sound('heliDown', e);
-        this.ui.feed(`${this.nameSpan(e.by)} 🚁 shot down ${this.nameSpan(e.tank)}'s ride`);
+        this.ui.feed(`${this.nameSpan(e.by)} shot down ${this.nameSpan(e.tank)}'s helicopter`);
         if (e.tank === me) this.ui.toast('Your helicopter was shot down!');
         if (e.by === me) this.ui.toast('Helicopter down! +1 LV');
         return;
@@ -408,8 +409,9 @@ export class GameState {
 
   private nameSpan(id: number) {
     const t = this.tanks.get(id);
-    const css = t ? colorCss(t.info.color) : '#fff';
-    return `<span style="color:${css}">${escapeHtml(this.nameOf(id))}</span>`;
+    const css = t ? colorCss(t.info.color) : '#c9cfdf';
+    // The name in ink, underlined in the tank's colour (coloured text is hard to read on paper).
+    return `<span class="tank-name" style="--c:${css}">${escapeHtml(this.nameOf(id))}</span>`;
   }
 
   private startNuke(now: number) {
@@ -432,7 +434,7 @@ export class GameState {
         y,
         vx: Math.cos(a) * v,
         vy: Math.sin(a) * v,
-        c: color !== undefined && i % 2 ? colorCss(color) : ['#8a3a86', '#e9803a', '#6b2a6a', '#78d648'][i % 4],
+        c: color !== undefined && i % 2 ? colorCss(color) : ['#bb926a', '#f2bd96', '#9c7a58', '#478653'][i % 4],
         s: 2 + Math.random() * 3,
       });
     }

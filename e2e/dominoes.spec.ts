@@ -3,8 +3,7 @@ import { createRoom, watchErrors } from './helpers';
 
 test('Dominoes in a private room: pick a tile and play it where it glows', async ({ page }) => {
   const errors = watchErrors(page);
-  await createRoom(page, 'Dot');
-  await page.locator('[data-game="dominoes"]').click();
+  await createRoom(page, 'Dot', 'dominoes');
   await expect(page.locator('#game')).toHaveAttribute('data-view', 'dominoes');
   const view = page.locator('#dominoes-view');
   await expect(view.locator('.dm-mine')).toHaveCount(7);
@@ -38,7 +37,9 @@ test('Dominoes in a private room: pick a tile and play it where it glows', async
       );
       for (const look of looks) {
         expect(look.filter).toBe('none');
-        expect(look.face).toBe(look.legal ? 'rgb(255, 253, 246)' : 'rgb(152, 151, 149)');
+        // Playable tiles are card stock (the shared paper pattern); the others a flat greyed stock.
+        if (look.legal) expect(look.face).toContain('url(');
+        else expect(look.face).toBe('rgb(185, 171, 152)');
       }
       const placedBefore = await view.locator('.dm-placed').count();
       await legal.first().click();
@@ -58,11 +59,51 @@ test('Dominoes in a private room: pick a tile and play it where it glows', async
   expect(errors).toEqual([]);
 });
 
+test('the board zooms in and out, with the buttons or the mouse wheel', async ({ page }) => {
+  const errors = watchErrors(page);
+  await createRoom(page, 'Dot', 'dominoes');
+  const view = page.locator('#dominoes-view');
+  await expect(view.locator('.dm-mine')).toHaveCount(7);
+  // Wait for the first tile (leading it ourselves if we hold the double six).
+  for (let i = 0; i < 80 && !(await view.locator('.dm-placed').count()); i++) {
+    const legal = view.locator('.dm-hand.my-turn .dm-mine.legal');
+    if (await legal.count()) {
+      await legal.first().click();
+      if (await legal.count()) await legal.first().click();
+    }
+    await page.waitForTimeout(250);
+  }
+  await expect(view.locator('.dm-placed').first()).toBeVisible();
+
+  const layout = view.locator('.dm-layout');
+  const scale = () => layout.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform.replace('none', '')).a);
+  const zoomIn = view.locator('.dm-zoom-in');
+  const zoomOut = view.locator('.dm-zoom-out');
+  await expect(zoomIn).toBeVisible();
+  // Nothing to zoom out from yet: the button keeps its place, unseen.
+  await expect(zoomOut).toBeHidden();
+  await zoomIn.click();
+  await expect.poll(scale).toBeCloseTo(1.5);
+  await expect(zoomOut).toBeVisible();
+  await expect(view.locator('.dm-board')).toHaveClass(/zoomed/);
+  await zoomOut.click();
+  await expect.poll(scale).toBe(1);
+  await expect(zoomOut).toBeHidden();
+
+  // The mouse wheel over the board zooms around the pointer, in and back out.
+  const box = (await view.locator('.dm-board').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -300);
+  await expect.poll(scale).toBeGreaterThan(1.2);
+  await page.mouse.wheel(0, 1200);
+  await expect.poll(scale).toBe(1);
+  expect(errors).toEqual([]);
+});
+
 test('after a hand you can look back at the board, and the next hand waits until you’re ready', async ({ page }) => {
   test.setTimeout(150_000);
   const errors = watchErrors(page);
-  await createRoom(page, 'Dot');
-  await page.locator('[data-game="dominoes"]').click();
+  await createRoom(page, 'Dot', 'dominoes');
   const view = page.locator('#dominoes-view');
   await expect(view.locator('.dm-mine')).toHaveCount(7);
 
@@ -92,18 +133,16 @@ test('after a hand you can look back at the board, and the next hand waits until
   await expect(overlay).toContainText('Hand 1 done');
   const placed = await view.locator('.dm-placed').count();
 
-  // Look at the board, then come back to the scores (from the button, or the Scores button).
+  // Look at the board, then come back to the scores: the one button by your name says so.
+  const scoresBtn = view.locator('.ht-scores-btn');
   await overlay.locator('[data-act="board"]').click();
   await expect(overlay).toBeHidden();
   await expect(view.locator('.dm-placed')).toHaveCount(placed);
   await expect(view.locator('.ht-status')).toHaveText('Hand 1 is over. Everyone else is ready.');
-  await view.locator('.dm-back').click();
+  await expect(scoresBtn).toHaveText('Back to scores');
+  await scoresBtn.click();
   await expect(overlay).toBeVisible();
-  await overlay.locator('[data-act="board"]').click();
-  await expect(view.locator('.dm-back')).toBeVisible();
-  await view.locator('.ht-scores-btn').click();
-  await expect(overlay).toBeVisible();
-  await expect(view.locator('.dm-back')).toBeHidden();
+  await expect(scoresBtn).toHaveText('Scores');
 
   // Ready: with only bots at the table, the next hand starts straight away.
   await ready.click();

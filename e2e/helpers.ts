@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'jigsaw';
 import { expect } from './fixtures';
 export { newPlayer } from './fixtures';
 
@@ -18,26 +19,37 @@ export function watchErrors(page: Page) {
   return errors;
 }
 
-export async function setName(page: Page, name: string) {
-  await page.goto(at('/'));
-  await page.locator('#name-input').fill(name);
+/** Type a name on the start or join page (tapping Change first if a name is already shown). */
+export async function enterName(page: Page, form: 'start' | 'join', name: string) {
+  const change = page.locator(`[data-name-for="${form}"] [data-name-act="change"]`);
+  if (await change.isVisible()) await change.click();
+  await page.locator(`#${form}-name`).fill(name);
 }
 
-/** Create a private room; returns its code once the lobby is showing. */
-export async function createRoom(page: Page, name: string) {
-  await setName(page, name);
-  await page.locator('#create-private').click();
-  const code = page.locator('.lobby-view .room-code');
-  await expect(code).toHaveText(/^[A-Z]{5}$/);
-  return (await code.textContent())!;
+/** Start a table playing `game`, the way the start page does; returns its code. */
+export async function createRoom(page: Page, name: string, game: GameId = 'jigsaw', mic: 'on' | 'off' = 'off') {
+  await page.goto(at('/start'));
+  await page.locator(`#start-games label:has(input[value="${game}"])`).click();
+  await enterName(page, 'start', name);
+  await page.getByRole('button', { name: `Start with mic ${mic}` }).click();
+  await expect(page.locator('#game')).toHaveAttribute('data-view', game);
+  await expect(page).toHaveURL(/\/r\/[A-Z]{5}/);
+  return new URL(page.url()).pathname.slice(3, 8);
 }
 
-/** Join a room through its invite link, the way a friend would. */
-export async function joinByInvite(page: Page, code: string, name: string) {
+/** Join a table through its invite link, the way a friend would. */
+export async function joinByInvite(page: Page, code: string, name: string, mic: 'on' | 'off' = 'off') {
   await page.goto(at(`/r/${code}`));
-  await page.locator('#name-input').fill(name);
-  await page.locator('#join-invite').click();
-  await expect(page.locator('.lobby-view .room-code')).toHaveText(code);
+  await enterName(page, 'join', name);
+  await page.getByRole('button', { name: `Join with mic ${mic}` }).click();
+  await expect(page.locator('#btn-menu')).toBeVisible();
+}
+
+/** Menu, then Switch game: the game picker. */
+export async function toLobby(page: Page) {
+  await page.locator('#btn-menu').click();
+  await page.locator('#menu-lobby').click();
+  await expect(page.locator('.lobby-view .lobby-games')).toBeVisible();
 }
 
 export async function sendChat(page: Page, text: string) {

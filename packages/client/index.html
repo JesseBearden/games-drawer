@@ -4,90 +4,94 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <title>Games Drawer</title>
-    <!-- Until the stylesheet loads (styles.css shows the page): no flash of a plain white page. -->
+    <!-- Until the stylesheet loads (styles.css shows the page): the page's paper colour, not a white flash. -->
     <style>
       html {
-        background: #141a4a;
+        background: #fffcf5;
       }
       body {
         visibility: hidden;
       }
     </style>
-    <meta name="description" content="Little games to play with friends while you hang out: Tanks, Hearts and more, with chat and voice." />
+    <meta name="description" content="Play a game together: talk and play at your own private table with the people you invite." />
     <meta property="og:title" content="Games Drawer" />
-    <meta property="og:description" content="Little games to play with friends while you hang out. Tap to join." />
+    <meta property="og:description" content="Play a game together. Talk and play at your own private table. Tap to join." />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/og.png" />
+    <meta property="og:image" content="/art/og.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#1b2a6b" />
+    <meta name="theme-color" content="#fffcf5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/sprites/tank-body.png" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" href="/art/drawer.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/art/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet" />
+    <!-- Atkinson Hyperlegible Next is the site's font; Lilita One stays for game titles until each game gets its paper look. -->
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;800&family=Lilita+One&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <!-- Landing: the home page (/), or one game's own page (/tanks, /hearts, ...) -->
-    <main id="landing" class="landing">
-      <div class="landing-card">
-        <header id="home-head" class="landing-head">
-          <h1 class="logo">Games Drawer</h1>
-          <p class="tagline">Little games to play with friends while you hang out.</p>
-        </header>
-        <header id="game-head" class="landing-head" hidden>
-          <a id="back-home" class="back-link" href="/" data-nav="/">← All games</a>
-          <div id="gp-icon" class="gp-icon" aria-hidden="true"></div>
-          <h1 id="gp-title" class="logo"></h1>
-          <p id="gp-tagline" class="tagline"></p>
-          <p id="gp-construction" class="uc-banner" hidden>
-            <span>🚧 Under construction: we're still finishing this one, so expect rough edges. Private rooms only for now.</span>
-          </p>
-        </header>
+    <!-- Shared SVG paper: the card stock as a fill (domino faces use it). -->
+    <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id="gd-stock" patternUnits="userSpaceOnUse" width="300" height="300"><image href="/art/card-stock.webp" width="300" height="300" /></pattern></defs></svg>
+    <!-- The way in: home (/), starting a table (/start, or a game's own address like /jigsaw),
+         and joining one (/r/CODE, an invite link). Cut Paper look: paper.css + entry.css. -->
+    <main id="landing" class="entry pc-page">
+      <div class="entry-wrap">
+        <a class="pc-brand" href="/" data-nav="/"><img src="/art/drawer.svg" alt="" width="44" height="40" />Games Drawer</a>
 
-        <label class="field">
-          <span>Your name</span>
-          <div class="name-row">
-            <input id="name-input" maxlength="20" autocomplete="off" spellcheck="false" />
-            <button id="name-dice" class="icon-btn" type="button" aria-label="Pick a random name" title="Random name">🎲</button>
+        <section id="page-home" class="entry-page" hidden>
+          <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="522" /></div>
+          <div class="entry-welcome">
+            <h1 class="pc-h1">Play a game together.</h1>
+            <p class="pc-lead">Talk and play at your own private table. Just you and the people you invite, up to four in all.</p>
           </div>
-        </label>
-
-        <div id="invite-panel" class="invite-panel" hidden>
-          <button id="join-invite" class="btn btn-primary btn-big" type="button">Join room <span id="invite-code"></span></button>
-          <p class="hint">You were invited to a private room.</p>
-        </div>
-
-        <section id="home-actions">
-          <div class="actions">
-            <button id="create-private" class="btn btn-primary btn-big" type="button">Start a private room</button>
+          <div class="entry-home-actions">
+            <a id="home-start" class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" href="/start" data-nav="/start">Start a table</a>
+            <form id="code-form" class="entry-code" novalidate>
+              <label class="pc-field" for="code-input">Have a table code?</label>
+              <div class="entry-row">
+                <input id="code-input" class="pc-input pc-input-code" maxlength="5" placeholder="5 letters" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
+                <button class="pc-btn pc-btn-plain" type="submit">Join</button>
+              </div>
+            </form>
           </div>
-          <p class="hint">Your own room with chat and voice. Anyone in it picks the games.</p>
-          <form id="code-form" class="code-form">
-            <input id="code-input" maxlength="5" placeholder="Room code" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" />
-            <button class="btn btn-secondary" type="submit">Join</button>
+        </section>
+
+        <section id="page-start" class="entry-page" hidden>
+          <h1 class="pc-h2">Start a table</h1>
+          <form id="start-form" class="entry-form" novalidate>
+            <fieldset class="entry-games">
+              <legend class="pc-h3">Choose a game</legend>
+              <div id="start-games" class="pc-choices"></div>
+            </fieldset>
+            <div class="entry-name" data-name-for="start"></div>
+            <div class="entry-mic">
+              <button class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="submit" value="on">Start with mic on</button>
+              <button class="pc-btn pc-btn-plain pc-btn-wide" type="submit" value="off">Start with mic off</button>
+            </div>
           </form>
-          <h2 class="section-title">Pick a game</h2>
-          <div id="game-list" class="game-list"></div>
+          <a class="pc-btn pc-btn-plain entry-home" href="/" data-nav="/">Back to home</a>
         </section>
 
-        <section id="game-actions" hidden>
-          <div class="actions">
-            <button id="play-public" class="btn btn-primary btn-big" type="button">Play now</button>
-            <button id="play-friends" class="btn btn-secondary" type="button">Play with friends</button>
-          </div>
-          <p id="gp-hint" class="hint"></p>
-          <ul id="gp-howto" class="howto"></ul>
-          <p id="gp-players" class="players-line"></p>
+        <section id="page-join" class="entry-page" hidden>
+          <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="522" /></div>
+          <h1 id="join-title" class="pc-h2">Join the table</h1>
+          <p id="join-detail" class="pc-lead entry-detail"></p>
+          <form id="join-form" class="entry-form" novalidate>
+            <div class="entry-name" data-name-for="join"></div>
+            <div class="entry-mic">
+              <button class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="submit" value="on">Join with mic on</button>
+              <button class="pc-btn pc-btn-plain pc-btn-wide" type="submit" value="off">Join with mic off</button>
+            </div>
+          </form>
+          <a id="join-home" class="pc-btn pc-btn-plain entry-home" href="/" data-nav="/">Back to home</a>
         </section>
 
-        <p id="landing-error" class="error" role="alert" hidden></p>
-        <p class="fineprint">Text chat is moderated and logged.</p>
+        <p id="landing-error" class="entry-error" role="alert" hidden></p>
+        <p class="pc-small entry-fine">Messages are moderated and logged.</p>
       </div>
     </main>
 
@@ -108,9 +112,9 @@
         </div>
 
         <div id="aim-box" class="aim-box">
-          <div><span class="aim-label">ANGLE</span> <span id="aim-angle">60°</span></div>
-          <div><span class="aim-label">POWER</span> <span id="aim-power">55%</span></div>
-          <div id="spread-badge" class="spread-badge" hidden>SPREAD READY</div>
+          <div><span class="aim-label">Angle</span> <span id="aim-angle">60°</span></div>
+          <div><span class="aim-label">Power</span> <span id="aim-power">55%</span></div>
+          <div id="spread-badge" class="spread-badge" hidden>Spread ready</div>
         </div>
 
         <div id="banner" class="banner" hidden></div>
@@ -135,11 +139,11 @@
               <button class="tbtn" data-act="move-left" aria-label="Move left">◀</button>
               <button class="tbtn" data-act="move-right" aria-label="Move right">▶</button>
             </div>
-            <button id="fire-btn" class="tbtn fire" data-act="fire">FIRE</button>
+            <button id="fire-btn" class="tbtn fire" data-act="fire">Fire</button>
           </div>
         </div>
         <div id="scores" class="scores" hidden></div>
-        <div id="rotate" class="overlay rotate"><div class="overlay-card">Turn your phone sideways to play</div></div>
+        <div id="rotate" class="overlay rotate"><div class="overlay-card">Turn your screen sideways to play</div></div>
         </div>
 
         <div id="lobby-view" class="view lobby-view" hidden></div>
@@ -149,50 +153,114 @@
         <div id="jigsaw-view" class="view jigsaw-view" hidden></div>
         <div id="toasts" class="toasts" aria-live="polite"></div>
 
-        <div class="toolbar">
-          <button id="btn-share" class="tool-btn" type="button" hidden title="Invite friends">Invite</button>
-          <button id="btn-sound" class="tool-btn" type="button" title="Sound (M)" aria-label="Sound on">🔊</button>
-          <button id="btn-voice" class="tool-btn" type="button" hidden title="Voice chat" aria-label="Voice chat">🎙️</button>
-          <button id="btn-fullscreen" class="tool-btn" type="button" title="Fullscreen (F)" aria-label="Fullscreen">⛶</button>
-          <button id="btn-chat" class="tool-btn chat-toggle" type="button" title="Chat (Enter)" aria-label="Chat">💬<span id="chat-unread" class="badge" hidden></span></button>
-          <button id="btn-menu" class="tool-btn" type="button" title="Menu" aria-label="Menu">☰</button>
+        <!-- The table's bar: words, not icons (DESIGN.md). -->
+        <nav class="toolbar pc-toolbar" aria-label="Table">
+          <button id="btn-mic" class="pc-btn pc-btn-main" type="button" hidden>Mute mic</button>
+          <button id="btn-share" class="pc-btn pc-btn-plain" type="button" hidden>Invite</button>
+          <button id="btn-help" class="pc-btn pc-btn-plain" type="button">Help</button>
+          <button id="btn-menu" class="pc-btn pc-btn-plain" type="button">Menu</button>
+          <!-- Last, so it sits by where Messages opens; hidden while Messages is open. -->
+          <button id="btn-chat" class="pc-btn pc-btn-plain chat-toggle" type="button">Messages<span id="chat-unread" class="pc-badge" hidden></span></button>
+        </nav>
+        <!-- Tanks on a phone held sideways folds the bar away; this paper tab pulls it down and back up. -->
+        <button id="bar-tab" class="bar-tab" type="button" aria-expanded="false" aria-label="Show the bar">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <span class="bar-tab-dot" hidden></span>
+        </button>
+
+        <!-- How to play the game on screen. -->
+        <div id="help" class="sheet-wrap" hidden>
+          <div class="pc-sheet sheet help-sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
+            <h2 id="help-title" class="pc-h2">How to play</h2>
+            <div id="help-body"></div>
+            <p class="pc-small">On a keyboard: Enter for messages, M for sound, F for full screen, Esc for the menu.</p>
+            <button id="help-close" class="pc-btn pc-btn-main pc-btn-wide" type="button">Close</button>
+          </div>
         </div>
 
-        <div id="voice-panel" class="voice-panel" hidden></div>
-        <div id="menu" class="menu" hidden>
-          <div class="menu-card">
-            <h2>Menu</h2>
-            <label class="field">
-              <span>Name</span>
-              <div class="name-row">
-                <input id="menu-name" maxlength="20" autocomplete="off" spellcheck="false" />
-                <button id="menu-name-save" class="btn btn-secondary" type="button">Save</button>
+        <!-- Invite someone: a link from you, optionally for one person by name. -->
+        <div id="invite" class="sheet-wrap" hidden>
+          <div class="pc-sheet sheet" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+            <h2 id="invite-title" class="pc-h2">Invite someone</h2>
+            <p>Send them a link. When they open it, they come straight to this table.</p>
+            <div class="pc-field">
+              <label for="invite-name">Their name <span class="pc-small">(you can leave it blank)</span></label>
+              <input id="invite-name" class="pc-input" maxlength="20" placeholder="Like Penny" autocomplete="off" autocapitalize="words" spellcheck="false" />
+            </div>
+            <p class="pc-small sheet-note">With a name, it’s filled in for them, so they just tap Join.</p>
+            <button id="invite-send" class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="button">Send the invite</button>
+            <p class="invite-code">Or tell them the table code: <b id="invite-code"></b></p>
+            <button id="invite-close" class="pc-btn pc-btn-plain pc-btn-wide" type="button">Done</button>
+          </div>
+        </div>
+
+        <!-- Phones that can't go full screen: add Games Drawer to the home screen instead. -->
+        <div id="home-help" class="sheet-wrap" hidden>
+          <div class="pc-sheet sheet" role="dialog" aria-modal="true" aria-labelledby="home-help-title">
+            <h2 id="home-help-title" class="pc-h2">Play full screen</h2>
+            <p>This browser can’t hide its bars. Instead, add Games Drawer to your home screen: it opens full screen, like an app.</p>
+            <ul class="help-steps">
+              <li data-for="ios"><b>iPhone (Safari):</b> tap the <b>Share</b> button (the square with an arrow), then <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+              <li data-for="android"><b>Android (Chrome):</b> tap <b>⋮</b> at the top right, then <b>Add to Home screen</b> (or <b>Install app</b>).</li>
+            </ul>
+            <p>Then open Games Drawer from its icon on your home screen.</p>
+            <button id="home-help-close" class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="button">Got it</button>
+          </div>
+        </div>
+
+        <!-- How to let the browser use the mic. -->
+        <div id="mic-help" class="sheet-wrap" hidden>
+          <div class="pc-sheet sheet" role="dialog" aria-modal="true" aria-labelledby="mic-help-title">
+            <h2 id="mic-help-title" class="pc-h2">Your mic is blocked</h2>
+            <p>The browser was told not to let Games Drawer use the microphone. To allow it:</p>
+            <ul class="help-steps">
+              <li><b>iPhone or iPad:</b> tap <b>aA</b> at the left of the address bar, then <b>Website Settings</b>, then set <b>Microphone</b> to <b>Allow</b>.</li>
+              <li><b>Android (Chrome):</b> tap the icon at the left of the address bar, then <b>Permissions</b>, and turn on <b>Microphone</b>.</li>
+              <li><b>Computer:</b> click the icon at the left of the address bar and allow the <b>Microphone</b>.</li>
+            </ul>
+            <p>Then tap <b>Try again</b>.</p>
+            <button id="mic-help-retry" class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="button">Try again</button>
+            <button id="mic-help-close" class="pc-btn pc-btn-plain pc-btn-wide" type="button">Not now</button>
+          </div>
+        </div>
+
+        <div id="menu" class="sheet-wrap" hidden>
+          <div class="pc-sheet sheet menu-sheet" role="dialog" aria-modal="true" aria-label="Menu">
+            <div class="sheet-actions">
+              <!-- The game on screen can add its own actions here (Jigsaw: New puzzle). -->
+              <div id="menu-game" class="menu-game"></div>
+              <button id="menu-lobby" class="pc-btn pc-btn-plain pc-btn-wide" type="button" hidden>Switch game</button>
+              <button id="menu-leave" class="pc-btn pc-btn-alert pc-btn-wide" type="button">Leave table</button>
+            </div>
+            <section id="menu-mic" class="sheet-part"></section>
+            <section class="sheet-part">
+              <h3 class="pc-h3">Your name</h3>
+              <div class="entry-row">
+                <input id="menu-name" class="pc-input" maxlength="20" autocomplete="off" spellcheck="false" aria-label="Your name" />
+                <button id="menu-name-save" class="pc-btn pc-btn-plain" type="button">Save</button>
               </div>
-            </label>
-            <label class="field">
-              <span>Volume</span>
-              <input id="menu-volume" type="range" min="0" max="100" step="5" value="80" aria-label="Volume" />
-            </label>
-            <div id="menu-muted" class="menu-muted" hidden></div>
-            <div id="menu-filter" class="menu-filter" hidden>
-              <span class="menu-filter-label">Chat filter</span>
-              <div class="seg" role="radiogroup" aria-label="Chat filter">
+            </section>
+            <section class="sheet-part">
+              <h3 class="pc-h3">Sound</h3>
+              <div class="sound-row">
+                <button id="btn-sound" class="pc-btn pc-btn-plain" type="button">Turn sound off</button>
+                <input id="menu-volume" type="range" min="0" max="100" step="5" value="80" aria-label="Volume" />
+              </div>
+            </section>
+            <section id="menu-fullscreen" class="sheet-part">
+              <button id="btn-fullscreen" class="pc-btn pc-btn-plain pc-btn-wide" type="button">Full screen</button>
+            </section>
+            <div id="menu-muted" class="sheet-part menu-muted" hidden></div>
+            <section id="menu-filter" class="sheet-part menu-filter" hidden>
+              <h3 class="pc-h3">Message filter</h3>
+              <div class="seg" role="radiogroup" aria-label="Message filter">
                 <button type="button" role="radio" data-filter="none">None</button>
                 <button type="button" role="radio" data-filter="hide">Hide</button>
                 <button type="button" role="radio" data-filter="block">Block</button>
               </div>
-              <p id="menu-filter-detail" class="hint"></p>
-            </div>
-            <p id="menu-room" class="hint"></p>
-            <div class="help">
-              <div id="menu-help"></div>
-              <p><b>Anywhere:</b> Enter chat, M mute sound, F fullscreen, Esc menu.</p>
-            </div>
-            <div class="actions">
-              <button id="menu-close" class="btn btn-primary" type="button">Close</button>
-              <button id="menu-lobby" class="btn btn-secondary" type="button" hidden>Back to lobby</button>
-              <button id="menu-leave" class="btn btn-secondary" type="button">Leave room</button>
-            </div>
+              <p id="menu-filter-detail" class="pc-small"></p>
+            </section>
+            <button id="menu-close" class="pc-btn pc-btn-main pc-btn-wide" type="button">Close</button>
           </div>
         </div>
         <div id="reconnect" class="overlay" hidden><div class="overlay-card">Reconnecting…</div></div>
@@ -200,18 +268,16 @@
 
       <aside id="chat" class="chat">
         <header class="chat-head">
-          <h2>Chat</h2>
-          <button id="chat-collapse" class="icon-btn" type="button" aria-label="Hide chat">
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          </button>
+          <h2>Messages</h2>
+          <button id="chat-collapse" class="pc-btn pc-btn-plain" type="button">Close</button>
         </header>
         <ol id="chat-log" class="chat-log"></ol>
         <form id="chat-form" class="chat-form">
           <div class="chat-row">
-            <input id="chat-input" maxlength="200" placeholder="Message…" autocomplete="off" enterkeyhint="send" aria-describedby="chat-hint" />
-            <button id="chat-send" class="btn btn-primary chat-send" type="submit" disabled>Send</button>
+            <input id="chat-input" class="pc-input" maxlength="200" placeholder="Write a message" autocomplete="off" enterkeyhint="send" aria-label="Write a message" aria-describedby="chat-hint" />
+            <button id="chat-send" class="pc-btn pc-btn-main chat-send" type="submit" disabled>Send</button>
           </div>
-          <p id="chat-hint" class="chat-hint" role="status" hidden>Keep Games Drawer chat family friendly.</p>
+          <p id="chat-hint" class="chat-hint pc-small" role="status" hidden>Keep Games Drawer messages family friendly.</p>
         </form>
       </aside>
     </div>

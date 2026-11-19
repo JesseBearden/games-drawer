@@ -57,10 +57,12 @@ describe('jigsaw piece shapes', () => {
 });
 
 describe('jigsaw bits and pieces', () => {
-  it('measures progress by how many joins are left', () => {
+  it('measures progress by how many pieces are in place: joined up, or set in the frame', () => {
     const loose = Array.from({ length: 4 }, (_, i) => ({ x: 0, y: 0, g: i }));
     expect(puzzleProgress(loose)).toBe(0);
-    expect(puzzleProgress(loose.map((p) => ({ ...p, g: p.g < 2 ? 0 : p.g })))).toBeCloseTo(1 / 3);
+    expect(puzzleProgress(loose.map((p) => ({ ...p, g: p.g < 2 ? 0 : p.g })))).toBe(0.5);
+    // A single piece set in its spot counts too.
+    expect(puzzleProgress(loose, [3])).toBe(0.25);
     expect(puzzleProgress(loose.map((p) => ({ ...p, g: 0 })))).toBe(1);
   });
 
