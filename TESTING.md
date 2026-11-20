@@ -55,6 +55,139 @@ old look until steps 2–4.
 - [ ] Public play is set aside for now: no Play now anywhere.
 - [ ] Link previews (iMessage etc.) use the new share card. Add to Home Screen uses the drawer icon.
 
+## Felt look (trial, `felt` branch)
+
+Same layout as Cut Paper, made of felt (`felt.css`). Dominoes is the first game done properly;
+the rest pick up the felt colours and depth but haven't been looked at yet. The felt itself is
+matched to your swatch sheet (`scripts/felt-textures.cjs`).
+
+**The table comes first (new, 2026-11-20).** Nothing starts until everyone says they're ready.
+
+- [ ] **Start a table** asks only for your name and the mic now (no game list). From `/dominoes`
+      (or another game's page) it says "Your table opens with Dominoes picked".
+- [ ] You land at **Your table**: who's here (with Invite someone right under them), the mic
+      strip if your mic is off, the games, and (for Hearts, Spades and Dominoes) **Pick your
+      seat**: four seats around a little piece of green table. Nothing is dealt yet.
+- [ ] Invite someone from a second device. They land at the table too, seeing the same pick.
+- [ ] Tap a seat: it turns sunflower with your name. Tap another: you move. Someone else's seat
+      can't be taken ("Liz is sitting there."). Empty seats say "Tap to sit" (the computer plays them).
+- [ ] Spades: "Partners sit across from each other. Jesse and Mom play against the computer."
+- [ ] The strip at the bottom stays on screen as you scroll: the game's name, who we're waiting
+      for, and **I'm ready**. Tap it: your name turns mint with "✓ Ready", and the others see
+      "Everyone else is ready." once only they are left. **Not ready** takes it back.
+- [ ] When the last person taps Ready, everyone goes into the game, sitting where they picked
+      (partners across from each other in Spades). Messages says "Everyone's ready: Spades is starting."
+- [ ] Anyone can pick a different game at the table; everyone's Ready starts over.
+- [ ] Someone whose phone drops at the table doesn't hold up the start (their seat is played for
+      them until they're back, or until someone new needs their place once the table is full).
+      Someone who taps Leave table gives up their seat.
+- [ ] Menu, Switch game: everyone goes back to the table, nothing picked.
+- [ ] A controller can do it all: move to a game, A to pick it, down to I'm ready, A.
+- [ ] No "Message filter" line at the bottom of the table any more (it's still in the Menu).
+
+**Fixes from your walk-through (new, 2026-11-20, later):**
+
+- [ ] **Leave and come back over and over** (say a phone, with a computer already at the table under
+      the same name): the phone is "Jesse 2" every time, never 3 or 4, and the table never says
+      it's full. Leave table now gives up your place for good; coming back is joining again.
+- [ ] Four at the table, then one phone just closes its tab (no Leave table). A fifth person is
+      turned away for the first 10 seconds ("full"), then gets in, taking the seat that was being
+      played for the one who left.
+- [ ] Jigsaw on a touch screen: dragging a piece shows the magnifier with no popup explaining it.
+- [ ] White felt (Join on home, the Ready strip, others' messages, the sound knob) is calmer:
+      finer grain, fewer dark flecks. Does it still read as felt? Does it still look dirty?
+- [ ] Phone, with the bar's dropdown open: turn the phone and the dropdown folds itself.
+- [ ] Dominoes, zoomed in: the tiles fade softly on all four sides, in Safari too. On a phone
+      held sideways they fade at the board's own sides (clear of the names and your tiles); on
+      an iPad or computer they carry on under the side name tags and fade near the screen's edges.
+- [ ] **Name tags all one size** (Hearts, Spades, Dominoes; phone, iPad, computer): the tags
+      across the top of a phone split the width evenly, yours matches them, and a long name
+      shrinks a little then ends in "…". Someone who dropped out shows a small "zzz" after
+      their name, and their tag stays two lines like everyone's.
+- [ ] No "Bleep Bloop" any more (too like Beep Boop).
+- [ ] Dominoes: when a line reaches the edge it turns as an L, the turning tile just past the
+      end of the line (not tucked beside the last tile). A line never turns at a double or
+      right after one: it runs on a little past the edge, so no double looks like a spinner.
+- [ ] Jigsaw, "Continue a puzzle": each saved puzzle is on white felt (easy to read), with a red
+      bin button instead of "Remove". On a phone the buttons sit on their own line under the name.
+      The bin still asks first if the puzzle is part done.
+- [ ] **iPhone home screen icon, turning the phone** (your bug: after turning sideways and back,
+      taps landed a status bar's height below your finger, and one finger zoomed the puzzle).
+      **First delete the Games Drawer icon and add it to the home screen again** (an iPhone keeps
+      the old status bar setting for an icon it already has). Then:
+  - [ ] The page sits below the time and battery, as it first did, and reaches all the way to
+        the bottom of the screen: no dark band, nothing cut off (Start puzzle, Jigsaw's tools).
+  - [ ] Turn sideways and back two or three times: every button still works where you tap it
+        (the dropdown, Help, Jigsaw's tools at the bottom), and the page settles back in place
+        within a moment: not pushed up under the time with a dark band at the bottom. (A small
+        jump as it settles is expected: we tried to remove it and let it go, 2026-11-20.)
+  - [ ] Jigsaw and Dominoes: after turning, one finger moves the table and two fingers zoom.
+  - [ ] Start, join and the table page still scroll where they should, and typing a message
+        doesn't leave the page shifted after the keyboard closes.
+  (Tried and dropped: running the page under the status bar. iOS 26 then leaves a status
+  bar's height empty at the bottom and cuts the page off there.)
+
+- [ ] **New (2026-11-21):** home has your felt hands-and-puzzle picture and felt drawer icon; the
+      game tiles have your felt icons, two across, with bigger names.
+- [ ] The table-code box on home is clean white (no felt grain).
+- [ ] Names stop at 15 letters as you type (the box says "First name, like Mike or Mike B").
+- [ ] Reload the page at a table (or let a phone sleep a few seconds): Messages says nothing. Stay
+      away more than 10 seconds: "Liz left.", then "Liz is back." when you return. Leave table
+      on purpose: "Liz left." straight away.
+- [ ] iPad and computer: the bar has your mic on the left, and Messages, Invite, Help and Menu
+      together on the right, each with a small icon.
+- [ ] Phones: the bar is folded. Your mic is a red tab in the top-left corner; a caret tab in the
+      top-right drops Messages, Invite, Help and Menu down as a stack of buttons. Using one, or
+      touching the game, folds it again. A red dot on the caret means unread messages.
+- [ ] Dominoes are matte ceramic (clean warm white, pressed-in pips, crisp middle line).
+- [ ] Tanks on a phone held sideways: the controls run down the right edge (Angle, Power, Fire),
+      and the battlefield gets the full height to their left.
+- [ ] Tanks: the tanks, helicopters, parachutes, hearts, windsock and clouds are your felt art.
+      Each tank is its player's colour. (A no-wind windsock is still the old paper one.)
+- [ ] `/felt-swatches.html` on the dev server: our felt laid out like your swatch sheet. Look at
+      it on the iPad, where it's sharper than any screenshot.
+- [ ] Dominoes on the iPad and a phone: green card-table felt (from your mock), cream felt bar,
+      tags and buttons with a lit top edge, a visible side (a darker edge of their own colour)
+      and a soft shadow, like layers of felt. "Ends add up to" is near-white on the green.
+- [ ] Pieces look laid on top, like the mock: a lit top edge and a dark shadow hugging them, no
+      visible side. No blue outlines on buttons anywhere; something picked lifts or turns cobalt.
+- [ ] Zoom the Dominoes board (pinch or wheel): the green cloth zooms and pans with the tiles.
+      Tiles carry on sideways out to near the screen's edges and fade there (under the side name
+      tags), not at the board's narrower box. The dashed "play here" spot keeps a tile's
+      corners (not a pill) and thin dashes however far you zoom.
+- [ ] Hearts, Spades and Dominoes are all on the green card table.
+- [ ] Jigsaw: the table is a calm light grey felt, every loose piece casts a small shadow (so
+      light pieces still stand out), and the frame for the finished picture is a sheet of cream
+      felt with a shadow and the dashed edge. Joined pieces have no shadow across their seams, and
+      pieces locked into the frame lie flat. Zoom and drag around: the cloth and the
+      frame's felt zoom and move with the pieces.
+- [ ] On a computer, buttons (the bar, Menu, Jigsaw's tools at the bottom) lift when the
+      pointer is over them and sink when pressed.
+- [ ] Words look pressed into the felt. Words straight on a table (green or grey) are
+      near-white; "Pick a game" sits on the cream felt, like home.
+- [ ] Messages is a cream felt sheet: "Liz joined." in dark ink, others' notes white felt, yours
+      cobalt. Between Dominoes hands, "Everyone else is ready." is dark ink on the score sheet.
+- [ ] On a phone held sideways, open the Menu and scroll it: the felt moves with the words.
+- [ ] The Menu has no thin lines between its parts. The sound slider is a groove in the felt,
+      filled with cobalt up to the volume, with a white felt knob; it goes all the way to both
+      ends.
+- [ ] Pressing a button pushes it down into the felt.
+- [ ] Tiles are satin ivory (no shine): warm cream with a faint grain along their length, a
+      softly rounded edge, dark painted pips, a cut-in middle line, a thick
+      side and a dark shadow. The one you pick lifts higher (no blue glow); the ones you can't
+      play are a darker, warm ivory with faded pips.
+- [ ] Scores, Menu and Invite dim the table under a warm shadow, not a blue one.
+
+- [ ] Tanks: a felt battlefield (muted blue sky, slate felt mountains, ground in layers of olive,
+      tan, orange and rust over charcoal). Craters cut cleanly through the layers. All the controls
+      are one felt strip along the bottom (move from level 4, Angle with its number, Power with its
+      number, Fire), on every device; there's no Angle / Power tag in the top right any more. The
+      whole battlefield sits above the strip. On a wide phone, past the map's edges the hills carry
+      on as a faded mirror (no smeared streaks).
+- [ ] Spades: Us and Them sit in the table's top-left corner and read "Us 0 · 2 of 5 tricks".
+- [ ] A phone held sideways, end of a Dominoes hand: all four scores and both buttons fit.
+- [ ] Tanks held upright: the Menu and Messages open on top of "Turn your phone sideways".
+
 ## Cut Paper, steps 2–4: the games (new)
 
 Every game now has the paper look. Try each one on the phone (both ways up), the iPad and the
@@ -62,7 +195,7 @@ computer:
 
 - [ ] **Hearts and Spades**: ivory card stock (lighter than before) with the cut-paper royals, on the blue mat. Name
       tags are paper; whose turn it is turns yellow and lifts.
-      The others' hands show a little pile of card backs and "13 cards". On a phone held upright
+      The other players' tags show just their name and score (no pile of cards). On a phone held upright
       the cards are bigger than before; tell me if they're too big or too small.
 - [ ] **Spades**: your team's tags are lilac; the bid buttons are paper; "Us" and "Them" are
       little paper tags.
@@ -217,10 +350,10 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       should both be on screen. Tell me if the tiles are too small, or if Scores belongs
       somewhere else.
 - [ ] Hearts and Spades upright: your name and Scores are the same height there too.
-- [ ] iPad and computer (all three card games): the player on your left has a tag as wide as
-      their name, like the one on your right (it stretched across that side). Your tag and Scores
-      line up exactly, top and bottom, even on your turn (your tag no longer lifts there; the
-      yellow says it's your turn).
+- [ ] iPad and computer (all three card games): every name tag is the same width (changed
+      2026-11-20; they used to be as wide as each name). Your tag and Scores line up exactly,
+      top and bottom, even on your turn (your tag no longer lifts there; the yellow says it's
+      your turn).
 - [ ] **Zoom**: there are no zoom buttons. On the phone and iPad, pinch the board to zoom, and
       drag with one finger to look around. Dragging never
       plays a tile; tapping a spot while zoomed in still plays it. On the computer, the mouse
@@ -234,19 +367,20 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
 - [ ] **Computer players** (Hearts, Spades, Dominoes) have made-up robot names (Robo-Bob, Beep
       Boop, Sprocket, Tin Can Tom…), never two the same at a table, and a small computer screen
       after their name on the name tag. A long name gives way to "…" but the screen stays. The
-      score sheets leave the screen off. No "Computer" word anywhere, and no "Partner" in Spades
+      score sheets leave the screen off. No "Computer" label on the name tags, and no "Partner" in Spades
       (your partner is the one across from you, on lilac). Tanks keeps its tank-pun names, and
-      its scores no longer say "(computer)". Someone who dropped out still says "Away". Does it
-      make it clear to your mom who's a person?
+      its scores no longer say "(computer)". Someone who dropped out gets a small "zzz" after
+      their name (no longer an "Away" line). Does it make it clear to your mom who's a person?
 - [ ] **Score sheets flipped** (all three): one row per player (Spades: Us and Them), you first,
       the name on the left with all the room it needs. Across: the points each hand scored
       ("Hand 1", "Hand 2"…), then a narrow, bold Total. The hand that just ended is darker. On a
       phone only the last 3 hands show (8 on bigger screens); older ones drop off the left.
       Before any hand is over it's just names and totals.
 - [ ] As the table fills up, everything shrinks to fit (phone held either way, and computer).
-      The east and west lines both bend down at the edges, like the sides of a table, and the
-      spinner's up and down lines run straight. Nothing overlaps (you saw an overlap after a
-      double at a corner, and the old bends made a pinwheel shape; both are fixed).
+      The east and west lines both bend down at the edges, like the sides of a table, and step
+      outward again at the bottom edge. The spinner's up line bends east at the top edge instead
+      of growing into a tall column (new); its down line runs straight between the two sides.
+      Nothing overlaps, and the bends never make a pinwheel shape.
 - [ ] Still guesses, worth asking the family: teams or everyone for themselves? Who leads each
       hand after the first? What does a blocked hand (nobody can play) score? Right now the
       lowest hand scores everyone else's pips, rounded to 5.

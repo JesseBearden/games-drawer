@@ -55,13 +55,17 @@ test('a controller gets you from the home page into Hearts and plays a hand', as
   await moveUntil(page, 'down', '#home-start');
   await press(page, 'a');
   await expect(page.locator('#page-start')).toBeVisible();
-  // Typing a name is for the keyboard; the d-pad picks the game and starts.
+  // Typing a name is for the keyboard; the d-pad starts the table…
   await page.locator('#start-name').fill('Pad');
-  await moveUntil(page, 'up', '#start-games input');
-  await moveUntil(page, 'right', 'input[value="hearts"]');
-  await press(page, 'a');
-  await expect(page.locator('input[value="hearts"]')).toBeChecked();
   await moveUntil(page, 'down', '#start-form button[value="off"]');
+  await press(page, 'a');
+  await expect(page.locator('#game')).toHaveAttribute('data-view', 'lobby');
+  // …then picks Hearts at the table and says it's ready.
+  await moveUntil(page, 'down', '[data-game]', 20);
+  await moveUntil(page, 'right', '[data-game="hearts"]', 6);
+  await press(page, 'a');
+  await expect(page.locator('[data-game="hearts"]')).toHaveAttribute('aria-pressed', 'true');
+  await moveUntil(page, 'down', '.tb-go [data-act="ready"]', 20);
   await press(page, 'a');
   await expect(page.locator('#hearts-view .ht-hand .card')).toHaveCount(13);
   // Let the card pictures finish loading, as they would before a person picks up the controller.

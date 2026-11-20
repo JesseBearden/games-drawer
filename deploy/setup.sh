@@ -1,63 +1,88 @@
 #!/usr/bin/env bash
 # setup.sh <templates dir>
 #
-# Sets up the game server machine: Caddy (HTTPS), coturn (voice relay), the service account,
-# secrets and config files. The rollout tool runs it from each release whenever this file
-# changes, so it must be safe to run again: every step checks or overwrites.
+# Sets up a game server box: Caddy (routes requests to the right box), coturn (voice relay), the
+# shared disk, the service account, secrets and config files. The rollout tool runs it from each
+# release whenever this file changes, so it must be safe to run again: every step checks or
+# overwrites.
 #
-# Reads /etc/games-drawer/deploy.env (written when AWS creates the machine):
-#   DOMAIN   the site's domain, e.g. games.example.com (staging is staging.DOMAIN)
-#   BUCKET   S3 bucket with release bundles
-#   REGION   AWS region
+# Boxes are disposable: a deploy launches a new one and the old one shuts itself down once its
+# games are done. Nothing that matters lives only on a box:
+#   - Jigsaw saves and logs are on the shared disk (EFS), mounted at /mnt/games-drawer;
+#   - secrets are in Parameter Store (/games-drawer/secrets), made by the first box that needs them.
+#
+# Reads /etc/games-drawer/deploy.env (written when AWS launches the box):
+#   DOMAIN       the site's domain, e.g. games.example.com (staging is staging.DOMAIN)
+#   BUCKET       S3 bucket with release bundles
+#   REGION       AWS region
+#   FILE_SYSTEM  the shared disk's id (fs-…)
 set -euo pipefail
 tpl="${1:?usage: setup.sh <templates dir>}"
 source /etc/games-drawer/deploy.env
 export DEBIAN_FRONTEND=noninteractive
+export PATH="$PATH:/snap/bin"
 
 # ---------------------------------------------------------------- packages
-if ! command -v caddy >/dev/null || ! command -v turnserver >/dev/null; then
+if ! command -v caddy >/dev/null || ! command -v turnserver >/dev/null || ! command -v mount.nfs4 >/dev/null; then
   apt-get update -q
   apt-get install -y -q debian-keyring debian-archive-keyring apt-transport-https curl gnupg
-  # Caddy's own package repository (Ubuntu's copy is too old for weighted canaries).
+  # Caddy's own package repository (Ubuntu's copy is too old for weighted routing).
   if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
     chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
     apt-get update -q
   fi
-  apt-get install -y -q caddy coturn
+  apt-get install -y -q caddy coturn nfs-common
 fi
 # Security updates install themselves (Ubuntu's default, made explicit).
 apt-get install -y -q unattended-upgrades >/dev/null
 
-# ---------------------------------------------------------------- account and folders
-id games >/dev/null 2>&1 || useradd --system --home-dir /opt/games-drawer --shell /usr/sbin/nologin games
+# ---------------------------------------------------------------- account
+# The same user and group ids on every box: they all write to the shared disk.
+getent group games >/dev/null || groupadd --system --gid 1500 games
+id games >/dev/null 2>&1 || useradd --system --uid 1500 --gid 1500 --home-dir /opt/games-drawer --shell /usr/sbin/nologin games
 install -d -m 755 /opt/games-drawer /opt/games-drawer/releases /etc/games-drawer
-install -d -m 750 -o games -g games /var/log/games-drawer
-# Jigsaw saves (both copies of the game read and write here, so a deploy keeps them).
-install -d -m 750 -o games -g games /var/lib/games-drawer /var/lib/games-drawer/puzzles
 
-# ---------------------------------------------------------------- secrets (made once, never leave this machine)
-if [ ! -f /etc/games-drawer/secrets.env ]; then
-  (
-    umask 077
-    {
-      echo "SESSION_SECRET=$(openssl rand -hex 32)"
-      echo "STATS_TOKEN=$(openssl rand -hex 24)"
-      echo "TURN_SECRET=$(openssl rand -hex 32)"
-    } > /etc/games-drawer/secrets.env
-  )
-fi
-# shellcheck disable=SC1091
-source /etc/games-drawer/secrets.env
-
-# ---------------------------------------------------------------- addresses (from the EC2 metadata service)
+# ---------------------------------------------------------------- this box (from the EC2 metadata service)
 token="$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"
 meta() { curl -fsS -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1"; }
 public_ip="$(meta public-ipv4)"
 private_ip="$(meta local-ipv4)"
+instance_id="$(meta instance-id)"
+printf 'PUBLIC_IP=%s\nPRIVATE_IP=%s\nINSTANCE_ID=%s\n' "$public_ip" "$private_ip" "$instance_id" > /etc/games-drawer/box.env
 
-# ---------------------------------------------------------------- game server settings shared by every copy
+# ---------------------------------------------------------------- the shared disk (EFS)
+mnt=/mnt/games-drawer
+install -d -m 755 "$mnt"
+fstab_line="${FILE_SYSTEM}.efs.${REGION}.amazonaws.com:/ ${mnt} nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0"
+if ! grep -qF "$fstab_line" /etc/fstab; then
+  sed -i "\|[[:space:]]${mnt}[[:space:]]|d" /etc/fstab
+  echo "$fstab_line" >> /etc/fstab
+  systemctl daemon-reload
+fi
+for _ in $(seq 1 30); do
+  mountpoint -q "$mnt" && break
+  mount "$mnt" 2>/dev/null || sleep 5
+done
+mountpoint -q "$mnt" || { echo "Couldn't mount the shared disk ${FILE_SYSTEM}." >&2; exit 1; }
+# Jigsaw saves (every box reads and writes them) and logs (a folder per box; the admin page adds them up).
+install -d -m 750 -o games -g games "$mnt/puzzles" "$mnt/logs" "$mnt/logs/$instance_id"
+
+# ---------------------------------------------------------------- secrets (shared by every box, in Parameter Store)
+param=/games-drawer/secrets
+get_secrets() { aws ssm get-parameter --region "$REGION" --name "$param" --with-decryption --query Parameter.Value --output text 2>/dev/null; }
+if ! secrets="$(get_secrets)"; then
+  # The first box makes them. If another box makes them at the same moment, theirs wins.
+  made="$(printf 'SESSION_SECRET=%s\nSTATS_TOKEN=%s\nTURN_SECRET=%s' "$(openssl rand -hex 32)" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)")"
+  aws ssm put-parameter --region "$REGION" --name "$param" --type SecureString --value "$made" --no-overwrite >/dev/null 2>&1 || true
+  secrets="$(get_secrets)"
+fi
+(umask 077 && printf '%s\n' "$secrets" > /etc/games-drawer/secrets.env)
+# shellcheck disable=SC1091
+source /etc/games-drawer/secrets.env
+
+# ---------------------------------------------------------------- game server settings
 cat > /etc/games-drawer/common.env <<EOF
 NODE_ENV=production
 HOST=127.0.0.1
@@ -65,8 +90,10 @@ TRUST_PROXY=1
 ALLOWED_ORIGINS=https://${DOMAIN},https://staging.${DOMAIN}
 MAX_PUBLIC_ROOMS=${MAX_PUBLIC_ROOMS:-10}
 MAX_PRIVATE_ROOMS=${MAX_PRIVATE_ROOMS:-50}
-PUZZLE_DIR=/var/lib/games-drawer/puzzles
-TURN_URLS=turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp
+PUZZLE_DIR=${mnt}/puzzles
+LOG_DIR=${mnt}/logs/${instance_id}
+ADMIN_LOG_DIRS=${mnt}/logs
+TURN_URLS=turn:${public_ip}:3478?transport=udp,turn:${public_ip}:3478?transport=tcp
 EOF
 
 # ---------------------------------------------------------------- systemd unit and deploy command
@@ -74,7 +101,7 @@ install -m 644 "$tpl/games-drawer@.service" /etc/systemd/system/games-drawer@.se
 install -m 755 "$tpl/games-drawer-deploy" /usr/local/bin/games-drawer-deploy
 systemctl daemon-reload
 
-# ---------------------------------------------------------------- voice relay
+# ---------------------------------------------------------------- voice relay (each box runs its own, on its own address)
 fill() { sed -e "s|@DOMAIN@|${DOMAIN}|g" -e "s|@PUBLIC_IP@|${public_ip}|g" -e "s|@PRIVATE_IP@|${private_ip}|g" -e "s|@TURN_SECRET@|${TURN_SECRET}|g" "$1"; }
 fill "$tpl/turnserver.conf" > /etc/turnserver.conf.new
 chmod 640 /etc/turnserver.conf.new
@@ -90,10 +117,10 @@ else
 fi
 
 # ---------------------------------------------------------------- web server
-if [ ! -f /etc/caddy/games-drawer-upstreams.caddy ]; then
-  echo 'respond "Starting up. Try again in a minute." 503' > /etc/caddy/games-drawer-upstreams.caddy
+if [ ! -f /etc/caddy/games-drawer-routes.caddy ]; then
+  echo 'respond "Starting up. Try again in a minute." 503' > /etc/caddy/games-drawer-routes.caddy
 fi
-fill "$tpl/Caddyfile" > /etc/caddy/Caddyfile.new
+install -m 644 "$tpl/Caddyfile" /etc/caddy/Caddyfile.new
 caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile.new >/dev/null
 if ! cmp -s /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile; then
   mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile
@@ -103,4 +130,4 @@ else
   rm -f /etc/caddy/Caddyfile.new
 fi
 
-echo "Setup done for ${DOMAIN} (${public_ip})."
+echo "Setup done for ${DOMAIN} on ${instance_id} (${public_ip})."

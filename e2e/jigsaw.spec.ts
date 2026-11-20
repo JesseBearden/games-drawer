@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, newPlayer, test } from './fixtures';
-import { at, createRoom, joinByInvite, watchErrors } from './helpers';
+import { at, createRoom, joinByInvite, watchErrors, tapBar } from './helpers';
 import { PUZZLE_IMAGES } from '../packages/shared/src/puzzle';
 
 /**
@@ -128,7 +128,7 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
 
   // Put it away; it shows up under "Continue a puzzle" and comes back as it was.
   page.once('dialog', (d) => d.accept());
-  await page.locator('#btn-menu').click();
+  await tapBar(page, '#btn-menu');
   await page.locator('#menu [data-menu-item="new-puzzle"]').click();
   await expect(view.locator('.pz-setup')).toBeVisible();
   await expect(view.locator('.pz-saves li')).toHaveCount(1);
@@ -142,7 +142,7 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
 
   // Put away again, then take it off the list (it asks first, since it's started).
   page.once('dialog', (d) => d.accept());
-  await page.locator('#btn-menu').click();
+  await tapBar(page, '#btn-menu');
   await page.locator('#menu [data-menu-item="new-puzzle"]').click();
   await expect(view.locator('.pz-saves li')).toHaveCount(1);
   let asked = '';
@@ -184,7 +184,7 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
     asked = d.message();
     void d.accept();
   });
-  await page.locator('#btn-menu').click();
+  await tapBar(page, '#btn-menu');
   await page.locator('#menu [data-menu-item="new-puzzle"]').click();
   await expect(view.locator('.pz-setup')).toBeVisible();
   expect(asked).toContain('won’t be kept');

@@ -6,15 +6,16 @@ import './table.css';
 import './cards.css';
 import './jigsaw.css';
 import './tanks.css';
+import './felt.css';
 import {
   canPlayPrivately,
   cleanName,
   gameForPath,
   gameInfo,
-  GAMES,
   isGameId,
   isInviteToken,
   isRoomCode,
+  MAX_NAME_LENGTH,
   normalizeRoomCode,
   randomName,
   ROOM_CODE_LENGTH,
@@ -36,7 +37,6 @@ import { MIC_CONSTRAINTS, voiceSupported } from './voice';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const NAME_KEY = 'tank.name';
-const LAST_GAME_KEY = 'gd.lastGame';
 const spritesReady: Promise<Sprites> = loadSprites();
 const sfx = new Sfx();
 
@@ -89,10 +89,6 @@ function pageFor(): Page {
 
 let page: Page = pageFor();
 
-/** Each game's paper colour (DESIGN.md), and the order the start page lists them. */
-const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', hearts: 'butter', spades: 'lilac', tanks: 'peach' };
-const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'tanks'];
-const startGames = () => [...GAMES].filter((g) => canPlayPrivately(g.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
 
 function showPage() {
   page = pageFor();
@@ -111,7 +107,7 @@ function showPage() {
     document.title = 'Games Drawer';
   } else if (page.kind === 'start') {
     document.title = page.game ? `${gameInfo(page.game).name} · Games Drawer` : 'Start a table · Games Drawer';
-    renderStartGames(page.game);
+    renderStartDetail(page.game);
     renderName('start');
   } else {
     document.title = 'Join a table · Games Drawer';
@@ -136,21 +132,13 @@ window.addEventListener('popstate', () => {
   if (!app) showPage();
 });
 
-// ------------------------------------------------------------------ choosing a game
+// ------------------------------------------------------------------ starting: what happens next
 
-function renderStartGames(picked: GameId | null) {
-  const games = startGames();
-  const last = stored(LAST_GAME_KEY);
-  const choose = picked ?? (games.find((g) => g.id === last)?.id || games[0]?.id);
-  $('start-games').innerHTML = games
-    .map(
-      (g) => `<label class="pc-choice paper-${GAME_PAPER[g.id] ?? 'sky'}">
-        <input type="radio" name="game" value="${g.id}"${g.id === choose ? ' checked' : ''} />
-        <img src="/art/games/${g.id}.webp" alt="" width="52" height="52" />
-        <span>${escapeHtml(g.name)}${g.underConstruction ? '<small>Work in Progress</small>' : ''}</span>
-      </label>`,
-    )
-    .join('');
+/** The game is picked at the table, together; a game's own page (/dominoes) picks it to begin with. */
+function renderStartDetail(game: GameId | null) {
+  $('start-detail').innerHTML = game
+    ? `Your table opens with <b class="pc-nw">${escapeHtml(gameInfo(game).name)}</b> picked. Invite people, take your seats, and start when everyone’s ready.`
+    : 'Your table opens first: invite people, pick a game together, and start when everyone’s ready.';
 }
 
 // ------------------------------------------------------------------ your name
@@ -172,7 +160,7 @@ function renderName(form: 'start' | 'join') {
   }
   box.innerHTML = `<div class="pc-field"><label for="${form}-name">Your name</label>
     <div class="entry-row">
-      <input id="${form}-name" class="pc-input" name="name" maxlength="20" placeholder="Your first name" autocomplete="given-name" autocapitalize="words" spellcheck="false" value="${escapeHtml(name ?? '')}" />
+      <input id="${form}-name" class="pc-input" name="name" maxlength="${MAX_NAME_LENGTH}" placeholder="First name, like Mike or Mike B" autocomplete="given-name" autocapitalize="words" spellcheck="false" value="${escapeHtml(name ?? '')}" />
       <button type="button" class="pc-btn pc-btn-plain entry-dice" data-name-act="dice" aria-label="Pick a random name" title="Pick a random name">${DICE_SVG}</button>
     </div></div>`;
 }
@@ -231,24 +219,24 @@ $('code-input').addEventListener('input', () => showError(null));
 $('start-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const form = $<HTMLFormElement>('start-form');
-  const game = new FormData(form).get('game');
   const name = chosenName('start');
-  if (!name || !isGameId(game)) return;
-  store(LAST_GAME_KEY, game);
+  if (!name) return;
+  const game = page.kind === 'start' ? page.game : null;
   const mic = (e as SubmitEvent).submitter?.getAttribute('value') !== 'off';
-  start({ kind: 'create-private', game }, { mic, name }, form);
+  start(game ? { kind: 'create-private', game } : { kind: 'create-private' }, { mic, name }, form);
 });
 
 // ------------------------------------------------------------------ join a table
 
-/** "Jesse", "Jesse and Sam", "Jesse, Sam and Mory": each name in bold (escaped: names are typed by people). */
+/** "Jesse", "Jesse and Sam", "Jesse, Sam and Mory": each name in bold (escaped: names are typed by
+ *  people), and never split across two lines. */
 const namesHtml = (people: string[]) => {
-  const b = people.map((n) => `<b>${escapeHtml(n)}</b>`);
+  const b = people.map((n) => `<b class="pc-nw">${escapeHtml(n)}</b>`);
   return b.length <= 1 ? (b[0] ?? '') : `${b.slice(0, -1).join(', ')} and ${b.at(-1)}`;
 };
 
 /** How each game reads in "Join Jesse for …". */
-const GAME_PHRASE: Record<GameId, string> = { jigsaw: 'a puzzle', dominoes: 'dominoes', hearts: 'Hearts', spades: 'Spades', tanks: 'Tanks' };
+const GAME_PHRASE: Record<GameId, string> = { jigsaw: 'a puzzle', dominoes: 'Dominoes', hearts: 'Hearts', spades: 'Spades', tanks: 'Tanks' };
 
 /** The join page re-checks who's there this often, so someone arriving or leaving shows before you join. */
 const JOIN_REFRESH_MS = 8000;
@@ -542,6 +530,28 @@ watchPadMode();
 
 // iOS Safari ignores user-scalable=no; block pinch-zoom so the game never zooms by accident.
 for (const ev of ['gesturestart', 'gesturechange'] as const) document.addEventListener(ev, (e) => e.preventDefault());
+
+/**
+ * From the home screen icon on an iPhone, turning the phone shows or hides the status bar, and
+ * the page can be left scrolled by the bar's height: everything sits too high, with an empty band
+ * at the bottom (seen 2026-11-20). Nothing here scrolls the page itself (each screen scrolls in
+ * its own box), so put it back once a turn has settled, and once the keyboard has gone away.
+ * Never while you're typing: then the phone has moved the page to keep the box in sight.
+ */
+function unscrollPage() {
+  const a = document.activeElement;
+  if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) return;
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+}
+const unscrollSoon = () => {
+  for (const ms of [0, 250, 600, 1200]) window.setTimeout(unscrollPage, ms);
+};
+// (It still shows for a moment before it moves back: a small jump the user is happy to live with.)
+matchMedia('(orientation: portrait)').addEventListener('change', unscrollSoon);
+window.addEventListener('resize', unscrollSoon);
+// The keyboard closing: focus leaves the box, and the visible part of the page grows again.
+document.addEventListener('focusout', () => window.setTimeout(unscrollPage, 150));
+window.visualViewport?.addEventListener('resize', unscrollSoon);
 
 showPage();
 const resume = getActive();

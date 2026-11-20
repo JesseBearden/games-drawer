@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { createRoom, joinByInvite, newPlayer } from './helpers';
+import { createRoom, joinByInvite, newPlayer, tapBar } from './helpers';
 
 test.skip(({ isMobile }) => isMobile, 'one screen size is enough');
 
@@ -20,7 +20,7 @@ test('tables star out swearing by default, and anyone can switch the filter', as
   await expect(friend.locator('#chat-log')).toContainText('well ****');
 
   // The friend switches to Block from the menu; everyone sees the change.
-  await friend.locator('#btn-menu').click();
+  await tapBar(friend, '#btn-menu');
   await friend.locator('#menu-filter [data-filter="block"]').click();
   await expect(friend.locator('#menu-filter [data-filter="block"]')).toHaveAttribute('aria-checked', 'true');
   await expect(host.locator('#chat-log')).toContainText('set the chat filter to Block');

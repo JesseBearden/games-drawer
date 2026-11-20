@@ -1,0 +1,507 @@
+/*
+ * Felt (trial, on the felt branch): the same pieces and layout as Cut Paper, made of wool felt.
+ * Imported last, so it only changes materials:
+ *   - felt sheets in place of the paper ones (public/art/felt/, from scripts/felt-textures.cjs),
+ *     in the colours of the user's felt swatch sheet;
+ *   - depth: every piece lies on the felt under it like the user's mock: a lit top edge, a
+ *     shaded lower edge, soft fibrous outline and a dark shadow hugging it (no visible side);
+ *   - dominoes are hard ivory (smooth, with engraved pips), so they stand out from the soft cloth.
+ * Each piece names its colour beside its background (--fc), which colours its fibrous outline.
+ * No cobalt outlines: the felt stands out on its own (picked things lift or turn cobalt).
+ */
+
+:root {
+  --paper: #e9dac4;
+  --white: #f6f2ea;
+  --mat: #7e828d;
+  --cobalt: #062fae;
+  --sunflower: #fbb505;
+  --tomato: #dc1218;
+  --grass: #4d842c;
+  --sky: #76b1e6;
+  --mint: #a9dab3;
+  --butter: #f6df8a;
+  --lilac: #bba0d5;
+  --peach: #f8b493;
+  --blush: #f6b5bd;
+  --kraft: #c19a71;
+
+  --paper-img: url('/art/felt/paper.webp');
+  --white-img: url('/art/felt/white.webp');
+  --mat-img: url('/art/felt/mat.webp');
+  --cobalt-img: url('/art/felt/cobalt.webp');
+  --sunflower-img: url('/art/felt/sunflower.webp');
+  --tomato-img: url('/art/felt/tomato.webp');
+  --grass-img: url('/art/felt/grass.webp');
+  --sky-img: url('/art/felt/sky.webp');
+  --mint-img: url('/art/felt/mint.webp');
+  --butter-img: url('/art/felt/butter.webp');
+  --lilac-img: url('/art/felt/lilac.webp');
+  --peach-img: url('/art/felt/peach.webp');
+  --blush-img: url('/art/felt/blush.webp');
+  --kraft-img: url('/art/felt/kraft.webp');
+
+  /* The card games are played on green card-table felt (the user's mock), not the grey mat. */
+  --baize: #617b57;
+  --baize-img: url('/art/felt/baize.webp');
+  /* Lighter, calmer tables tried under Jigsaw. */
+  --dove: #b4b7bc;
+  --dove-img: url('/art/felt/dove.webp');
+  --sage: #8ea888;
+  --sage-img: url('/art/felt/sage.webp');
+
+  /* The shadow a piece of felt casts: warm and dark, like the mock's (felt shadows aren't blue). */
+  --shade: 34 26 18;
+  /* The top of a piece, as measured on the user's mock and swatches: a bright line where its
+     rounded upper edge catches the light, a soft lit band below that, and a lower edge that rolls
+     away into shade. */
+  --felt-top:
+    inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 5px 4px -3px rgb(255 255 255 / 0.18),
+    inset 3px 0 3px -2px rgb(255 255 255 / 0.08), inset 0 -4px 4px -1px rgb(var(--shade) / 0.32),
+    inset -2px 0 3px -2px rgb(var(--shade) / 0.1);
+
+  /* Boxes you type into are cut into the felt: white felt at the bottom of the cut, a shadow
+     along its top wall and a darker rim (no navy line). */
+  --cut-in: inset 0 2px 4px rgb(var(--shade) / 0.32), inset 0 0 0 1.5px rgb(var(--shade) / 0.4);
+}
+
+/* Each element softens its own outline with fibres of its own colour (--fc, named beside each
+   piece's background), so the shadows below are set per element. */
+body,
+body *,
+body *::before,
+body *::after {
+  --fuzz: color-mix(in oklab, var(--fc, var(--paper)) 50%, transparent);
+  /* A piece lying on the felt, as in the mock: no visible side, just a dark shadow hugging it
+     (strongest right under its bottom edge, a little at the sides), fading within a few px, and a
+     soft wider shade. That shadow is what makes it look thick and laid on top. */
+  /* Pressed: pushed flat into the felt under it. */
+  --lift-0:
+    var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 1.5px 0 rgb(var(--shade) / 0.35), 0 1px 1.5px 0 rgb(var(--shade) / 0.4);
+  /* Lying flat (measured on the mock's name tag: about half as bright as the table right under
+     the edge, still a fifth darker 5 px down). */
+  --lift-1:
+    var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 2.5px 0 rgb(var(--shade) / 0.32), 0 1.5px 2px 0 rgb(var(--shade) / 0.6),
+    0 4px 6px 0 rgb(var(--shade) / 0.4), 0 8px 16px 0 rgb(var(--shade) / 0.24);
+  /* Lifted (whose turn, picked, hover): off the felt below, so the shadow drops further. */
+  --lift-2:
+    var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 3px 0 rgb(var(--shade) / 0.25), 0 3px 4px 0 rgb(var(--shade) / 0.42),
+    0 8px 12px 0 rgb(var(--shade) / 0.26), 0 14px 26px 0 rgb(var(--shade) / 0.16);
+  /* Held (dragging, pop-up sheets). */
+  --lift-3:
+    var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 3px 0 rgb(var(--shade) / 0.22), 0 4px 6px 0 rgb(var(--shade) / 0.35),
+    0 14px 22px 0 rgb(var(--shade) / 0.26), 0 28px 54px 0 rgb(var(--shade) / 0.22);
+}
+
+/* Pressing a button pushes it down into the felt. */
+.pc-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* No cobalt outlines: the felt pieces stand out on their own (user, 2026-11-20). Plain buttons
+   are white felt with cobalt words, lying flat like everything else. */
+.pc-btn-plain {
+  box-shadow: var(--lift-1);
+}
+@media (hover: hover) {
+  .pc-btn-plain:hover:not(:disabled) {
+    box-shadow: var(--lift-2);
+  }
+}
+.pc-btn-plain:active:not(:disabled) {
+  box-shadow: var(--lift-0);
+}
+/* A picked game tile: lifted, with its tick, but no outline. */
+.pc-choice:has(input:checked) {
+  box-shadow: var(--lift-2);
+}
+/* The rest of the outlined pieces, the same way: small white felt buttons (Jigsaw's choices,
+   the menu's switches, Report and Mute in Messages, the Tanks touch buttons) lie flat; a picked
+   one turns cobalt or lifts. */
+#game .pz-btn,
+#menu .seg button,
+#game .tbtn {
+  box-shadow: var(--lift-1);
+}
+#game .chat-actions button {
+  box-shadow: var(--lift-0);
+}
+@media (hover: hover) {
+  #game .pz-btn:hover {
+    box-shadow: var(--lift-2);
+  }
+}
+/* A picked picture or card: lifted, with a cobalt tick on its corner for the picture. */
+#game .pz-image {
+  position: relative;
+}
+#game .pz-image.picked {
+  box-shadow: var(--lift-2);
+}
+#game .pz-image.picked::after {
+  content: '';
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--cobalt)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 18px no-repeat;
+  box-shadow: var(--lift-1);
+}
+#game .ht-hand .card.raised {
+  box-shadow: var(--lift-2);
+}
+/* The magnifier: a lens with a white felt rim. */
+#game .pz-loupe {
+  box-shadow:
+    0 0 0 4px var(--white),
+    var(--lift-3);
+}
+
+
+/* Messages: a sheet of cream felt like the other sheets (sky felt was blue on blue). Notes from
+   others are white felt on it; yours stay cobalt; "Liz joined." is printed straight on it. */
+#game .chat {
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+}
+#game .chat-log li:not(.mine):not(.system) {
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+}
+#game .chat-log li.system {
+  background: none;
+}
+
+/* Sheets that scroll (the menu, scores, the game picker) carry their felt with them, instead of
+   the words sliding over a cloth that stays put. */
+#game .sheet,
+#game .ht-panel {
+  background-attachment: local;
+}
+#game .lobby-view {
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  background-attachment: local;
+}
+
+/* ------------------------------------------------------------------ dominoes: matte ceramic */
+
+/* Matte ceramic (the user's material studies, 2026-11-21): a clean warm-white face with no grain
+   or shine, dark pips pressed into it (a light lip below each), a crisp navy middle line, a
+   softly rounded edge, a thick side a shade darker, and a dark shadow on the felt. */
+#game .dm-face,
+#game .dm-face.h {
+  fill: url(#gd-ceramic) #ede7dd;
+  stroke: none;
+}
+#game .dm-bevel {
+  display: inline;
+  fill: none;
+  stroke: url(#gd-bevel);
+  stroke-width: 3;
+  opacity: 0.8;
+}
+#game .dm-tile svg {
+  overflow: visible;
+  filter: drop-shadow(0 3px 0 #d3c9b9) drop-shadow(0 1px 1px rgb(var(--shade) / 0.5)) drop-shadow(0 4px 6px rgb(var(--shade) / 0.28));
+}
+#game .dm-tile line,
+#game .dm-ghost line {
+  stroke: #1b2440;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+#game .dm-pips {
+  fill: url(#gd-pip) #141d33;
+}
+#game .dm-lip {
+  display: inline;
+  fill: #ffffff;
+  stroke: #ffffff;
+  opacity: 0.85;
+}
+/* The tile just played keeps its sunflower edge. */
+#game .dm-placed.dm-last .dm-face {
+  stroke: var(--sunflower);
+  stroke-width: 9;
+}
+/* Your tiles that can't go anywhere this turn: a greyer, darker ceramic with faded pips.
+   Recoloured, never a CSS filter (Safari on iPad drew filtered tiles in the wrong place, cut off). */
+#game .dm-hand.my-turn .dm-mine.illegal .dm-face,
+#game .dm-hand.my-turn .dm-mine.illegal .dm-face.h {
+  fill: #cdc5b7;
+}
+#game .dm-hand.my-turn .dm-mine.illegal line {
+  stroke: #6e7183;
+}
+#game .dm-hand.my-turn .dm-mine.illegal .dm-pips {
+  fill: #6e7183;
+}
+#game .dm-hand.my-turn .dm-mine.illegal .dm-lip {
+  opacity: 0.35;
+}
+/* The tile you picked: lifted off the table (no outline), so its shadow falls further. */
+#game .dm-mine.raised svg {
+  filter: drop-shadow(0 3px 0 #d3c9b9) drop-shadow(0 6px 5px rgb(var(--shade) / 0.4)) drop-shadow(0 14px 16px rgb(var(--shade) / 0.25));
+}
+/* The green card table, for every card and tile game (the user, 2026-11-20). */
+#game[data-view='dominoes'],
+#game[data-view='hearts'],
+#game[data-view='spades'] {
+  --fc: var(--baize);
+  background: var(--baize) var(--baize-img) 0 0 / var(--paper-size);
+  /* Zooming the board zooms the cloth too (dominoesView.zoomTable sets these). */
+  background-size: calc(var(--paper-size) * var(--felt-zoom, 1));
+  background-position: var(--felt-x, 0px) var(--felt-y, 0px);
+}
+/* Words straight on a table (the green and the grey) are near-white: ink is too dark on either.
+   On the green that's 4.7:1; on the grey, bold and a touch bigger. */
+#game .ht-status,
+#game .dm-empty,
+#game .dm-info {
+  color: #fffdf7;
+}
+#game .hearts-view:not(.dominoes-view) .ht-status {
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+#game .ht-status .ht-broken {
+  color: inherit;
+}
+/* The game picker is a page, not a table: it sits on the cream felt, like home. */
+#game[data-view='lobby'] {
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+}
+
+/* Behind a sheet (menu, invite, scores), the table dims under a warm shadow, not a blue one. */
+#game .overlay,
+#game .sheet-wrap,
+#game .ht-overlay {
+  background: rgb(var(--shade) / 0.4);
+}
+
+/* ------------------------------------------------------------------ words pressed into the felt */
+
+/* Words look pressed into the felt they're on: dark words get a light lip below (where the cut's
+   lower wall catches the light), light words a dark one above. Small secondary words are a shade
+   darker than on paper, so the grain doesn't break them up. */
+:root {
+  --ink-soft: #2c3a70;
+}
+body {
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.6);
+}
+.pc-small,
+.pc-tag span,
+#game .ht-score,
+#game .ht-tag,
+#game .ht-sheet th,
+#game .chat-log .time {
+  text-shadow: none;
+}
+.pc-btn-main,
+.pc-btn-alert,
+.pc-msg.mine,
+.paper-cobalt,
+.paper-tomato,
+.paper-grass,
+.pc-badge,
+.pc-alert,
+#game .pz-btn.picked,
+#game .pz-btn[aria-pressed='true'],
+#menu .seg button.active,
+#game .tbtn.held,
+#game .ht-status,
+#game .dm-empty,
+#game .dm-info {
+  text-shadow: 0 -1px 0 rgb(0 0 0 / 0.64);
+}
+
+/* ------------------------------------------------------------------ the menu */
+
+/* No thin divider lines between the menu's parts: the spacing does it. */
+.sheet-part {
+  border-top: 0;
+  padding-top: 8px;
+}
+
+/* The volume slider: a groove cut into the felt, filled with cobalt felt up to the volume, and a
+   white felt knob lying on it. It runs the full width of its space. (--fill: shell.ts.) */
+.sound-row input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  cursor: pointer;
+}
+.sound-row input[type='range']::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(to right, var(--cobalt) var(--fill, 80%), rgb(var(--shade) / 0.1) var(--fill, 80%));
+  box-shadow: inset 0 2px 3px rgb(var(--shade) / 0.35), inset 0 -1px 0 rgb(255 255 255 / 0.35);
+}
+.sound-row input[type='range']::-moz-range-track {
+  height: 14px;
+  border-radius: 7px;
+  background: rgb(var(--shade) / 0.1);
+  box-shadow: inset 0 2px 3px rgb(var(--shade) / 0.35), inset 0 -1px 0 rgb(255 255 255 / 0.35);
+}
+.sound-row input[type='range']::-moz-range-progress {
+  height: 14px;
+  border-radius: 7px;
+  background: var(--cobalt);
+}
+.sound-row input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 30px;
+  height: 30px;
+  margin-top: -8px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+}
+.sound-row input[type='range']::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+}
+.sound-row input[type='range']:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ jigsaw */
+
+/* The puzzle table: a light, calm grey felt (the grey mat was too dark and busy), with a small
+   shadow under every loose piece so light pieces still stand out. Also tried: kraft, sage, sky. Like the card table, it zooms and pans with the puzzle (jigsawView.moveFelt). The frame
+   where the finished picture goes is a sheet of cream felt laid on it (drawn by jigsawView from
+   --pz-frame and --pz-frame-img). */
+#game[data-view='jigsaw'] {
+  --jig-table: var(--dove);
+  --jig-table-img: var(--dove-img);
+  --fc: var(--jig-table);
+  background: var(--jig-table) var(--jig-table-img) 0 0 / var(--paper-size);
+  background-size: calc(var(--paper-size) * var(--felt-zoom, 1));
+  background-position: var(--felt-x, 0px) var(--felt-y, 0px);
+  --pz-area: rgb(58 44 34 / 0.025);
+  --pz-frame: #e9dac4;
+  --pz-frame-img: url('/art/felt/paper.webp');
+  --pz-frame-edge: rgb(58 44 34 / 0.35);
+}
+
+/* ------------------------------------------------------------------ hover */
+
+/* On a computer, things you can press lift off the felt under the pointer (their shadow drops
+   further), and sink back in when pressed. */
+#game .pz-btn,
+#menu .seg button {
+  transition:
+    transform 0.12s var(--settle),
+    box-shadow 0.12s;
+}
+@media (hover: hover) {
+  .pc-btn:hover:not(:disabled),
+  #game .pz-btn:hover:not(:disabled),
+  #menu .seg button:hover,
+  #game .tbtn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--lift-2);
+  }
+}
+.pc-btn:active:not(:disabled),
+#game .pz-btn:active:not(:disabled),
+#menu .seg button:active {
+  transform: translateY(1px);
+  box-shadow: var(--lift-0);
+}
+
+/* ------------------------------------------------------------------ leftovers from testing */
+
+/* Boxes you type into: a clean white slot cut into the felt (white felt read as grubby there). */
+.pc-input,
+#game .chat-row .pc-input {
+  background: #fffdf9;
+  box-shadow: var(--cut-in);
+}
+/* "Your name  Liz  Change" on the way in: no thin lines above and below it. */
+.pc-namerow {
+  border-block: 0;
+}
+/* Your name tag and Scores are the same height, top and bottom (the paper look lined the tag up
+   with the button's outline, which felt doesn't have). */
+#game .ht-mine > .ht-seat {
+  margin-block: 0;
+}
+/* A button you can't press yet (Send with nothing typed, Pass before 3 cards are picked): plain
+   white felt lying flat, with soft ink words, rather than a washed-out colour. */
+.pc-btn:disabled,
+.pc-btn:disabled:hover {
+  opacity: 1;
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  color: var(--ink-soft);
+  box-shadow: var(--lift-0);
+  text-shadow: none;
+  transform: none;
+}
+
+/* ------------------------------------------------------------------ game tiles */
+
+/* Game names big enough to read at a glance on the coloured felt: two tiles across (three was
+   too narrow for a readable name), each with a bigger name and icon. */
+.pc-choices {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+}
+.pc-choice {
+  gap: 14px;
+  min-height: 80px;
+  padding: 10px 12px 10px 10px;
+  font-size: 1.4rem;
+  letter-spacing: -0.01em;
+}
+.pc-choice small {
+  font-size: 0.95rem;
+  letter-spacing: 0;
+}
+.pc-choice img {
+  width: 60px;
+  height: 60px;
+}
+@container (max-width: 199px) {
+  .pc-choice img {
+    width: 48px;
+    height: 48px;
+  }
+  .pc-choice > span {
+    font-size: 1.15rem;
+  }
+  .pc-choice small {
+    font-size: 0.85rem;
+  }
+}
+/* Phones keep two across, so the start buttons stay on the first screen (the narrow-tile sizes
+   above apply). */
+@media (max-width: 600px) {
+  .pc-choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .pc-choice {
+    min-height: 72px;
+    gap: 8px;
+    padding: 8px 8px 8px 6px;
+  }
+}

@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { createRoom, joinByInvite, newPlayer, toLobby } from './helpers';
+import { createRoom, joinByInvite, newPlayer, toLobby, tapBar } from './helpers';
 
 // Browsers with fake microphones on this machine; deployed copies are tested by hand.
 test.skip(({ isMobile }) => isMobile, 'one screen size is enough');
@@ -11,7 +11,7 @@ test('two people who join with their mics on can hear each other', async ({ page
   await joinByInvite(friend, code, 'Vic', 'on');
   for (const p of [host, friend]) await expect(p.locator('#btn-mic')).toHaveText('Mute mic');
 
-  await host.locator('#btn-menu').click();
+  await tapBar(host, '#btn-menu');
   const peer = host.locator('#menu-mic li[data-peer]', { hasText: 'Vic' });
   await expect(peer).toBeVisible({ timeout: 20_000 });
   // Connected: no "(connecting…)" or "(couldn't connect)" next to their name.
@@ -32,7 +32,7 @@ test('"with mic on" turns the mic on, and the bar mutes and unmutes it', async (
   await expect(btn).toHaveText('Mute mic');
 
   // Turning it off completely is in the menu.
-  await page.locator('#btn-menu').click();
+  await tapBar(page, '#btn-menu');
   await page.locator('#menu-mic [data-v="leave"]').click();
   await expect(btn).toHaveText('Turn on mic');
 });

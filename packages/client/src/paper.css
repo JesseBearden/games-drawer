@@ -74,6 +74,7 @@
 .pc-page {
   margin: 0;
   min-height: 100dvh;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   color: var(--ink);
   font: 400 1.125rem/1.5 var(--font);
@@ -139,7 +140,7 @@
    around it. (Blending a white background away doesn't work in iPad Safari's scrolling pages.)
    It keeps its own shape and is never cropped. */
 .pc-hero {
-  aspect-ratio: 1536 / 522;
+  aspect-ratio: 1536 / 498;
 }
 .pc-hero img {
   display: block;
@@ -174,11 +175,13 @@
 }
 /* The main button: cobalt paper. */
 .pc-btn-main {
+  --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
 }
 /* Everything else: white paper on a slightly bigger piece of cobalt (the outline is paper too). */
 .pc-btn-plain {
+  --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   color: var(--cobalt);
   box-shadow:
@@ -187,6 +190,7 @@
 }
 /* Something is off (mic muted, leave): tomato paper. */
 .pc-btn-alert {
+  --fc: var(--tomato);
   background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
   color: #fff;
 }
@@ -256,6 +260,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   height: 24px;
   padding: 0 7px;
   border-radius: 12px;
+  --fc: var(--tomato);
   background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
   color: #fff;
   font-size: 0.85rem;
@@ -334,6 +339,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   padding: 8px 10px 8px 8px;
   line-height: 1.2;
   border-radius: var(--radius);
+  --fc: var(--sky);
   background: var(--sky) var(--sky-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   color: var(--ink);
@@ -412,6 +418,11 @@ body.pad-mode .pc-choice:has(input:focus) {
   white-space: nowrap;
 }
 
+/* A name inside a sentence ("Join Liz for Dominoes"): the sentence wraps around it, never through it. */
+.pc-nw {
+  white-space: nowrap;
+}
+
 /* A person's name, wherever it shows: always one line; too long for its room and it ends in "…". */
 .pc-nm {
   display: block;
@@ -429,6 +440,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   min-width: 140px;
   padding: 10px 16px 11px;
   border-radius: var(--radius);
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   transition:
@@ -458,6 +470,7 @@ body.pad-mode .pc-choice:has(input:focus) {
 }
 /* Whose turn it is: sunflower paper, lifted off the mat. */
 .pc-tag.is-turn {
+  --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
   transform: translateY(-3px);
   box-shadow: var(--lift-2);
@@ -516,6 +529,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   width: var(--w);
   aspect-ratio: 5 / 7;
   border-radius: calc(var(--w) * 0.08);
+  --fc: var(--card);
   background: var(--card) var(--card-img) 0 0 / 120% auto;
   box-shadow: var(--lift-1);
   transition:
@@ -537,6 +551,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   inset: 7%;
   overflow: hidden;
   border-radius: calc(var(--w) * 0.05);
+  --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / 200px;
 }
 /* Lifted (picked on a phone, or a card you can play when hovered). */
@@ -556,6 +571,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   width: calc(var(--u) * 2);
   height: var(--u);
   border-radius: calc(var(--u) * 0.14);
+  --fc: var(--card);
   background: var(--card) var(--card-img) 0 0 / calc(var(--u) * 3) auto;
   box-shadow: var(--lift-1);
 }
@@ -589,6 +605,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   gap: 14px;
   padding: 14px;
   border-radius: 16px;
+  --fc: var(--sky);
   background: var(--sky) var(--sky-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
 }
@@ -601,6 +618,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   justify-self: start;
   padding: 8px 14px 10px;
   border-radius: 4px var(--radius) var(--radius) var(--radius);
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   overflow-wrap: anywhere;
@@ -612,6 +630,7 @@ body.pad-mode .pc-choice:has(input:focus) {
 .pc-msg.mine {
   justify-self: end;
   border-radius: var(--radius) 4px var(--radius) var(--radius);
+  --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
 }
@@ -624,6 +643,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   flex-wrap: wrap;
   padding: 12px 16px;
   border-radius: var(--radius);
+  --fc: var(--tomato);
   background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
   color: #fff;
   font-weight: 800;
@@ -637,6 +657,7 @@ body.pad-mode .pc-choice:has(input:focus) {
 /* A panel that pops up over everything (menus, invites): paper, held above the page. */
 .pc-sheet {
   border-radius: 18px;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-3);
   color: var(--ink);
@@ -645,21 +666,21 @@ body.pad-mode .pc-choice:has(input:focus) {
 /* ------------------------------------------------------------------ papers
    Put any piece on any paper: class="paper-mint". These come last so they win over a
    component's default paper. Light text goes on the dark ones (cobalt, tomato, grass). */
-.paper-paper { background: var(--paper) var(--paper-img) 0 0 / var(--paper-size); }
-.paper-white { background: var(--white) var(--white-img) 0 0 / var(--paper-size); }
-.paper-mat { background: var(--mat) var(--mat-img) 0 0 / var(--paper-size); }
-.paper-cobalt { background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size); color: #fff; }
-.paper-sunflower { background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size); color: var(--ink); }
-.paper-tomato { background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size); color: #fff; }
-.paper-grass { background: var(--grass) var(--grass-img) 0 0 / var(--paper-size); color: #fff; }
-.paper-sky { background: var(--sky) var(--sky-img) 0 0 / var(--paper-size); }
-.paper-mint { background: var(--mint) var(--mint-img) 0 0 / var(--paper-size); }
-.paper-butter { background: var(--butter) var(--butter-img) 0 0 / var(--paper-size); }
-.paper-lilac { background: var(--lilac) var(--lilac-img) 0 0 / var(--paper-size); }
-.paper-peach { background: var(--peach) var(--peach-img) 0 0 / var(--paper-size); }
-.paper-blush { background: var(--blush) var(--blush-img) 0 0 / var(--paper-size); }
-.paper-kraft { background: var(--kraft) var(--kraft-img) 0 0 / var(--paper-size); }
-.paper-card { background: var(--card) var(--card-img) 0 0 / var(--paper-size); }
+.paper-paper { --fc: var(--paper); background: var(--paper) var(--paper-img) 0 0 / var(--paper-size); }
+.paper-white { --fc: var(--white); background: var(--white) var(--white-img) 0 0 / var(--paper-size); }
+.paper-mat { --fc: var(--mat); background: var(--mat) var(--mat-img) 0 0 / var(--paper-size); }
+.paper-cobalt { --fc: var(--cobalt); background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size); color: #fff; }
+.paper-sunflower { --fc: var(--sunflower); background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size); color: var(--ink); }
+.paper-tomato { --fc: var(--tomato); background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size); color: #fff; }
+.paper-grass { --fc: var(--grass); background: var(--grass) var(--grass-img) 0 0 / var(--paper-size); color: #fff; }
+.paper-sky { --fc: var(--sky); background: var(--sky) var(--sky-img) 0 0 / var(--paper-size); }
+.paper-mint { --fc: var(--mint); background: var(--mint) var(--mint-img) 0 0 / var(--paper-size); }
+.paper-butter { --fc: var(--butter); background: var(--butter) var(--butter-img) 0 0 / var(--paper-size); }
+.paper-lilac { --fc: var(--lilac); background: var(--lilac) var(--lilac-img) 0 0 / var(--paper-size); }
+.paper-peach { --fc: var(--peach); background: var(--peach) var(--peach-img) 0 0 / var(--paper-size); }
+.paper-blush { --fc: var(--blush); background: var(--blush) var(--blush-img) 0 0 / var(--paper-size); }
+.paper-kraft { --fc: var(--kraft); background: var(--kraft) var(--kraft-img) 0 0 / var(--paper-size); }
+.paper-card { --fc: var(--card); background: var(--card) var(--card-img) 0 0 / var(--paper-size); }
 
 @media (prefers-reduced-motion: reduce) {
   .pc-page *,

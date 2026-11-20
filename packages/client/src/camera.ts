@@ -49,10 +49,11 @@ export class Camera {
   }
 
   /**
-   * bottomInset: screen pixels at the bottom covered by touch controls. The battlefield is
-   * framed above them so no tank ends up hidden under a button.
+   * bottomInset / rightInset: screen pixels covered by the control strip (along the bottom, or
+   * down the right side on a phone held sideways). The whole battlefield is framed clear of it
+   * so no tank ends up hidden under a button.
    */
-  update(vw: number, vh: number, target: Point | null, deepest: number, dtMs: number, bottomInset = 0, highest = deepest) {
+  update(vw: number, vh: number, target: Point | null, deepest: number, dtMs: number, bottomInset = 0, highest = deepest, rightInset = 0) {
     const W = this.cfg.worldWidth;
     const H = this.cfg.worldHeight;
     const b = this.contentBounds(deepest);
@@ -63,11 +64,13 @@ export class Camera {
     if (!this.following || !target) {
       // Whole battlefield: the full width, edge to edge, unless that would cut the hills or the
       // valleys off (short, wide phone screens). Then it shrinks until they fit, and the ground
-      // past the map's edges (drawn dimmed) fills the sides. Spare height goes to the sky.
+      // past the map's edges (drawn dimmed) fills the sides. Spare height goes to the sky. It all
+      // sits above the control strip; below the strip there's just more ground.
       const band = this.wholeBand(deepest, highest);
-      scale = Math.min(vw / W, vh / (band.bottom - band.top));
-      x = -Math.max(0, vw / scale - W) / 2;
-      y = band.bottom - vh / scale;
+      const usableW = Math.max(100, vw - rightInset);
+      scale = Math.min(usableW / W, usableH / (band.bottom - band.top));
+      x = -Math.max(0, usableW / scale - W) / 2;
+      y = band.bottom - usableH / scale;
     } else {
       // Zoomed views are based on the screen's width, so short, wide phone screens fill
       // edge to edge and trim empty sky rather than shrinking the whole map to fit.

@@ -34,6 +34,7 @@
   border: 0;
   border-radius: var(--radius);
   padding: 7px 12px 8px;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   color: var(--ink);
@@ -43,6 +44,7 @@
 }
 /* Whose turn: sunflower paper, lifted off the mat. */
 #game .ht-seat.turn {
+  --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
   transform: translateY(-3px);
   box-shadow: var(--lift-2);
@@ -96,29 +98,6 @@
   font-weight: 800;
   margin-left: 2px;
 }
-/* The other players' cards: a small pile of cobalt backs with a card-stock edge, and the count. */
-#game .ht-backs {
-  align-items: center;
-  height: auto;
-  margin-top: 5px;
-}
-#game .ht-backs i {
-  width: 13px;
-  height: 18px;
-  margin-right: -8px;
-  border: 1.5px solid var(--card);
-  border-radius: 3px;
-  background: var(--cobalt) var(--cobalt-img) 0 0 / 120px;
-  box-shadow: 0 1px 1px rgb(17 40 117 / 0.25);
-}
-#game .ht-backs span {
-  margin-left: 14px;
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-}
-#game .ht-seat.turn .ht-backs span {
-  color: var(--ink);
-}
 
 /* ------------------------------------------------------------------ the middle */
 
@@ -169,6 +148,7 @@
 #game .card {
   border: 0;
   border-radius: calc(var(--cw) * 0.08);
+  --fc: var(--card);
   background: var(--card) var(--card-img) 0 0 / 120% auto;
   color: inherit;
   box-shadow: var(--lift-1);
@@ -207,6 +187,7 @@
   bottom: 5%;
   padding: 1px 6px;
   border-radius: 6px;
+  --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / 200px;
   color: var(--ink);
   content: 'New';
@@ -324,6 +305,7 @@ body.pad-mode #game .card.pad-cursor {
 #game .sp-score > span {
   padding: 4px 12px;
   border-radius: 10px;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-0);
 }
@@ -348,6 +330,7 @@ body.pad-mode #game .card.pad-cursor {
 }
 /* Your team's tags are lilac (Spades' own paper), the other team's plain paper. */
 #game .ht-seat.sp-us:not(.turn) {
+  --fc: var(--lilac);
   background: var(--lilac) var(--lilac-img) 0 0 / var(--paper-size);
 }
 #game .ht-seat.sp-us .ht-score,
@@ -373,6 +356,11 @@ body.pad-mode #game .card.pad-cursor {
 }
 #game .dm-pips {
   fill: var(--card-black);
+}
+/* The lip and bevel are for the felt look's ivory tiles only. */
+#game .dm-lip,
+#game .dm-bevel {
+  display: none;
 }
 #game .dm-tile svg {
   filter: drop-shadow(0 1.5px 1.5px rgb(17 40 117 / 0.3));
@@ -406,6 +394,7 @@ body.pad-mode #game .card.pad-cursor {
 #game .dm-pop {
   padding: 4px 14px;
   border-radius: var(--radius);
+  --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-2);
   color: var(--ink);
@@ -422,10 +411,7 @@ body.pad-mode #game .card.pad-cursor {
 #game .dm-layout {
   transform-origin: 0 0;
 }
-/* Clip, not scroll: focusing a spot must never scroll the board out from under the zoom. */
 #game .dm-board.zoomed {
-  overflow: hidden;
-  overflow: clip;
   cursor: grab;
 }
 #game .dm-board.moving {
@@ -486,6 +472,10 @@ body.pad-mode #game .card.pad-cursor {
 #game .ht-cpu svg {
   width: 1em;
   height: 0.9em;
+}
+/* Someone who dropped out: a small "zzz" in the same place. */
+#game .ht-away svg {
+  width: 1.15em;
 }
 #game .ht-seat.turn .ht-cpu,
 #game .ht-seat.sp-us .ht-cpu {
@@ -610,5 +600,162 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .dm-mine {
     width: var(--dw);
     min-width: 0;
+  }
+  /* Zoomed in, the tiles fade at the board's own sides here (like its top and bottom), not out
+     at the screen's edges: the names fill the left and your tiles the right. (Beats the distances
+     dominoesView sets on the board.) */
+  #game .dominoes-view .dm-board {
+    --fade-l: 0px !important;
+    --fade-r: 0px !important;
+  }
+}
+
+/* ------------------------------------------------------------------ fixes from testing (2026-11-20) */
+
+/* Zoomed in, the tiles fade out softly on all four sides instead of being sliced off along a
+   hard line. They show through a window (.dm-window) that, sideways, reaches past the board out
+   to the screen's edges (under the side name tags) and fades there; up and down it fades at the
+   board's top and bottom. dominoesView sets --fade-l and --fade-r: how far the screen's edges
+   are beyond the board's. The tiles' own layer stays exactly over the board.
+   Clip, not scroll: focusing a spot must never scroll the tiles out from under the zoom. */
+#game .dm-board.zoomed .dm-window {
+  left: calc(-1 * var(--fade-l, 0px));
+  right: calc(-1 * var(--fade-r, 0px));
+  overflow: hidden;
+  overflow: clip;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent),
+    linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent),
+    linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-composite: intersect;
+}
+#game .dm-board.zoomed .dm-layout {
+  left: var(--fade-l, 0px);
+  right: var(--fade-r, 0px);
+}
+/* The name tags stay on top of tiles that slide under them. */
+#game .dominoes-view .ht-seat,
+#game .dominoes-view .ht-scores-btn {
+  position: relative;
+  z-index: 3;
+}
+/* Where a tile can go: corners rounded like a tile's (in proportion, so a small, zoomed-in spot
+   isn't a pill), and a dashed edge that stays thin however far you zoom. */
+#game .dm-ghost {
+  border-radius: 14% / 7%;
+  border-width: calc(2.5px / var(--dm-zoom, 1));
+}
+#game .dm-ghost.h {
+  border-radius: 7% / 14%;
+}
+
+/* While Scores is open, the table's own line under the board hides (it poked out underneath). */
+#game .hearts-view:has(.ht-overlay:not([hidden])) .ht-status {
+  visibility: hidden;
+}
+
+/* Short screens (a phone on its side): the score sheet is compact, and its buttons stay in view
+   along its bottom while the scores scroll above them. */
+@media (max-height: 460px) {
+  #game .ht-panel {
+    padding: 12px 16px 0;
+  }
+  #game .ht-panel h2 {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  #game .ht-panel .dm-result {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+  }
+  #game .ht-panel .actions {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 10px;
+    margin: 8px -16px 0;
+    padding: 10px 16px 12px;
+    --fc: var(--paper);
+    background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  }
+  #game .ht-panel .actions .pc-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    min-height: 48px;
+    margin: 0;
+  }
+  /* Tighter rows, so all four players fit above the buttons. */
+  #game .ht-sheet th,
+  #game .ht-sheet td {
+    padding-block: 3px;
+  }
+  #game .ht-panel .pc-small {
+    margin-top: 4px;
+  }
+}
+
+/* Spades: the team scores sit in the table's empty top-left corner at every size, so a played
+   card can never cover them. */
+#game .sp-score {
+  position: absolute;
+  top: 12px;
+  left: calc(12px + var(--safe-l, 0px));
+  z-index: 2;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* Bigger to tap. */
+#game .sp-bids .pc-btn {
+  min-height: 48px;
+}
+#game .ht-scores-btn {
+  min-height: 44px;
+}
+/* What the open ends add up to: easy to read on a phone. */
+#game .dm-info {
+  font-size: 0.95rem;
+}
+
+/* ------------------------------------------------------------------ name tags: one size (2026-11-20)
+   Everyone's name tag is the same size whatever their name (the user's rule): a long name shrinks
+   a little, then ends in "…" (fitSeatText), and dropping out or being a computer adds a small
+   mark beside the name, never a line. */
+#game .hearts-view {
+  --seat-w: clamp(150px, 15vw, 210px);
+}
+#game .hearts-view .ht-seat {
+  width: var(--seat-w);
+  max-width: 100%;
+}
+/* Phones held upright: the three across the top split the width evenly, and yours (beside
+   Scores) is as wide as one of them. */
+@media (max-width: 600px) {
+  #game .hearts-view .ht-pos-1,
+  #game .hearts-view .ht-pos-2,
+  #game .hearts-view .ht-pos-3 {
+    width: auto;
+    justify-self: stretch;
+    align-self: stretch;
+  }
+  #game .hearts-view .ht-mine > .ht-seat {
+    width: calc((100% - 12px) / 3);
+  }
+}
+/* Phones held sideways: a little narrower. Dominoes lines everyone up down the left, the column's
+   width. */
+@media (max-height: 460px) {
+  #game .hearts-view {
+    --seat-w: clamp(104px, 16vw, 170px);
+  }
+  #game .dominoes-view .ht-seat {
+    width: auto;
   }
 }

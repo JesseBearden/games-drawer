@@ -90,12 +90,15 @@ export function fitOneLine(el: HTMLElement, minPx: number) {
 const COMPUTER_MARK =
   '<span class="ht-cpu" role="img" aria-label="Computer player" title="Computer player"><svg viewBox="0 0 16 14" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="8.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 10v2.5M4.8 12.6h6.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>';
 
+/** A small "zzz" beside the name of someone who dropped out (a computer plays for them). */
+const AWAY_MARK =
+  '<span class="ht-cpu ht-away" role="img" aria-label="Away" title="Away"><svg viewBox="0 0 18 14" aria-hidden="true"><path d="M1 8.5h3.6l-3.6 4h3.6M6.5 4.8h4.4l-4.4 4.6h4.4M12.6 1h4.4l-4.4 4.8h4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+
 export function seatNameHtml(name: string, opts: { bot?: boolean; away?: boolean }) {
-  // Someone who dropped out says "Away" (a computer plays for them); a computer player gets the
-  // small computer screen instead of a word.
-  const note = opts.away ? '<span class="ht-tag ht-away">Away</span>' : '';
-  const cpu = opts.bot && !opts.away ? COMPUTER_MARK : '';
-  return `<div class="ht-name"><span class="pc-talk"><i></i><i></i><i></i></span><span class="ht-nm">${escapeHtml(name)}</span>${cpu}</div>${note}`;
+  // Marks, not words, so every name tag keeps the same two lines (user, 2026-11-20): someone
+  // who dropped out gets a small "zzz", a computer player a small computer screen.
+  const mark = opts.away ? AWAY_MARK : opts.bot ? COMPUTER_MARK : '';
+  return `<div class="ht-name"><span class="pc-talk"><i></i><i></i><i></i></span><span class="ht-nm">${escapeHtml(name)}</span>${mark}</div>`;
 }
 
 /**
@@ -259,10 +262,10 @@ export class HeartsTable implements View {
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
       const status = v.phase === 'passing' && s.passed ? ' <span class="ht-badge">Passed</span>' : '';
       const taken = s.taken ? ` <span class="ht-taken">+${s.taken}<span class="ht-long"> this hand</span></span>` : '';
-      // A little pile of card backs, and how many.
-      const backs = seat === v.seat || !s.cards ? '' : `<span class="ht-backs">${'<i></i>'.repeat(Math.min(s.cards, 3))}<span>${s.cards} card${s.cards === 1 ? '' : 's'}</span></span>`;
+      // No count of the others' cards: everyone holds about the same number in a trick game, so the
+      // tag keeps just the name and score (the user, 2026-11-20).
       el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
-        <div class="ht-score">${s.score} pts${taken}${status}</div>${backs}`;
+        <div class="ht-score">${s.score} pts${taken}${status}</div>`;
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
@@ -289,7 +292,7 @@ export class HeartsTable implements View {
       const to = this.name((v.seat + { left: 1, right: 3, across: 2, none: 0 }[v.passDir]) % 4);
       if (v.passing) text = 'Waiting for everyone to pass…';
       else {
-        text = `Pick 3 cards to pass ${PASS_WORD[v.passDir]} to ${escapeHtml(to)}`;
+        text = `Pick 3 cards to pass ${PASS_WORD[v.passDir]} to <span class="pc-nw">${escapeHtml(to)}</span>`;
         action.hidden = false;
         action.disabled = this.selected.size !== 3 || this.pending;
         action.textContent = `Pass ${this.selected.size}/3`;
@@ -298,7 +301,7 @@ export class HeartsTable implements View {
     } else if (v.phase === 'playing') {
       if (v.trickWinner !== null) text = v.trickWinner === v.seat ? 'You take the trick' : `${escapeHtml(this.name(v.trickWinner))} takes the trick`;
       else if (v.turn === v.seat) text = this.shell.device.touch ? (this.lifted ? 'Tap it again to play' : 'Your turn: tap a card') : 'Your turn';
-      else if (v.turn !== null) text = `Waiting for ${escapeHtml(this.name(v.turn))}…`;
+      else if (v.turn !== null) text = `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>'s turn`;
       if (v.hand > 0 && v.passDir === 'none' && v.trick.length === 0 && v.seats.every((s) => s.cards === 13)) text += ' · No passing this hand';
     } else if (v.phase === 'handEnd') {
       text = 'Next hand coming up…';

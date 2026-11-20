@@ -42,7 +42,7 @@
 .entry-page .pc-hero {
   width: min(100%, 980px);
   height: auto;
-  aspect-ratio: 1536 / 522;
+  aspect-ratio: 1536 / 498;
   justify-self: center;
 }
 .entry-page .pc-hero img {
@@ -93,16 +93,6 @@
   display: grid;
   gap: 22px;
 }
-.entry-games {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  min-width: 0;
-}
-.entry-games legend {
-  margin-bottom: 12px;
-  padding: 0;
-}
 .entry-mic {
   display: grid;
   gap: 12px;
@@ -133,6 +123,7 @@
   margin: 18px auto 0;
   padding: 12px 16px;
   border-radius: var(--radius);
+  --fc: var(--tomato);
   background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
   color: #fff;
   font-weight: 800;
@@ -140,6 +131,7 @@
 }
 /* "Joining…": a quiet note, not an alarm. */
 .entry-error.pending {
+  --fc: var(--sky);
   background: var(--sky) var(--sky-img) 0 0 / var(--paper-size);
   color: var(--ink);
 }
@@ -173,10 +165,10 @@
   gap: clamp(8px, 2dvh, 18px);
 }
 #page-home .pc-hero {
-  width: min(100%, 980px, calc(27dvh * 1536 / 522));
+  width: min(100%, 980px, calc(27dvh * 1536 / 498));
 }
 #page-join .pc-hero {
-  width: min(100%, 760px, calc(22dvh * 1536 / 522));
+  width: min(100%, 760px, calc(22dvh * 1536 / 498));
 }
 #page-home .pc-h1 {
   font-size: clamp(2rem, min(7vw, 7.5dvh), 4.5rem);

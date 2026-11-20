@@ -1,58 +1,107 @@
-# On the server
+# Deploys and the game server boxes
 
-What runs on the game server, and how a deploy works there. Setting up AWS itself is in
-[infra/README.md](../infra/README.md).
+How a deploy moves Games Drawer from one server box to the next, and what runs on each box.
+Setting up AWS itself is in [infra/README.md](../infra/README.md).
 
-## What's installed
+## The shape of it
 
-[setup.sh](setup.sh) sets the machine up, and every deploy re-runs it when it changes:
+```
+players ──HTTPS──▶ CloudFront ──HTTP──▶ origin.<domain> = the current box ──▶ the right box
+   │                (the front door: certificate, DNS, never changes)           (by table code)
+   └──TURN (voice relay)──▶ each box's own address
+```
 
-- **Caddy** ([Caddyfile](Caddyfile)) serves HTTPS for the domain and `staging.` the domain, gets
-  and renews certificates, and passes everything to the game server copies on localhost.
-- **coturn** ([turnserver.conf](turnserver.conf)), the voice relay for players whose networks
-  block direct voice connections.
-- **The game server**, as a systemd service ([games-drawer@.service](games-drawer@.service))
-  running as the unprivileged `games` user, locked down to writing only its logs.
-- **Secrets** (session signing, stats token, relay secret) are generated on the machine on first
-  setup, in `/etc/games-drawer/secrets.env`, and never leave it.
+- **Boxes are disposable.** Each deploy launches a new EC2 box from a launch template. Nothing
+  that matters lives only on a box:
+  - Jigsaw saves and logs are on a shared disk (EFS) that every box mounts at `/mnt/games-drawer`.
+  - Secrets (session signing, stats token, voice relay secret) are in Parameter Store
+    (`/games-drawer/secrets`), made by the first box that needs them. The admin password hash is
+    there too (see below).
+  - Release bundles are in S3.
+- **A table lives on one box** (in that server's memory), and **its code says which**: every box
+  has a slot letter (a–d), and room codes are made so they map to their box's letter
+  (`slotOfCode` in the shared protocol). The page adds `?slot=` to its requests for a table.
+- **Every box can answer any request.** Caddy on each box sends a table's requests to that
+  table's box over the private network, staging to the newest box, and new tables wherever the
+  fleet map says ([fleetMap.ts](fleetMap.ts)). So CloudFront can point at any one box, and
+  moving it to a new box never cuts off a game on an old one.
 
 ## How a deploy works
 
-GitHub Actions uploads a release bundle (`npm run release -- --tar`) to S3, then runs
-`games-drawer-deploy <commit> <command>` on the server through AWS Systems Manager (there is no
-SSH). That fetches the bundle and runs its [rollout tool](rollout.ts):
+GitHub Actions uploads the release bundle (`npm run release -- --tar`) to S3, then runs the
+fleet tool ([fleet.ts](fleet.ts)) with the deploy role:
 
-1. **staging**: the release starts on port 8803 behind `staging.<domain>`, and the smoke tests
-   (`npx playwright test --grep @smoke`) run against it.
-2. **canary**: the release starts in whichever of the two production slots is free (a on
-   port 8801, b on 8802). Caddy sends it 10% of new rooms; everything else stays on the
-   current version. Smoke tests then run against the canary alone (`?slot=` routes straight to
-   one copy).
+1. **launch**: a new box with the release, in a free slot. Its first boot installs the deploy
+   command; the fleet tool then has it fetch the release, set itself up ([setup.sh](setup.sh)),
+   and start the server. Every box is told the new map: staging is the new box; new tables stay
+   where they were. Smoke tests (`npx playwright test --grep @smoke`) run against
+   `staging.<domain>`.
+2. **canary**: the new box gets a share of new tables (10% by default). Smoke tests run against
+   it through the real front door (`?slot=` routes straight to it).
 3. **check**, every minute for 10 minutes: any crash, restart, room error or message-handler
-   error fails the deploy.
-4. **promote**: the new version takes all new rooms. The old one gets `SIGUSR2`: it finishes
-   the games it has (people stay connected the whole time), then exits on its own.
-5. If anything fails, **rollback** sends everything back to the old version and stops the new one.
+   error on the new box fails the deploy.
+4. **promote**: the new box takes every new table, and `origin.<domain>` moves to it (DNS with a
+   one-minute TTL, so CloudFront follows within a couple of minutes). The old box gets
+   `SIGUSR2`: it finishes the games it has (people stay connected the whole time, through any
+   box), passes everything else to the new box, then powers itself off once its games are done
+   and at least 15 minutes have passed. It was launched to terminate on shutdown, so AWS removes
+   it. (A game can hold a box for at most `DRAIN_MAX_MS`, 3 hours.)
+5. If anything fails, **rollback** removes the new box and puts everything back on the current one.
 
-A room's code says which slot holds it (`slotOfCode` in the shared protocol), so reconnects and
-invite links reach the right copy even while two versions run. Each release also carries the
-other's build files, so a page loaded from either copy works.
+The very first deploy (or one after every box is gone) has no current box: the new box takes
+the front door straight away.
+
+Pages loaded from one box ask for that release's build files, which may come back from
+another box. So a new box copies in the files of the release it replaces, and at the canary
+step the current box copies in the new release's.
+
+A box from an earlier deploy may still be finishing its games when the next deploy comes; it
+keeps its slot, and the new box takes a free one. If all four are taken, the oldest retiring
+box stops at once.
+
+## The fleet tool by hand
+
+From the repo, with the `games-drawer` AWS profile (needs `AWS_REGION`, `SITE_DOMAIN` and
+`LAUNCH_TEMPLATE`, as in the GitHub variables):
+
+```bash
+export AWS_PROFILE=games-drawer AWS_REGION=us-east-2 SITE_DOMAIN=gamesdrawer.com LAUNCH_TEMPLATE=games-drawer-box
+npx tsx deploy/fleet.ts status                 # the live boxes, and where the front door points
+npx tsx deploy/fleet.ts rollback <commit>      # remove a new box by hand
+npx tsx deploy/fleet.ts launch <commit>        # e.g. bring the site back after the kill switch
+npx tsx deploy/fleet.ts promote <commit>
+```
+
+## What's on a box
+
+[setup.sh](setup.sh) sets each box up, and every deploy re-runs it when it changes:
+
+- **Caddy** ([Caddyfile](Caddyfile)) on port 80, plain HTTP (HTTPS ends at CloudFront). Only
+  CloudFront and our other boxes can reach it. The routes (`/etc/caddy/games-drawer-routes.caddy`)
+  come from the fleet map.
+- **coturn** ([turnserver.conf](turnserver.conf)), the voice relay for players whose networks
+  block direct voice connections. Each box runs its own, on its own address.
+- **The game server**, as a systemd service ([games-drawer@.service](games-drawer@.service))
+  running as the unprivileged `games` user (the same user id on every box, since they share the
+  disk), locked down to writing only the shared disk.
+- **The rollout tool** ([rollout.ts](rollout.ts)), which the fleet tool runs through
+  `games-drawer-deploy` and AWS Systems Manager (there is no SSH).
 
 ## Handy commands
 
-Open a shell on the server (needs the AWS CLI's Session Manager plugin):
+Open a shell on a box (needs the AWS CLI's Session Manager plugin; `fleet.ts status` lists ids):
 
 ```bash
-aws ssm start-session --target <InstanceId> --profile games-drawer
+aws ssm start-session --target <instance id> --profile games-drawer
 ```
 
 Then:
 
 ```bash
-sudo games-drawer-deploy <commit> status       # what's running in each slot
-sudo games-drawer-deploy <commit> rollback     # undo a canary by hand
-journalctl -u games-drawer@a -f                # server output (also @b, @staging)
-ls /var/log/games-drawer/a                     # JSONL game logs and chat counts (and reported messages)
+sudo games-drawer-deploy <commit> status       # what this box runs
+journalctl -u 'games-drawer@*' -f              # server output
+cat /etc/caddy/games-drawer-routes.caddy       # where this box sends requests
+ls /mnt/games-drawer/logs/                     # JSONL game logs, a folder per box (kept after the box goes)
 ```
 
 ## Admin page
@@ -66,14 +115,15 @@ aws ssm put-parameter --profile games-drawer --name /games-drawer/admin-password
 ```
 
 The next deploy picks it up (`games-drawer-deploy` writes it to `/etc/games-drawer/admin.env`).
-The server's role can read that one parameter and nothing else. Parameter Store's standard tier
-is free, unlike Secrets Manager, and does the same job here.
+The boxes can read that parameter and their shared secrets, and no other. Parameter Store's
+standard tier is free, unlike Secrets Manager, and does the same job here. The admin page on any
+box adds up every box's logs from the shared disk.
 
 ## Voice relay (TURN)
 
 Voice chat connects players directly. Some networks (strict routers, some mobile carriers,
-work Wi-Fi) block that; those players' audio goes through coturn on the server instead.
-The game server hands each player relay credentials that expire after 24 hours
+work Wi-Fi) block that; those players' audio goes through coturn instead. The box a table is on
+hands each player relay credentials for its own coturn, which expire after 24 hours
 (`TURN_TTL_SECONDS`), signed with the shared secret.
 
 **Testing it:** open a private room with `?relay=1` on the end of the URL (for example
@@ -81,8 +131,8 @@ The game server hands each player relay credentials that expire after 24 hours
 link through the relay. The voice panel shows "(relayed)" next to each person when it works.
 
 **Limits:** the relay refuses to forward to private and internal addresses (including the AWS
-metadata service), allows 16 KB/s per relayed link (`max-bps`) and 300 KB/s in total
+metadata service), allows 16 KB/s per relayed link (`max-bps`) and 300 KB/s in total per box
 (`bps-capacity`), which is about 50 voice streams at once. Both are in
 [turnserver.conf](turnserver.conf); change them there and deploy (setup.sh re-renders the file
-and restarts coturn). The admin page's Voice section shows how often voice needs the relay. Networks that only allow port 443 aren't covered; that would need a
-second IP address for the relay.
+and restarts coturn). The admin page's Voice section shows how often voice needs the relay.
+Networks that only allow port 443 aren't covered; that would need a second address for the relay.

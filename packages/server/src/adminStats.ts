@@ -87,12 +87,30 @@ async function readJsonl(file: string, keep: (line: string) => boolean, into: Ro
   }
 }
 
-/** Read the logs for these days from every folder (both copies of the server write their own). */
+/**
+ * The folders to read: each one given, and the folders directly inside it. On AWS every box
+ * writes to its own folder on the shared disk (logs/<instance>), so the admin page on any box
+ * adds up every box's logs, including ones that have since shut down.
+ */
+export function logFolders(dirs: string[]): string[] {
+  const out: string[] = [];
+  for (const dir of dirs) {
+    out.push(dir);
+    try {
+      for (const d of fs.readdirSync(dir, { withFileTypes: true })) if (d.isDirectory()) out.push(path.join(dir, d.name));
+    } catch {
+      /* not there (yet) */
+    }
+  }
+  return [...new Set(out)];
+}
+
+/** Read the logs for these days from every folder (each box, or copy of the server, writes its own). */
 export async function readLogs(dirs: string[], days: string[]): Promise<{ events: Row[]; chats: Row[] }> {
   const events: Row[] = [];
   const chats: Row[] = [];
   const wanted = new Set(days);
-  for (const dir of dirs) {
+  for (const dir of logFolders(dirs)) {
     let files: string[];
     try {
       files = fs.readdirSync(dir);

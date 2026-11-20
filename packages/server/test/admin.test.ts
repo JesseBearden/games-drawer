@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { hashAdminPassword, isAdminPasswordHash, issueAdminSession, verifyAdminPassword, verifyAdminSession, ADMIN_SESSION_MS } from '../src/adminAuth';
-import { dayRange, summarize } from '../src/adminStats';
+import { dayRange, logFolders, readLogs, summarize } from '../src/adminStats';
 import { MemoryLog } from '../src/eventlog';
 import { startGameServer, type GameServer } from '../src/server';
 
@@ -91,6 +91,26 @@ describe('the admin numbers', () => {
     ];
     const s = summarize(events, [], days);
     expect(s.voice).toEqual({ links: 12, relayed: 6, failed: 2, people: 4, peopleRelayed: 4, peopleFailed: 2 });
+  });
+
+  it('adds up every box’s logs: the folder given and the folders inside it', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-logs-'));
+    try {
+      const line = (pid: string) => JSON.stringify({ type: 'join', at: '2026-11-17T12:00:00.000Z', pid, roomKind: 'private' }) + '\n';
+      // On AWS each box writes to logs/<instance>; one box has shut down since.
+      for (const [box, pid] of [['i-old', 'p1'], ['i-new', 'p2']]) {
+        fs.mkdirSync(path.join(root, box));
+        fs.writeFileSync(path.join(root, box, 'events-2026-11-17.jsonl'), line(pid));
+      }
+      fs.writeFileSync(path.join(root, 'events-2026-11-17.jsonl'), line('p3'));
+      expect(logFolders([root]).sort()).toEqual([root, path.join(root, 'i-new'), path.join(root, 'i-old')].sort());
+      const { events } = await readLogs([root], ['2026-11-17']);
+      expect(events.map((e) => e.pid).sort()).toEqual(['p1', 'p2', 'p3']);
+      // A folder that isn't there yet is fine.
+      expect(logFolders([path.join(root, 'nope')])).toEqual([path.join(root, 'nope')]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

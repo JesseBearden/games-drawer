@@ -341,21 +341,6 @@
   margin-left: 4px;
 }
 
-.ht-backs {
-  display: flex;
-  margin-top: 4px;
-  height: 18px;
-}
-
-.ht-backs i {
-  width: 12px;
-  height: 18px;
-  margin-right: -6px;
-  border-radius: 3px;
-  background: linear-gradient(135deg, #c43a5a, #7b1f4f);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
 .ht-center {
   grid-area: center;
   display: flex;
@@ -758,8 +743,7 @@
     font-size: 12px;
   }
 
-  .ht-long,
-  .ht-backs {
+  .ht-long {
     display: none;
   }
 
@@ -830,8 +814,7 @@
     font-size: 13px;
   }
 
-  .ht-long,
-  .ht-backs {
+  .ht-long {
     display: none;
   }
 
@@ -994,13 +977,6 @@
   margin: 6px 0 0;
 }
 
-.lobby-filter {
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 8px;
-}
-
 /* ------------------------------------------------------------------ dominoes (on the card-table layout) */
 
 .dominoes-view {
@@ -1020,6 +996,9 @@
   min-height: 0;
 }
 
+/* The tiles' layer and the window they show through (zoomed in, it reaches past the board
+   sideways: cards.css). */
+.dm-window,
 .dm-layout {
   position: absolute;
   inset: 0;
@@ -1399,24 +1378,6 @@ body.pad-mode .dm-mine.pad-cursor {
 
 .pz-saves small {
   color: var(--muted);
-}
-
-.pz-forget {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font: 700 16px var(--body);
-  cursor: pointer;
-}
-
-.pz-forget:hover,
-.pz-forget:focus-visible {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
 }
 
 .pz-play {

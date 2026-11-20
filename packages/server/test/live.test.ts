@@ -524,16 +524,15 @@ describe('live server: deploy slots and draining', () => {
 });
 
 describe('deploy slots', () => {
-  it('splits room codes evenly between the two slots', () => {
-    const counts = { a: 0, b: 0 };
+  it('splits room codes evenly between the four box slots', () => {
+    const counts = { a: 0, b: 0, c: 0, d: 0 };
     const alphabet = ROOM_CODE_ALPHABET;
     for (let i = 0; i < 4000; i++) {
       let code = '';
       for (let j = 0; j < ROOM_CODE_LENGTH; j++) code += alphabet[(i * 7 + j * 13 + ((i * j) % 17)) % alphabet.length];
       counts[slotOfCode(code)]++;
     }
-    expect(counts.a / 4000).toBeGreaterThan(0.4);
-    expect(counts.b / 4000).toBeGreaterThan(0.4);
+    for (const n of Object.values(counts)) expect(n / 4000).toBeGreaterThan(0.2);
     expect(slotOfCode('BCDFG')).toBe(slotOfCode('BCDFG'));
   });
 });

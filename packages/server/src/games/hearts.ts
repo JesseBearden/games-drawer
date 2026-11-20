@@ -90,9 +90,10 @@ export class HeartsGame implements ServerGame {
     return this.seats.some((_, i) => !this.botControls(i) && !this.round.passes[i]);
   }
 
-  addPlayer(m: Member): boolean {
+  addPlayer(m: Member, seat?: number): boolean {
     if (this.seatOf(m.session) !== null) return true;
-    const free = this.seats.findIndex((s) => s.session === null);
+    // The seat they picked at the table, if it's free; otherwise the first free one.
+    const free = seat !== undefined && this.seats[seat]?.session === null ? seat : this.seats.findIndex((s) => s.session === null);
     if (free < 0) {
       // Watching: the room has more people than seats.
       this.sendInit(m, false);
@@ -117,7 +118,7 @@ export class HeartsGame implements ServerGame {
     if (this.seatOf(m.session) === null) return null;
     this.schedule();
     this.sync();
-    return 'A bot will play their cards.';
+    return 'Their cards are played for them until they’re back.';
   }
 
   removePlayer(m: Member) {

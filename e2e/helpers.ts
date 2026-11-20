@@ -26,15 +26,46 @@ export async function enterName(page: Page, form: 'start' | 'join', name: string
   await page.locator(`#${form}-name`).fill(name);
 }
 
-/** Start a table playing `game`, the way the start page does; returns its code. */
-export async function createRoom(page: Page, name: string, game: GameId = 'jigsaw', mic: 'on' | 'off' = 'off') {
-  await page.goto(at('/start'));
-  await page.locator(`#start-games label:has(input[value="${game}"])`).click();
+/**
+ * Open a table from a game's own page (/dominoes), the way a person would: it opens at the
+ * table with that game picked, before anyone is ready. Returns its code.
+ */
+export async function createTable(page: Page, name: string, game: GameId | null = 'jigsaw', mic: 'on' | 'off' = 'off') {
+  await page.goto(at(game ? `/${game}` : '/start'));
   await enterName(page, 'start', name);
   await page.getByRole('button', { name: `Start with mic ${mic}` }).click();
-  await expect(page.locator('#game')).toHaveAttribute('data-view', game);
+  await expect(page.locator('#game')).toHaveAttribute('data-view', 'lobby');
   await expect(page).toHaveURL(/\/r\/[A-Z]{5}/);
   return new URL(page.url()).pathname.slice(3, 8);
+}
+
+/** Say you're ready at the table. */
+export async function ready(page: Page) {
+  await page.locator('.tb-go [data-act="ready"]').click();
+}
+
+/** Start a table playing `game` on your own: open it, then say you're ready. Returns its code. */
+export async function createRoom(page: Page, name: string, game: GameId = 'jigsaw', mic: 'on' | 'off' = 'off') {
+  const code = await createTable(page, name, game, mic);
+  await ready(page);
+  await expect(page.locator('#game')).toHaveAttribute('data-view', game);
+  return code;
+}
+
+/**
+ * On a phone the bar folds away behind a caret tab in the top-right corner (only the mic tab
+ * shows): open it, the way a player would.
+ */
+export async function openBar(page: Page) {
+  const tab = page.locator('#bar-tab');
+  if ((await tab.isVisible()) && (await tab.getAttribute('aria-expanded')) !== 'true') await tab.click();
+}
+
+/** Tap a button on the bar (opening the folded bar first on a phone). */
+export async function tapBar(page: Page, selector: string) {
+  const btn = page.locator(selector);
+  if (!(await btn.isVisible())) await openBar(page);
+  await btn.click();
 }
 
 /** Join a table through its invite link, the way a friend would. */
@@ -42,12 +73,12 @@ export async function joinByInvite(page: Page, code: string, name: string, mic: 
   await page.goto(at(`/r/${code}`));
   await enterName(page, 'join', name);
   await page.getByRole('button', { name: `Join with mic ${mic}` }).click();
-  await expect(page.locator('#btn-menu')).toBeVisible();
+  await expect(page.locator('#btn-menu:visible, #bar-tab:visible').first()).toBeVisible();
 }
 
-/** Menu, then Switch game: the game picker. */
+/** Menu, then Switch game: back to the table. */
 export async function toLobby(page: Page) {
-  await page.locator('#btn-menu').click();
+  await tapBar(page, '#btn-menu');
   await page.locator('#menu-lobby').click();
   await expect(page.locator('.lobby-view .lobby-games')).toBeVisible();
 }
@@ -55,7 +86,7 @@ export async function toLobby(page: Page) {
 export async function sendChat(page: Page, text: string) {
   const input = page.locator('#chat-input');
   const wasOpen = await input.isVisible();
-  if (!wasOpen) await page.locator('#btn-chat').click();
+  if (!wasOpen) await tapBar(page, '#btn-chat');
   await input.fill(text);
   await input.press('Enter');
   // On a phone the chat covers the screen; close it again like a player would.

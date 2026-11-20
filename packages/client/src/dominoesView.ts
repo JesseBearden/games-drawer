@@ -68,7 +68,7 @@ export class DominoesTable implements View {
         <div class="ht-seat ht-pos-1"></div>
         <div class="ht-seat ht-pos-3"></div>
         <div class="ht-center">
-          <div class="dm-board"><div class="dm-layout"></div><div class="dm-pop" hidden></div></div>
+          <div class="dm-board"><div class="dm-window"><div class="dm-layout"></div></div><div class="dm-pop" hidden></div></div>
           <div class="ht-status" aria-live="polite">Shuffling…</div>
           <button class="pc-btn pc-btn-main ht-action dm-draw" type="button" hidden></button>
         </div>
@@ -229,15 +229,50 @@ export class DominoesTable implements View {
       return `left:${ox + s.x * unit - w / 2}px;top:${oy + s.y * unit - h / 2}px;width:${w}px;height:${h}px`;
     };
     const last = v.lastPlay?.tile;
-    let html = spots.map((s) => `<div class="dm-tile dm-placed${s.tile === last ? ' dm-last' : ''}" style="${placeStyle(s)}">${tileSvg(s.first, s.second, s.horizontal)}</div>`).join('');
+    // Drawn from the top of the table down, so each tile's shadow (which falls downward) tucks
+    // under the tile below it, as if they lay flat side by side. In play order, a line growing
+    // up drew each new tile over the last one, shadow and all (user, 2026-11-20).
+    const byRow = [...spots].sort((a, b) => a.y - b.y || a.x - b.x);
+    let html = byRow.map((s) => `<div class="dm-tile dm-placed${s.tile === last ? ' dm-last' : ''}" style="${placeStyle(s)}">${tileSvg(s.first, s.second, s.horizontal)}</div>`).join('');
     html += ghosts
       .map(
         (g, i) =>
-          `<button type="button" class="dm-ghost${i === this.ghostIndex ? ' pad-cursor' : ''}" style="${placeStyle(g.spot)}" data-arm="${g.move.arm}" aria-label="Play here">${tileSvg(g.spot.first, g.spot.second, g.spot.horizontal)}</button>`,
+          `<button type="button" class="dm-ghost${g.spot.horizontal ? ' h' : ''}${i === this.ghostIndex ? ' pad-cursor' : ''}" style="${placeStyle(g.spot)}" data-arm="${g.move.arm}" aria-label="Play here">${tileSvg(g.spot.first, g.spot.second, g.spot.horizontal)}</button>`,
       )
       .join('');
     if (!spots.length && !ghosts.length) html = '<p class="dm-empty">The first tile goes here.</p>';
     (board.querySelector('.dm-layout') as HTMLElement).innerHTML = html;
+    this.applyZoom();
+    this.revealSpots(board);
+  }
+
+  /** The tile the board last moved to show the spots for (once per pick, so it never fights a drag). */
+  private revealedFor: TileId | null = null;
+
+  /**
+   * Zoomed in, every place your picked tile can go may be off screen, with nothing pointing to it.
+   * When that happens the board glides to show the first one (the zoom stays).
+   */
+  private revealSpots(board: HTMLElement) {
+    if (!this.selected) {
+      this.revealedFor = null;
+      return;
+    }
+    if (this.zoom <= 1 || this.revealedFor === this.selected) return;
+    const ghosts = [...board.querySelectorAll<HTMLElement>('.dm-ghost')];
+    if (!ghosts.length) return;
+    this.revealedFor = this.selected;
+    const centre = (g: HTMLElement) => [g.offsetLeft + g.offsetWidth / 2, g.offsetTop + g.offsetHeight / 2];
+    const seen = ghosts.some((g) => {
+      const [cx, cy] = centre(g);
+      const x = this.panX + this.zoom * cx;
+      const y = this.panY + this.zoom * cy;
+      return x > 0 && x < this.boxW && y > 0 && y < this.boxH;
+    });
+    if (seen) return;
+    const [cx, cy] = centre(ghosts[0]);
+    this.panX = this.boxW / 2 - this.zoom * cx;
+    this.panY = this.boxH / 2 - this.zoom * cy;
     this.applyZoom();
   }
 
@@ -278,8 +313,43 @@ export class DominoesTable implements View {
     this.panX = Math.min(0, Math.max(this.boxW * (1 - this.zoom), this.panX));
     this.panY = Math.min(0, Math.max(this.boxH * (1 - this.zoom), this.panY));
     const zoomed = this.zoom > 1;
-    (board.querySelector('.dm-layout') as HTMLElement).style.transform = zoomed ? `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})` : '';
+    const layout = board.querySelector('.dm-layout') as HTMLElement;
+    layout.style.transform = zoomed ? `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})` : '';
+    layout.style.setProperty('--dm-zoom', String(this.zoom));
     board.classList.toggle('zoomed', zoomed);
+    // Zoomed tiles carry on sideways past the board, out to the screen's edges, and fade there.
+    if (zoomed) {
+      const b = board.getBoundingClientRect();
+      const v = this.el.getBoundingClientRect();
+      board.style.setProperty('--fade-l', `${Math.max(0, b.left - v.left)}px`);
+      board.style.setProperty('--fade-r', `${Math.max(0, v.right - b.right)}px`);
+    }
+    this.zoomTable(board);
+  }
+
+  /**
+   * The table's cloth zooms and pans with the tiles, as if looking closer at a real table (the
+   * felt look draws it from these: --felt-zoom, --felt-x, --felt-y on #game). A point of the
+   * cloth that sat at x (from the game's left) now shows where the tiles' own point there went:
+   * origin + pan + zoom * (x - origin), so the texture's offset is origin * (1 - zoom) + pan.
+   */
+  private zoomTable(board: HTMLElement) {
+    const game = this.el.closest<HTMLElement>('#game');
+    if (!game) return;
+    if (this.zoom === 1) {
+      game.style.removeProperty('--felt-zoom');
+      game.style.removeProperty('--felt-x');
+      game.style.removeProperty('--felt-y');
+      return;
+    }
+    // The tiles' layer covers the board exactly (cards.css: .dm-window), so its origin is the board's.
+    const g = game.getBoundingClientRect();
+    const b = board.getBoundingClientRect();
+    const ox = b.left - g.left;
+    const oy = b.top - g.top;
+    game.style.setProperty('--felt-zoom', String(this.zoom));
+    game.style.setProperty('--felt-x', `${ox * (1 - this.zoom) + this.panX}px`);
+    game.style.setProperty('--felt-y', `${oy * (1 - this.zoom) + this.panY}px`);
   }
 
   /** A trackpad pinch: the zoom it started from (null while fingers are doing it instead). */
@@ -323,6 +393,9 @@ export class DominoesTable implements View {
 
   private onPointerDown = (e: PointerEvent) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // A first finger means nothing else is touching: forget any finger whose lift never arrived
+    // (an iPhone can lose one when it's turned), or this touch would pinch instead of move.
+    if (e.isPrimary) this.pointers.clear();
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     this.startGesture();
   };
@@ -661,6 +734,8 @@ export class DominoesTable implements View {
 
   dispose() {
     this.observer.disconnect();
+    const game = this.el.closest<HTMLElement>('#game');
+    for (const p of ['--felt-zoom', '--felt-x', '--felt-y']) game?.style.removeProperty(p);
     this.el.removeEventListener('click', this.onClick);
     const board = this.board();
     board.removeEventListener('pointerdown', this.onPointerDown);

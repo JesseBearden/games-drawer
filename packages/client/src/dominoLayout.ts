@@ -3,9 +3,13 @@ import { cloneLayout, place, type Layout, type Move, type Placed, type TileId } 
 /**
  * Where every domino sits on the table, in "units" (a tile is 2 x 1). The first tile is at the
  * centre. The east and west lines both bend down at the edge, like the sides of a table (mirror
- * images, never all rotating one way: that pinwheel looks like a swastika). The spinner's north
- * and south lines run straight: south between the two bent lines, north up the open top. Doubles sit
- * crosswise, like on a real table.
+ * images). Lines heading up bend at the top edge too, outward (the spinner's own north line bends
+ * east), into the open space above; lines heading down run straight, between the two bent sides
+ * (bending them would run into those). So the four lines never all rotate one way (that pinwheel
+ * looks like a swastika). Before 2026-11-21 the up lines ran straight too and grew into a tall
+ * column. Doubles sit crosswise, like on a real table. Corners are Ls (the turning tile just past
+ * the end of the line), and a line never turns at a double or right after one, which would make
+ * it look like a spinner: it runs a little past the edge instead (user, 2026-11-20).
  */
 export interface TileSpot {
   tile: TileId;
@@ -24,8 +28,7 @@ const DIRS: Record<string, Dir> = { e: [1, 0], w: [-1, 0], n: [0, -1], s: [0, 1]
 const clockwise = (d: Dir): Dir => [-d[1], d[0]];
 const counterClockwise = (d: Dir): Dir => [d[1], -d[0]];
 
-/** Lines running sideways bend down at the edge (so east and west mirror each other); lines
- *  running up or down go straight. */
+/** Lines running sideways bend down at the edge, so east and west mirror each other. */
 const DOWN: Dir = [0, 1];
 
 /** A tile laid from the edge point (cx, cy) heading `dir`; doubles sit crosswise. */
@@ -88,10 +91,23 @@ export function layoutSpots(l: Layout, limits = { across: 8, upDown: 4 }): TileS
     let [cx, cy] = start.at;
     let dir = start.dir;
     let run = 0;
-    let turned = false;
+    let turns = 0;
     let lastWasDouble = false;
-    // Sideways lines bend down at the edge; up-and-down lines run straight and only turn to dodge.
-    const limit = dir[0] !== 0 ? limits.across : Infinity;
+    // Sideways lines bend down at the edge, and at the bottom edge once more, outward again (a
+    // staircase away from the middle, where there's room; inward they'd run into the line coming
+    // straight down the middle). East and west mirror each other all the way. Lines heading up bend outward at the
+    // top edge (away from the middle; the spinner's own north line bends east). Lines heading down
+    // from the start run straight between the bent sides, and only turn to dodge.
+    const startedSideways = dir[0] !== 0;
+    const outward = start.at[0] < -0.01 ? -1 : 1;
+    const edge = (): { limit: number; turn: Dir } | null => {
+      if (turns === 0) {
+        if (startedSideways) return { limit: limits.across, turn: DOWN };
+        return dir[1] < 0 ? { limit: limits.upDown, turn: [outward, 0] } : null;
+      }
+      if (turns === 1 && startedSideways && dir[1] > 0) return { limit: limits.upDown, turn: [cx < 0 ? -1 : 1, 0] };
+      return null;
+    };
     // A spinner partway along this line sprouts side lines; turning right after it would run
     // into one of them, so the line goes one tile further first.
     const sp = l.spinner;
@@ -99,16 +115,26 @@ export function layoutSpots(l: Layout, limits = { across: 8, upDown: 4 }): TileS
     tiles.forEach((t, i) => {
       const dbl = t.inner === t.outer;
       const len = dbl ? 1 : 2;
-      // Where this tile could go: straight on, or round a corner either way. A corner starts
-      // beside the outer half of the last tile, clear of its edge (a crosswise double reaches a
+      // Where this tile could go: straight on, or round a corner either way. A corner is an L,
+      // as on a real table: the turning tile's matching half goes just past the end of the line
+      // (the two ends touch), and the tile heads off the new way from there. (Before 2026-11-20
+      // it lay beside the last tile's outer half, which looked stacked.)
+      const turnTo = (nd: Dir) => ({ cx: cx + (dir[0] - nd[0]) * 0.5, cy: cy + (dir[1] - nd[1]) * 0.5, dir: nd, corner: true });
+      // A double can only turn to get out of another line's way (it can't make an L): it sits
+      // crosswise beside the last tile's outer half (a crosswise double before it reaches a
       // whole unit out to the side, not half).
       const side = lastWasDouble ? 1 : 0.5;
-      const turnTo = (nd: Dir) => ({ cx: cx - dir[0] * 0.5 + nd[0] * side, cy: cy - dir[1] * 0.5 + nd[1] * side, dir: nd, corner: true });
+      const sidestep = (nd: Dir) => ({ cx: cx - dir[0] * 0.5 + nd[0] * side, cy: cy - dir[1] * 0.5 + nd[1] * side, dir: nd, corner: true });
       const straight = { cx, cy, dir, corner: false };
-      const options = run > 0 ? [straight, turnTo(clockwise(dir)), turnTo(counterClockwise(dir))] : [straight];
-      // At the edge, the line turns its own way (unless it just passed a spinner).
-      if (!turned && run > 0 && run + len > limit && i !== spinnerAt + 1) {
-        const k = options.findIndex((o) => o.corner && o.dir[0] === DOWN[0] && o.dir[1] === DOWN[1]);
+      // A double never turns at the edge, and nor does the tile after one: a line leaving a
+      // double at a right angle looks like a spinner's (user, 2026-11-20). Past the edge they
+      // carry straight on and the table grows a little; either turns only to dodge.
+      const turn = dbl ? sidestep : turnTo;
+      const options = run > 0 ? [straight, turn(clockwise(dir)), turn(counterClockwise(dir))] : [straight];
+      // At the edge, the line turns its own way.
+      const e = edge();
+      if (e && run > 0 && run + len > e.limit && !dbl && !lastWasDouble && i !== spinnerAt + 1) {
+        const k = options.findIndex((o) => o.corner && o.dir[0] === e.turn[0] && o.dir[1] === e.turn[1]);
         if (k > 0) options.unshift(options.splice(k, 1)[0]);
       }
       // Take the first that lands clear of every tile already on the table (if it's boxed in,
@@ -127,7 +153,7 @@ export function layoutSpots(l: Layout, limits = { across: 8, upDown: 4 }): TileS
         if (hits === 0) break;
       }
       if (pick.corner) {
-        turned = true;
+        turns++;
         run = 0;
       }
       ({ cx, cy, dir } = pick);
@@ -219,5 +245,10 @@ export function tileSvg(first: number, second: number, horizontal: boolean): str
   const h = horizontal ? 100 : 200;
   const half = (n: number, ox: number, oy: number) => PIPS[n].map(([x, y]) => `<circle cx="${ox + x}" cy="${oy + y}" r="9.5"/>`).join('');
   const divider = horizontal ? '<line x1="100" y1="12" x2="100" y2="88"/>' : '<line x1="12" y1="100" x2="88" y2="100"/>';
-  return `<svg viewBox="0 0 ${w} ${h}" aria-hidden="true"><rect x="3" y="3" width="${w - 6}" height="${h - 6}" rx="14" class="dm-face"/>${divider}<g class="dm-pips">${half(first, 0, 0)}${horizontal ? half(second, 100, 0) : half(second, 0, 100)}</g></svg>`;
+  const pips = `${half(first, 0, 0)}${horizontal ? half(second, 100, 0) : half(second, 0, 100)}`;
+  // The felt look's matte ceramic (the paper look hides these): the lip, a light copy just below
+  // and right of the pips and the middle line so they look pressed in; and a bevel, the rounded
+  // edge lit along the top and shaded along the bottom.
+  const face = `x="3" y="3" width="${w - 6}" height="${h - 6}" rx="14"`;
+  return `<svg viewBox="0 0 ${w} ${h}" aria-hidden="true"><rect ${face} class="dm-face${horizontal ? ' h' : ''}"/><g class="dm-lip" transform="translate(0.8 1.6)">${divider}${pips}</g>${divider}<g class="dm-pips">${pips}</g><rect x="5" y="5" width="${w - 10}" height="${h - 10}" rx="12" class="dm-bevel"/></svg>`;
 }

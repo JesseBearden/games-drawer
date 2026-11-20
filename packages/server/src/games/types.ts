@@ -46,8 +46,9 @@ export interface ServerGame {
   readonly id: GameId;
   /** Most people the game can seat (the room may have fewer). */
   readonly capacity: number;
-  /** A member joined the room, or was there when the game started. False if there's no seat. */
-  addPlayer(m: Member): boolean;
+  /** A member joined the room, or was there when the game started (at the seat they picked,
+   *  for games with seats). False if there's no seat. */
+  addPlayer(m: Member, seat?: number): boolean;
   /** A member came back on a new connection. True if they got their old seat back. */
   reconnect(m: Member): boolean;
   /** A member's connection dropped; their seat is held. Returns a note for the chat line. */

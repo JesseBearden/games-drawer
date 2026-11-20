@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Felt swatches</title>
+    <!-- Dev-only page (like paper.html): our felt sheets laid out exactly like the user's felt
+         swatch sheet (1536 x 1024), lit and shadowed the same way, to compare the two. Shrinks
+         to fit narrower screens. Not part of the build. Textures: scripts/felt-textures.cjs. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@800&display=swap" />
+    <style>
+      :root {
+        --shade: 58 44 34;
+      }
+      html,
+      body {
+        margin: 0;
+        background: #f2ece7;
+      }
+      .sheet {
+        position: relative;
+        width: 1536px;
+        height: 1024px;
+        font-family: 'Atkinson Hyperlegible Next', sans-serif;
+      }
+      /* A square of felt lying on the table, lit from above: its rounded top edge catches the
+         light (a soft bright band about 6 px deep), its bottom edge rolls away into shade, and
+         it casts a tight dark shadow right under its bottom edge that spreads and fades. Its
+         edges aren't machine-straight (the #fuzz filter). */
+      .sw {
+        position: absolute;
+        border-radius: 3px;
+        filter: url(#fuzz);
+        background-size: 100% 100%, 384px;
+        box-shadow:
+          inset 0 7px 6px -4px rgb(255 255 255 / 0.3),
+          inset 5px 0 5px -4px rgb(255 255 255 / 0.12),
+          inset -4px 0 5px -4px rgb(255 255 255 / 0.1),
+          inset 0 -3.5px 3px -2px rgb(var(--shade) / 0.3),
+          0 1px 1px 0 rgb(var(--shade) / 0.4),
+          0 3px 5px 0 rgb(var(--shade) / 0.3),
+          0 6px 12px 0 rgb(var(--shade) / 0.18),
+          0 0 4px 0 rgb(var(--shade) / 0.06);
+      }
+      .lb {
+        position: absolute;
+        width: 300px;
+        margin-left: -150px;
+        text-align: center;
+        color: #112875;
+        font-size: 29px;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <!-- Wander the outline a little (low-frequency) and fray it (high-frequency), at the edges only. -->
+      <filter id="fuzz" x="-4%" y="-4%" width="108%" height="108%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="1" seed="4" result="wave" />
+        <feDisplacementMap in="SourceGraphic" in2="wave" scale="2.2" xChannelSelector="R" yChannelSelector="G" result="w" />
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="9" result="hair" />
+        <feDisplacementMap in="w" in2="hair" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="fz" />
+        <feMorphology in="SourceAlpha" operator="erode" radius="5" result="core" />
+        <feComposite in="SourceGraphic" in2="core" operator="in" result="inside" />
+        <feMerge><feMergeNode in="fz" /><feMergeNode in="inside" /></feMerge>
+      </filter>
+    </svg>
+    <div class="sheet" id="sheet"></div>
+    <script>
+      // label, felt, x, y, width, height, label y: the user's sheet, measured.
+      const S = [
+        ['Standard', 'paper', 22, 20, 283, 266, 313],
+        ['Mat', 'mat', 327, 20, 279, 266, 313],
+        ['Cobalt', 'cobalt', 628, 20, 282, 266, 313],
+        ['Sunflower', 'sunflower', 932, 20, 280, 266, 313],
+        ['Tomato', 'tomato', 1233, 20, 282, 266, 313],
+        ['Grass', 'grass', 22, 357, 283, 255, 638],
+        ['Sky', 'sky', 327, 357, 280, 255, 638],
+        ['Mint', 'mint', 628, 357, 282, 255, 638],
+        ['Butter', 'butter', 931, 357, 279, 255, 638],
+        ['Lilac', 'lilac', 1231, 357, 284, 255, 638],
+        ['Peach', 'peach', 230, 686, 343, 254, 967],
+        ['Blush', 'blush', 598, 686, 340, 254, 967],
+        ['Kraft', 'kraft', 962, 686, 343, 254, 967],
+      ];
+      const sheet = document.getElementById('sheet');
+      for (const [label, felt, x, y, w, h, ly] of S) {
+        const d = document.createElement('div');
+        d.className = 'sw';
+        d.style.cssText =
+          `left:${x}px;top:${y}px;width:${w}px;height:${h}px;` +
+          `background-image:linear-gradient(rgb(255 255 255 / 0.015), rgb(255 255 255 / 0) 50%, rgb(0 0 0 / 0.01)),url('/art/felt/${felt}.webp');` +
+          // Whole pixels: a texture sitting on half a pixel gets resampled and goes soft.
+          `background-position:0 0,${Math.round(-x * 0.7)}px ${Math.round(-y * 0.4)}px`;
+        sheet.append(d);
+        const l = document.createElement('div');
+        l.className = 'lb';
+        l.textContent = label;
+        l.style.cssText = `left:${x + w / 2}px;top:${ly - 20}px`;
+        sheet.append(l);
+      }
+      // Shrink to fit a narrower screen (zoom keeps the felt drawn at full sharpness).
+      const fit = () => (sheet.style.zoom = String(Math.min(1, innerWidth / 1536)));
+      addEventListener('resize', fit);
+      fit();
+    </script>
+  </body>
+</html>

@@ -25,8 +25,8 @@ const NAMES: SpriteName[] = [
   'windsock-calm',
 ];
 
-/** The paper sheets Tanks is made of (public/art/paper): sky, hills and the ground's layers. */
-export const PAPERS = ['sky', 'lilac', 'mint', 'grass', 'kraft', 'peach', 'butter', 'blush'] as const;
+/** The felt sheets Tanks is made of (public/art/felt): sky, mountains and the ground's layers. */
+export const PAPERS = ['sky', 'lilac', 'mint', 'grass', 'kraft', 'peach', 'butter', 'blush', 'air', 'mist', 'slate', 'olive', 'orange', 'rust', 'charcoal'] as const;
 export type PaperName = (typeof PAPERS)[number];
 
 export interface Sprites {
@@ -49,7 +49,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export async function loadSprites(): Promise<Sprites> {
   const [imgs, papers] = await Promise.all([
     Promise.all(NAMES.map((n) => loadImage(`/sprites/${n}.png`))),
-    Promise.all(PAPERS.map((n) => loadImage(`/art/paper/${n}.webp`))),
+    Promise.all(PAPERS.map((n) => loadImage(`/art/felt/${n}.webp`))),
   ]);
   const img = Object.fromEntries(NAMES.map((n, i) => [n, imgs[i]])) as Record<SpriteName, HTMLImageElement>;
   const paper = Object.fromEntries(PAPERS.map((n, i) => [n, papers[i]])) as Record<PaperName, HTMLImageElement>;

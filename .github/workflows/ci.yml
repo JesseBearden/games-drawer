@@ -1,7 +1,9 @@
 # Every pull request and push: typecheck, unit tests, a release build, and browser tests.
-# Pushes to main then deploy: staging (with smoke tests), then production as a canary that
-# gets a small share of new rooms while it is watched, then everyone. Deploys stay off until
-# the repository variables below exist (see infra/README.md).
+# Pushes to main then deploy, a box at a time (deploy/fleet.ts): a new box with the release
+# comes up as staging and is smoke-tested; then it gets a small share of new tables while it is
+# watched; then it takes every new table and the front door, and the old box finishes its games
+# and shuts itself down. Deploys stay off until the repository variables below exist (see
+# infra/README.md).
 name: CI and deploy
 
 on:
@@ -54,24 +56,34 @@ jobs:
           retention-days: 7
 
   staging:
-    name: Deploy to staging
+    name: New box (staging)
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DEPLOY_INSTANCE_ID != ''
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.LAUNCH_TEMPLATE != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     environment:
       name: staging
       url: https://staging.${{ vars.SITE_DOMAIN }}
+    # One deploy at a time, start to finish.
     concurrency:
-      group: deploy-staging
+      group: deploy
     permissions:
       contents: read
       id-token: write
+    outputs:
+      slot: ${{ steps.launch.outputs.slot }}
     env:
       RELEASE: ${{ github.sha }}
-      DEPLOY_INSTANCE_ID: ${{ vars.DEPLOY_INSTANCE_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
+      LAUNCH_TEMPLATE: ${{ vars.LAUNCH_TEMPLATE }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - uses: actions/download-artifact@v4
         with:
           name: release
@@ -79,23 +91,28 @@ jobs:
         with:
           role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: 3600
       - name: Upload the release
         run: aws s3 cp release.tar.gz "s3://${{ vars.RELEASE_BUCKET }}/releases/$RELEASE.tar.gz" --only-show-errors
-      - name: Install it on staging
-        run: bash deploy/ssm-run.sh "games-drawer-deploy $RELEASE staging"
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
+      - name: Launch a box with it (staging shows it)
+        id: launch
+        run: |
+          out="$(npx tsx deploy/fleet.ts launch "$RELEASE")"
+          echo "$out"
+          slot="$(echo "$out" | sed -n 's/^CANARY_SLOT=//p' | tail -1)"
+          test -n "$slot"
+          echo "slot=$slot" >> "$GITHUB_OUTPUT"
       - run: npx playwright install --with-deps chromium
       - name: Smoke tests against staging
         run: npx playwright test --grep @smoke
         env:
           E2E_BASE_URL: https://staging.${{ vars.SITE_DOMAIN }}
+      - name: Remove the new box
+        if: failure() && steps.launch.outcome != 'skipped'
+        run: npx tsx deploy/fleet.ts rollback "$RELEASE"
 
   production:
-    name: Deploy to production (canary, then everyone)
+    name: Canary, then everyone
     needs: staging
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -103,50 +120,47 @@ jobs:
       name: production
       url: https://${{ vars.SITE_DOMAIN }}
     concurrency:
-      group: deploy-production
+      group: deploy
     permissions:
       contents: read
       id-token: write
     env:
       RELEASE: ${{ github.sha }}
-      DEPLOY_INSTANCE_ID: ${{ vars.DEPLOY_INSTANCE_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
+      LAUNCH_TEMPLATE: ${{ vars.LAUNCH_TEMPLATE }}
       CANARY_PERCENT: ${{ vars.CANARY_PERCENT || '10' }}
       CANARY_MINUTES: ${{ vars.CANARY_MINUTES || '10' }}
     steps:
       - uses: actions/checkout@v5
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-          role-duration-seconds: 3600
-      - name: Start the canary
-        id: canary
-        run: |
-          out="$(bash deploy/ssm-run.sh "games-drawer-deploy $RELEASE canary $CANARY_PERCENT")"
-          echo "$out"
-          slot="$(echo "$out" | sed -n 's/^CANARY_SLOT=//p' | tail -1)"
-          test -n "$slot"
-          echo "slot=$slot" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: 3600
+      - name: Send the new box a share of new tables
+        id: canary
+        run: npx tsx deploy/fleet.ts canary "$RELEASE" "$CANARY_PERCENT"
       - run: npx playwright install --with-deps chromium
-      - name: Smoke tests against the canary only
+      - name: Smoke tests against the new box through the real front door
         run: npx playwright test --grep @smoke
         env:
           E2E_BASE_URL: https://${{ vars.SITE_DOMAIN }}
-          E2E_SLOT: ${{ steps.canary.outputs.slot }}
-      - name: Watch the canary with real players
+          E2E_SLOT: ${{ needs.staging.outputs.slot }}
+      - name: Watch it with real players
         run: |
           for i in $(seq 1 "$CANARY_MINUTES"); do
             sleep 60
             echo "Check $i of $CANARY_MINUTES"
-            bash deploy/ssm-run.sh "games-drawer-deploy $RELEASE check"
+            npx tsx deploy/fleet.ts check "$RELEASE"
           done
-      - name: Send everyone to the new version
-        run: bash deploy/ssm-run.sh "games-drawer-deploy $RELEASE promote"
+      - name: Send everyone to it; the old box finishes its games and shuts down
+        run: npx tsx deploy/fleet.ts promote "$RELEASE"
       - name: Roll back
-        if: failure() && steps.canary.outcome == 'success'
-        run: bash deploy/ssm-run.sh "games-drawer-deploy $RELEASE rollback"
+        if: failure() && steps.canary.outcome != 'skipped'
+        run: npx tsx deploy/fleet.ts rollback "$RELEASE"

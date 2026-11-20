@@ -13,7 +13,9 @@ import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from
  *   NODE_ENV           "production" serves the built client and locks down /stats
  *   SESSION_SECRET     signs reclaim credentials (random per boot if unset)
  *   ALLOWED_ORIGINS    comma-separated origins allowed to open sockets (default: same origin)
- *   TRUST_PROXY=1      read client IPs from X-Forwarded-For (only behind our own Caddy)
+ *   TRUST_PROXY=1      read client IPs from CloudFront's CloudFront-Viewer-Address, else the
+ *                      first X-Forwarded-For (only behind our own Caddy, which only CloudFront and
+ *                      our other boxes can reach)
  *   STATS_TOKEN        required as ?token= for /stats in production
  *   EMPTY_ROOM_MS, RECLAIM_MS, MAX_PUBLIC_ROOMS, MAX_PRIVATE_ROOMS   timers/caps (shorten to test)
  *   IDLE_ROOM_MS       close a table after this long with nobody playing or talking (default 10 min)
@@ -25,14 +27,15 @@ import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from
  *   TURN_SECRET        shared secret (coturn static-auth-secret); players get expiring credentials
  *   TURN_TTL_SECONDS   how long each player's TURN credentials last (default 86400)
  *   LIMITS             JSON overrides for the abuse limits in server.ts, e.g. {"privateRoomsPer10Min":50}
- *   SLOT               a or b when two copies run side by side during a deploy (see deploy/README.md)
+ *   SLOT               this box's slot letter (a-d); its room codes all map to it (see deploy/README.md)
  *   RELEASE            the build's git commit, reported by /healthz
  *   DRAIN_MAX_MS       on SIGUSR2, finish games for at most this long, then exit (default 3 hours)
  *   CLIENT_DIST, BLOCKLIST_PATH   file locations (defaults work in the repo and in a release bundle)
  *   PUZZLE_DIR         where jigsaw puzzles are saved (default ./data/puzzles)
  *   ADMIN_PASSWORD_HASH  turns on /admin; make it with `npm run admin-password` (never the
  *                      password itself). In development it's read from .env.local (git ignores it).
- *   ADMIN_LOG_DIRS     comma-separated log folders /admin adds up (default: LOG_DIR)
+ *   ADMIN_LOG_DIRS     comma-separated log folders /admin adds up, with the folders directly inside
+ *                      them (on AWS, one per box on the shared disk; default: LOG_DIR)
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 // A release bundle (npm run release) puts server.mjs next to client/ and blocklist.txt.
@@ -85,7 +88,7 @@ try {
 }
 const slot = env.SLOT || undefined;
 if (slot !== undefined && !isSlot(slot)) {
-  console.error('SLOT must be a or b.');
+  console.error('SLOT must be one of a, b, c or d.');
   process.exit(1);
 }
 const turnUrls = (env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean);

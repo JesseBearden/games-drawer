@@ -1,13 +1,21 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { botPass, botPlay, DOMINOES_RULES, dominoesBotMove, gameInfo, Rng, spadesBotBid, spadesBotPlay, type DominoesView, type HeartsView, type RoomRequest, type ServerMessage, type SpadesView } from '@tank/shared';
+import { botPass, botPlay, DOMINOES_RULES, dominoesBotMove, gameInfo, Rng, spadesBotBid, spadesBotPlay, type DominoesView, type HeartsView, type RoomRequest, type ServerMessage, type SpadesView, type GameId } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import { HAND_END_MS, HeartsGame, TRICK_PAUSE_MS } from '../src/games/hearts';
 import { SpadesGame } from '../src/games/spades';
 import { DominoesGame } from '../src/games/dominoes';
 import { RoomManager } from '../src/manager';
-import { GAME_SWITCH_COOLDOWN_MS, IDLE_ROOM_MS, IDLE_WARNING_MS, turnCredentials, type Conn, type RoomDeps } from '../src/room';
+import { IDLE_ROOM_MS, IDLE_WARNING_MS, turnCredentials, type Conn, type RoomDeps, type Room } from '../src/room';
+
+/** Pick a game at the table and have everyone here say they're ready, so it starts. */
+function play(room: Room, game: GameId) {
+  const here = [...room.players.entries()].filter(([, p]) => p.conn);
+  if (here.length) room.handle(here[0][0], { t: 'pick', game });
+  for (const [s] of here) room.handle(s, { t: 'ready', ready: true });
+}
+
 
 class FakeConn implements Conn {
   sent: ServerMessage[] = [];
@@ -58,6 +66,12 @@ function joinPrivate(mgr: RoomManager, session: string, code?: string) {
   return { room: lookup.room, conn, session };
 }
 
+/** Whether the join page would say the table is full. */
+function full(room: Room) {
+  const info = room.tableInfo(null);
+  return info.ok && info.full;
+}
+
 /** Advance the clock and run the room until `until` holds (or a time limit). */
 function run(mgr: RoomManager, clock: { now: number }, ms: number, until?: () => boolean) {
   for (let t = 0; t < ms; t += 50) {
@@ -92,55 +106,211 @@ describe('private rooms are parties', () => {
   });
 
   it('anyone can start a game, and anyone can take the room back to the lobby', () => {
-    const { mgr, clock } = setup();
+    const { mgr } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');
     const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
     b.room.handle('session-bbbb', { t: 'pick', game: 'tanks' });
+    play(b.room, 'tanks');
     expect(a.room.game?.id).toBe('tanks');
     expect(a.conn.of('game').at(-1)!.game).toBe('tanks');
     // Both get the tank game's start-up message after the switch.
     for (const c of [a.conn, b.conn]) expect(c.sent.some((m) => m.t === 'g' && m.m.t === 'init')).toBe(true);
     expect(a.room.tanks!.world.tanks.size).toBe(4);
     // A second pick while playing doesn't switch.
-    clock.now += GAME_SWITCH_COOLDOWN_MS;
-    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    play(a.room, 'hearts');
     expect(a.room.game?.id).toBe('tanks');
     a.room.handle('session-aaaa', { t: 'lobby' });
     expect(a.room.game).toBeNull();
     expect(b.conn.of('game').at(-1)!.game).toBeNull();
-    clock.now += GAME_SWITCH_COOLDOWN_MS;
-    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    play(a.room, 'hearts');
     expect(a.room.game?.id).toBe('hearts');
     const chat = a.room.chatHistory.map((m) => m.text);
-    expect(chat).toContain('bbbb started Tanks.');
-    expect(chat).toContain('aaaa ended Tanks. Back to the lobby.');
-    expect(chat).toContain('aaaa started Hearts.');
+    expect(chat).toContain('bbbb picked Tanks.');
+    expect(chat).toContain('Everyone’s ready: Tanks is starting.');
+    expect(chat).toContain('aaaa ended Tanks. Pick a game to play next.');
+    expect(chat).toContain('Everyone’s ready: Hearts is starting.');
   });
 
-  it('throttles game switching', () => {
+  it('a game starts only once everyone at the table is ready', () => {
     const { mgr } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');
-    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
-    a.room.handle('session-aaaa', { t: 'lobby' });
-    expect(a.room.game?.id).toBe('tanks');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'dominoes' });
+    expect(a.room.game).toBeNull();
+    expect(b.conn.of('table').at(-1)!.table.pick).toBe('dominoes');
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    expect(a.room.game).toBeNull();
+    expect(b.conn.of('table').at(-1)!.table.ready).toEqual([a.room.players.get('session-aaaa')!.alias]);
+    // Changing your mind takes it back.
+    b.room.handle('session-bbbb', { t: 'ready', ready: true });
+    expect(a.room.game?.id).toBe('dominoes');
   });
 
-  it('a pick made right after Switch game waits out the cooldown instead of being lost', () => {
+  it('picking another game starts the readiness over', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    b.room.handle('session-bbbb', { t: 'pick', game: 'spades' });
+    expect(a.room.tableSetup()).toEqual({ pick: 'spades', seats: [null, null, null, null], ready: [] });
+    b.room.handle('session-bbbb', { t: 'ready', ready: true });
+    expect(a.room.game).toBeNull();
+    // Not ready any more, then ready again.
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    expect(a.room.game?.id).toBe('spades');
+  });
+
+  it('no one can say they are ready before a game is picked', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    expect(a.room.tableSetup().ready).toEqual([]);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
+    expect(a.room.game).toBeNull();
+  });
+
+  it('a ready taken back doesn’t start the game', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    a.room.handle('session-aaaa', { t: 'ready', ready: false });
+    b.room.handle('session-bbbb', { t: 'ready', ready: true });
+    expect(a.room.game).toBeNull();
+    expect(a.room.tableSetup().ready).toEqual([b.room.players.get('session-bbbb')!.alias]);
+  });
+
+  it('people pick seats for the card and tile games, and keep them when it starts', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    const alias = (s: string) => a.room.players.get(s)!.alias;
+    a.room.handle('session-aaaa', { t: 'pick', game: 'spades' });
+    a.room.handle('session-aaaa', { t: 'sit', seat: 2 });
+    b.room.handle('session-bbbb', { t: 'sit', seat: 0 });
+    expect(a.conn.of('table').at(-1)!.table.seats).toEqual([alias('session-bbbb'), null, alias('session-aaaa'), null]);
+    // A taken seat stays taken.
+    b.room.handle('session-bbbb', { t: 'sit', seat: 2 });
+    expect(a.room.tableSetup().seats[2]).toBe(alias('session-aaaa'));
+    expect(b.conn.of('chat').at(-1)!.msg.text).toBe('aaaa is sitting there.');
+    // Moving leaves your old seat.
+    b.room.handle('session-bbbb', { t: 'sit', seat: 3 });
+    expect(a.room.tableSetup().seats).toEqual([null, null, alias('session-aaaa'), alias('session-bbbb')]);
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    b.room.handle('session-bbbb', { t: 'ready', ready: true });
+    const spades = a.room.game as SpadesGame;
+    expect(spades.seatOf('session-aaaa')).toBe(2);
+    expect(spades.seatOf('session-bbbb')).toBe(3);
+    // The table is clear again for next time.
+    expect(a.room.tableSetup()).toEqual({ pick: null, seats: [], ready: [] });
+  });
+
+  it('people who didn’t pick a seat get a free one, around those who did', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    b.room.handle('session-bbbb', { t: 'sit', seat: 0 });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    b.room.handle('session-bbbb', { t: 'ready', ready: true });
+    const hearts = a.room.game as HeartsGame;
+    expect(hearts.seatOf('session-bbbb')).toBe(0);
+    expect(hearts.seatOf('session-aaaa')).toBe(1);
+  });
+
+  it('Tanks and Jigsaw have no seats to pick', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    a.room.handle('session-aaaa', { t: 'pick', game: 'jigsaw' });
+    a.room.handle('session-aaaa', { t: 'sit', seat: 1 });
+    expect(a.room.tableSetup()).toEqual({ pick: 'jigsaw', seats: [], ready: [] });
+  });
+
+  it('someone who dropped out doesn’t hold up the start, and keeps their seat', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'dominoes' });
+    b.room.handle('session-bbbb', { t: 'sit', seat: 1 });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    // bbbb's connection drops: everyone still here is ready, so it starts, with bbbb's seat kept.
+    b.room.disconnect('session-bbbb', b.conn, 'disconnect');
+    expect(a.room.game?.id).toBe('dominoes');
+    expect((a.room.game as DominoesGame).seatOf('session-bbbb')).toBe(1);
+  });
+
+  it('leaving the table on purpose gives up your seat', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    const c = joinPrivate(mgr, 'session-cccc', a.room.code);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    b.room.handle('session-bbbb', { t: 'sit', seat: 1 });
+    b.room.handle('session-bbbb', { t: 'ready', ready: true });
+    b.room.disconnect('session-bbbb', b.conn, 'left');
+    expect(a.room.tableSetup().seats).toEqual([null, null, null, null]);
+    expect(a.room.tableSetup().ready).toEqual([]);
+    expect(c.conn.of('table').at(-1)!.table.seats[1]).toBeNull();
+    expect(a.room.game).toBeNull();
+  });
+
+  it('people who leave on purpose don’t fill the table up', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    play(a.room, 'jigsaw');
+    const code = a.room.code;
+    // The same person leaving and coming back (each time in a new tab, so as someone new) under
+    // the name already taken at the table: "aaaa 2" each time, never "aaaa 3", and never full.
+    for (let i = 0; i < 6; i++) {
+      const lookup = mgr.resolve({ kind: 'private', code }, `session-phone${i}`);
+      if (!lookup.ok) throw new Error(lookup.code);
+      const r = lookup.room.join(new FakeConn(), `session-phone${i}`, 'aaaa', 'phone');
+      if (!r.ok) throw new Error(r.code);
+      expect(r.name).toBe('aaaa 2');
+      a.room.handle(`session-phone${i}`, { t: 'leave' });
+    }
+    expect(a.room.members().map((m) => m.name)).toEqual(['aaaa']);
+    expect(full(a.room)).toBe(false);
+  });
+
+  it('someone gone a while makes way when the table is full and someone new comes', () => {
     const { mgr, clock } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');
-    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
-    clock.now += GAME_SWITCH_COOLDOWN_MS;
-    a.room.handle('session-aaaa', { t: 'lobby' });
-    expect(a.room.game).toBeNull();
-    // Picked straight away: held for now…
-    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
-    expect(a.room.game).toBeNull();
-    a.room.step();
-    expect(a.room.game).toBeNull();
-    // …and started once the cooldown is over.
-    clock.now += GAME_SWITCH_COOLDOWN_MS;
-    a.room.step();
-    expect(a.room.game?.id).toBe('hearts');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    joinPrivate(mgr, 'session-cccc', a.room.code);
+    joinPrivate(mgr, 'session-dddd', a.room.code);
+    play(a.room, 'hearts');
+    b.room.disconnect('session-bbbb', b.conn, 'disconnect');
+    // Just dropped (maybe a reload): their place is kept.
+    expect(() => joinPrivate(mgr, 'session-eeee', a.room.code)).toThrow('room-full');
+    expect(full(a.room)).toBe(true);
+    // Still gone after QUIET_DROP_MS: the table has said they left, and someone new can have it.
+    clock.now += 10_000;
+    expect(full(a.room)).toBe(false);
+    const e = joinPrivate(mgr, 'session-eeee', a.room.code);
+    expect(a.room.members().map((m) => m.name)).toEqual(['aaaa', 'cccc', 'dddd', 'eeee']);
+    expect(a.conn.of('chat').some((m) => m.msg.text.startsWith('bbbb left'))).toBe(true);
+    // The new person gets the seat that was being played for them.
+    expect((a.room.game as HeartsGame).seatOf('session-eeee')).toBe(1);
+    expect(e.conn.of('welcome').length).toBe(1);
+    // bbbb coming back now is someone new, and the table is full.
+    expect(() => joinPrivate(mgr, 'session-bbbb', a.room.code)).toThrow('room-full');
+  });
+
+  it('a table opened from a game’s page has that game picked, waiting for people', () => {
+    const { mgr } = setup();
+    const lookup = mgr.resolve({ kind: 'create-private', game: 'hearts' }, 'session-aaaa');
+    if (!lookup.ok) throw new Error();
+    const conn = new FakeConn();
+    const r = lookup.room.join(conn, 'session-aaaa', 'aaaa', 'desktop');
+    if (!r.ok) throw new Error(r.code);
+    lookup.room.sendWelcome('session-aaaa', r);
+    expect(lookup.room.game).toBeNull();
+    expect(conn.of('welcome')[0].table).toEqual({ pick: 'hearts', seats: [null, null, null, null], ready: [] });
+    lookup.room.handle('session-aaaa', { t: 'ready', ready: true });
+    expect(lookup.room.game?.id).toBe('hearts');
   });
 
   it('public rooms always play tanks', () => {
@@ -152,7 +322,7 @@ describe('private rooms are parties', () => {
     if (!r.ok) throw new Error();
     lookup.room.sendWelcome('session-aaaa', r);
     lookup.room.handle('session-aaaa', { t: 'lobby' });
-    lookup.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    play(lookup.room, 'hearts');
     expect(lookup.room.game?.id).toBe('tanks');
   });
 
@@ -202,15 +372,16 @@ describe('private rooms are parties', () => {
     }
   });
 
-  it('a private room made from a game’s page opens straight into that game', () => {
+  it('a private room made from a game’s page opens at the table with that game picked', () => {
     const { mgr } = setup();
     const lookup = mgr.resolve({ kind: 'create-private', game: 'hearts' }, 'session-aaaa');
     if (!lookup.ok) throw new Error();
     expect(lookup.room.kind).toBe('private');
-    expect(lookup.room.game?.id).toBe('hearts');
-    // Without a game it opens on the lobby, as before.
+    expect(lookup.room.game).toBeNull();
+    expect(lookup.room.tableSetup().pick).toBe('hearts');
+    // Without a game nothing is picked, as before.
     const plain = mgr.resolve({ kind: 'create-private' }, 'session-bbbb');
-    expect(plain.ok && plain.room.game).toBeNull();
+    expect(plain.ok && plain.room.tableSetup().pick).toBeNull();
   });
 
   it('respects each game’s rollout: private-only games can’t be played publicly, off games not at all', () => {
@@ -222,12 +393,12 @@ describe('private rooms are parties', () => {
       const pub = mgr.resolve({ kind: 'public', game: 'hearts' }, 'session-aaaa');
       expect(pub.ok).toBe(false);
       const priv = joinPrivate(mgr, 'session-bbbb');
-      priv.room.handle('session-bbbb', { t: 'pick', game: 'hearts' });
+      play(priv.room, 'hearts');
       expect(priv.room.game?.id).toBe('hearts');
 
       info.availability = 'off';
       const other = joinPrivate(mgr, 'session-cccc');
-      other.room.handle('session-cccc', { t: 'pick', game: 'hearts' });
+      play(other.room, 'hearts');
       expect(other.room.game).toBeNull();
       expect(mgr.resolve({ kind: 'create-private', game: 'hearts' }, 'session-dddd').ok).toBe(false);
     } finally {
@@ -239,7 +410,7 @@ describe('private rooms are parties', () => {
     const { mgr, clock, log } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');
     const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
-    a.room.handle('session-aaaa', { t: 'pick', game: 'dominoes' });
+    play(a.room, 'dominoes');
     clock.now += 60_000; // both play for a minute
     b.room.disconnect('session-bbbb', b.conn, 'disconnect');
     clock.now += 30_000; // then one alone for half a minute
@@ -260,8 +431,7 @@ describe('private rooms are parties', () => {
     });
 
     // A game still going when the room closes is logged too.
-    clock.now += GAME_SWITCH_COOLDOWN_MS;
-    a.room.handle('session-aaaa', { t: 'pick', game: 'jigsaw' });
+    play(a.room, 'jigsaw');
     clock.now += 10_000;
     a.room.close('empty');
     const last = log.events.filter((e) => e.type === 'game_session').at(-1)!;
@@ -269,17 +439,15 @@ describe('private rooms are parties', () => {
   });
 
   it('voice carries on across game switches', () => {
-    const { mgr, clock } = setup();
+    const { mgr } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');
     const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
     a.room.handle('session-aaaa', { t: 'voice', join: true });
     b.room.handle('session-bbbb', { t: 'voice', join: true });
     const before = a.room.voicePeers();
-    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
-    clock.now += GAME_SWITCH_COOLDOWN_MS;
+    play(a.room, 'hearts');
     a.room.handle('session-aaaa', { t: 'lobby' });
-    clock.now += GAME_SWITCH_COOLDOWN_MS;
-    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
+    play(a.room, 'tanks');
     expect(a.room.voicePeers()).toEqual(before);
     // Nobody was told voice changed.
     expect(a.conn.of('voice').at(-1)!.peers).toHaveLength(2);
@@ -288,7 +456,7 @@ describe('private rooms are parties', () => {
   it('a person who joins mid-game takes a seat', () => {
     const { mgr } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');
-    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    play(a.room, 'hearts');
     const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
     expect(b.conn.of('welcome')[0].game).toBe('hearts');
     const view = b.conn.lastView();
@@ -306,7 +474,7 @@ describe('hearts in a room', () => {
     const env = setup();
     const a = joinPrivate(env.mgr, 'session-aaaa');
     const b = joinPrivate(env.mgr, 'session-bbbb', a.room.code);
-    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    play(a.room, 'hearts');
     const game = a.room.game as HeartsGame;
     return { ...env, a, b, game };
   }
@@ -314,7 +482,7 @@ describe('hearts in a room', () => {
   it('bots wait for every person to pass, so a friend who joins mid-pass still chooses', () => {
     const env = setup();
     const host = joinPrivate(env.mgr, 'session-host');
-    host.room.handle('session-host', { t: 'pick', game: 'hearts' });
+    play(host.room, 'hearts');
     const game = host.room.game as HeartsGame;
     expect(game.phase).toBe('passing');
 
@@ -448,7 +616,7 @@ describe('spades in a room', () => {
     const env = setup();
     const a = joinPrivate(env.mgr, 'session-aaaa');
     const b = joinPrivate(env.mgr, 'session-bbbb', a.room.code);
-    a.room.handle('session-aaaa', { t: 'pick', game: 'spades' });
+    play(a.room, 'spades');
     return { ...env, a, b, game: a.room.game as SpadesGame };
   }
 
@@ -511,7 +679,7 @@ describe('dominoes in a room', () => {
     const env = setup();
     const a = joinPrivate(env.mgr, 'session-aaaa');
     const b = joinPrivate(env.mgr, 'session-bbbb', a.room.code);
-    a.room.handle('session-aaaa', { t: 'pick', game: 'dominoes' });
+    play(a.room, 'dominoes');
     return { ...env, a, b, game: a.room.game as DominoesGame };
   }
 
@@ -766,7 +934,7 @@ describe('tank resync', () => {
   it('sends a fresh snapshot on request, at most every couple of seconds', () => {
     const { mgr, clock } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');
-    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
+    play(a.room, 'tanks');
     const inits = () => a.conn.sent.filter((m) => m.t === 'g' && m.m.t === 'init').length;
     const start = inits();
     for (let i = 0; i < 20; i++) a.room.handle('session-aaaa', { t: 'g', m: { t: 'resync' } });

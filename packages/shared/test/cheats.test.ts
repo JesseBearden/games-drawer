@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, cleanText } from '../src/names';
+import { cleanName, cleanText, MAX_NAME_LENGTH } from '../src/names';
 import { parseClientMessage } from '../src/protocol';
 import { Rng } from '../src/rng';
 import { addPlaced, dropShellAt, flatWorld, runTicks } from './helpers';
@@ -238,8 +238,8 @@ describe('text cleaning', () => {
   it('caps length without splitting emoji', () => {
     const s = '🙂'.repeat(30);
     const out = cleanName(s);
-    expect([...out].length).toBe(20);
-    expect(out).toBe('🙂'.repeat(20));
+    expect([...out].length).toBe(MAX_NAME_LENGTH);
+    expect(out).toBe('🙂'.repeat(MAX_NAME_LENGTH));
   });
 });
 

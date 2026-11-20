@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { ServerMessage } from '@tank/shared';
+import type { ServerMessage, GameId } from '@tank/shared';
 import { ChatModerator, joinSpacedLetters, normalizeForFilter } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import { RoomManager } from '../src/manager';
-import type { Conn } from '../src/room';
+import type { Conn, Room } from '../src/room';
+
+/** Pick a game at the table and have everyone here say they're ready, so it starts. */
+function play(room: Room, game: GameId) {
+  const here = [...room.players.entries()].filter(([, p]) => p.conn);
+  if (here.length) room.handle(here[0][0], { t: 'pick', game });
+  for (const [s] of here) room.handle(s, { t: 'ready', ready: true });
+}
+
 
 class FakeConn implements Conn {
   sent: ServerMessage[] = [];
@@ -101,7 +109,7 @@ describe('rooms and bots', () => {
     const a = join(mgr, 'session-aaaa', { kind: 'create-private' });
     const b = join(mgr, 'session-bbbb', { kind: 'private', code: a.room.code.toLowerCase() });
     expect(b.room).toBe(a.room);
-    a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
+    play(a.room, 'tanks');
     a.tankId = a.room.tanks!.tankIdOf('session-aaaa')!;
     a.room.disconnect('session-aaaa', a.conn, 'disconnect');
     // Ten minutes later (b kept playing, so the table isn't idle), a's tank is still theirs.

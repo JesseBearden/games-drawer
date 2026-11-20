@@ -1,4 +1,4 @@
-import type { ChatFilterMode, GameId, GameInput, GameServerMessage, MemberInfo } from '@tank/shared';
+import type { ChatFilterMode, GameId, GameInput, GameServerMessage, MemberInfo, TableSetup } from '@tank/shared';
 import type { PlayOptions, Sfx, SoundName } from './audio';
 import type { Gamepads, PadPress } from './gamepad';
 
@@ -17,7 +17,11 @@ export interface ShellApi {
   readonly isPrivate: boolean;
   members(): MemberInfo[];
   sendGame(input: GameInput): void;
+  /** At the table between games: the game picked to play next, the seats, and who's ready. */
+  table(): TableSetup;
   pickGame(game: GameId): void;
+  sit(seat: number): void;
+  setReady(ready: boolean): void;
   toLobby(): void;
   toast(text: string): void;
   share(): void;
@@ -51,8 +55,8 @@ export interface View {
   readonly helpHtml: string;
   onGameMessage?(m: GameServerMessage): void;
   onMembers?(members: MemberInfo[]): void;
-  /** The room's chat filter setting changed. */
-  onChatFilter?(): void;
+  /** The table's pick, seats or readiness changed (between games). */
+  onTable?(table: TableSetup): void;
   /** Aliases of people talking in voice right now. */
   onSpeaking?(aliases: Set<string>): void;
   onPong?(at: number): void;

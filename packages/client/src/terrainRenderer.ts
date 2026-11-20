@@ -2,13 +2,15 @@ import type { Terrain } from '@tank/shared';
 import { getGroundPapers, type PaperName, type PaperPixels } from './sprites';
 
 /**
- * Paints the destructible terrain into a world-sized canvas, as layers of torn paper. A texture
- * of paper strata (grass on top, then kraft, peach and butter) is built once per map from the
- * real paper sheets; after each crater only the affected columns are repainted.
+ * Paints the destructible terrain into a world-sized canvas, as layers of felt (the default look)
+ * or torn paper. A texture of strata (felt: olive grass on top, then tan, orange and rust over
+ * charcoal) is built once per map from the real sheets; after each crater only the affected
+ * columns are repainted.
  *
  * Edges are drawn per pixel so overhangs and crater walls look the same:
  *   - the untouched grass top catches the light (a slightly lighter edge)
- *   - torn edges (crater walls, freshly exposed ground) show pale paper fibres
+ *   - torn paper edges (crater walls, freshly exposed ground) show pale fibres; cut felt edges
+ *     are just a little lighter in their own colour
  *   - undersides of overhangs are in shadow
  * Each layer casts a small shadow on the one under it, and its torn bottom edge is pale.
  */
@@ -58,6 +60,7 @@ export class TerrainRenderer {
     const out = img.data;
     const tex = this.texture;
     const surface = this.terrain.surface;
+    const cut = !!groundLook().cut;
     for (let x = x0; x <= x1; x++) {
       const m = maskAt(x)!;
       const ml = maskAt(x - 1);
@@ -80,6 +83,7 @@ export class TerrainRenderer {
         if (airUp1 || airSide1 || airDown1) {
           if (airUp1 && originalTop) [r, g, b] = mix(r, g, b, 255, 255, 240, 0.28);
           else if (airDown1 && !airUp1) [r, g, b] = [r * 0.62, g * 0.62, b * 0.68];
+          else if (cut) [r, g, b] = [Math.min(255, r * 1.18), Math.min(255, g * 1.18), Math.min(255, b * 1.18)];
           else [r, g, b] = mix(r, g, b, 250, 243, 226, 0.78);
         } else {
           let nearUp = 0;
@@ -91,7 +95,9 @@ export class TerrainRenderer {
           }
           const nearSide = (ml2 ? !ml2[y] : false) || (mr2 ? !mr2[y] : false) || (ml ? !ml[y - 1] || !ml[y + 1] : false) || (mr ? !mr[y - 1] || !mr[y + 1] : false);
           const original = y - s >= 0 && y - s < 9;
-          if (!original && (nearUp === 2 || nearSide)) [r, g, b] = mix(r, g, b, 250, 243, 226, 0.5);
+          if (cut) {
+            /* felt: no pale fibres inside the cut */
+          } else if (!original && (nearUp === 2 || nearSide)) [r, g, b] = mix(r, g, b, 250, 243, 226, 0.5);
           else if (!original && nearUp === 3) [r, g, b] = mix(r, g, b, 250, 243, 226, 0.2);
         }
         out[o] = r;
@@ -129,7 +135,16 @@ function smoothNoise(x: number, scale: number, seed: number) {
  * paper), and how thick each is. Colours close together read as one hillside; the first look
  * (peach, kraft, butter at full strength) read as sherbet.
  */
-type Ground = { layers: { paper: PaperName; shade: number }[]; depth: number };
+type Ground = {
+  layers: { paper: PaperName; shade: number }[];
+  depth: number;
+  /** The grass on top (default grass). */
+  grass?: PaperName;
+  /** Below the layers, the ground is this all the way down (instead of the layers repeating). */
+  deep?: PaperName;
+  /** Felt is cut, not torn: smooth edges (no pale fibres, barely any wobble). */
+  cut?: boolean;
+};
 const GROUNDS: Record<string, Ground> = {
   // Brown paper in four close shades.
   kraft: {
@@ -151,6 +166,18 @@ const GROUNDS: Record<string, Ground> = {
     ],
     depth: 60,
   },
+  // Felt (the user's Tanks mock): olive grass, then tan, orange and rust layers over charcoal.
+  felt: {
+    layers: [
+      { paper: 'kraft', shade: 1.04 },
+      { paper: 'orange', shade: 1 },
+      { paper: 'rust', shade: 1 },
+    ],
+    depth: 58,
+    grass: 'olive',
+    deep: 'charcoal',
+    cut: true,
+  },
   // Red canyon clay.
   clay: {
     layers: [
@@ -162,10 +189,10 @@ const GROUNDS: Record<string, Ground> = {
     depth: 66,
   },
 };
-/** In development, ?ground=kraft|earth|clay on the page you start from tries the other looks. */
+/** In development, ?ground=kraft|earth|clay|felt on the page you start from tries the other looks. */
 const GROUND_PICK = import.meta.env.DEV ? new URLSearchParams(location.search).get('ground') : null;
 function groundLook(): Ground {
-  return (GROUND_PICK && GROUNDS[GROUND_PICK]) || GROUNDS.clay;
+  return (GROUND_PICK && GROUNDS[GROUND_PICK]) || GROUNDS.felt;
 }
 /** Flat colours, if the paper sheets aren't loaded (never in practice). */
 const FLAT: Record<string, [number, number, number]> = {
@@ -173,6 +200,10 @@ const FLAT: Record<string, [number, number, number]> = {
   kraft: [187, 146, 106],
   peach: [242, 189, 150],
   butter: [247, 227, 162],
+  olive: [116, 141, 58],
+  orange: [212, 135, 60],
+  rust: [176, 70, 47],
+  charcoal: [62, 61, 67],
 };
 
 /** Paper strata that follow the generated surface, with torn edges between them. */
@@ -192,9 +223,9 @@ function buildTexture(terrain: Terrain): Uint8ClampedArray {
   for (let x = 0; x < W; x++) {
     // A gentle wave (the first layer under the grass stays thick).
     wobble.push(smoothNoise(x, 90, 7) * 18 + smoothNoise(x, 23, 11) * 6);
-    grassEdge.push(25 + smoothNoise(x, 40, 5) * 9 + (smoothNoise(x, 3, 19) - 0.5) * 3);
+    grassEdge.push(25 + smoothNoise(x, 40, 5) * 9 + (smoothNoise(x, 3, 19) - 0.5) * (look.cut ? 0.8 : 3));
   }
-  const tearAt = (x: number, band: number) => (smoothNoise(x, 2.6, 31 + band * 7) - 0.5) * 4;
+  const tearAt = (x: number, band: number) => (smoothNoise(x, 2.6, 31 + band * 7) - 0.5) * (look.cut ? 0.8 : 4);
   const sample = (p: PaperPixels | undefined, name: string, x: number, y: number): [number, number, number] => {
     if (!p) return FLAT[name];
     const i = ((y % p.size) * p.size + (x % p.size)) * 4;
@@ -209,7 +240,8 @@ function buildTexture(terrain: Terrain): Uint8ClampedArray {
       let fromTop: number; // distance below the edge of the layer above (for its shadow)
       let toBottom: number; // distance above this layer's own torn bottom edge
       if (depth < ge) {
-        [r, g, b] = sample(papers?.grass, 'grass', x, y);
+        const grass = look.grass ?? 'grass';
+        [r, g, b] = sample(papers?.[grass], grass, x, y);
         fromTop = 99;
         toBottom = ge - depth;
       } else {
@@ -219,7 +251,10 @@ function buildTexture(terrain: Terrain): Uint8ClampedArray {
         const within = d - band * LAYER_DEPTH;
         const tear = tearAt(x, band);
         const inBand = within + tear < 0 ? band - 1 : band;
-        const layer = LAYERS[((inBand % LAYERS.length) + LAYERS.length) % LAYERS.length];
+        const layer =
+          look.deep && inBand >= LAYERS.length
+            ? { paper: look.deep, shade: 1 }
+            : LAYERS[((inBand % LAYERS.length) + LAYERS.length) % LAYERS.length];
         [r, g, b] = sample(papers?.[layer.paper], layer.paper, x, y);
         r *= layer.shade;
         g *= layer.shade;
@@ -227,6 +262,8 @@ function buildTexture(terrain: Terrain): Uint8ClampedArray {
         fromTop = inBand === band ? within + tear : 99;
         const next = (band + 1) * LAYER_DEPTH + tearAt(x, band + 1);
         toBottom = inBand === band ? next - d : -(within + tear);
+        // Deep down it's one thick sheet: no edges between its bands.
+        if (look.deep && inBand > LAYERS.length) fromTop = toBottom = 99;
         if (depth < ge + SHADOW) fromTop = depth - ge; // right under the grass
       }
       // Strips of paper on top of each other: the layer above casts a shadow on this one (darkest
@@ -238,7 +275,7 @@ function buildTexture(terrain: Terrain): Uint8ClampedArray {
         r *= k;
         g *= k;
         b *= k;
-      } else if (toBottom >= 0 && toBottom < 2.2) {
+      } else if (!look.cut && toBottom >= 0 && toBottom < 2.2) {
         [r, g, b] = mix(r, g, b, 252, 247, 234, 0.5);
       }
       if (fromTop >= 0 && fromTop < 99) {

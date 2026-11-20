@@ -15,7 +15,7 @@ import { isPuzzleId, type PuzzleState, type PuzzleSummary } from './puzzle';
 import { isChatFilterMode, type ChatFilterMode } from './chatFilter';
 import { isGameId, type GameId } from './games';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 4;
 
 /** Private room codes: consonants only (they never spell words), this many letters. */
 export const ROOM_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -30,21 +30,23 @@ export function isRoomCode(code: string) {
 }
 
 /**
- * During a deploy two copies of the server run side by side, in "slots" a and b: games in
- * progress finish on the old copy while new rooms start on the new one. A room's code says
- * which slot holds it, so the web server can send reconnects and invite links to the right
- * copy without asking either of them.
+ * Each game server box has a "slot" letter. During a deploy a new box starts beside the old
+ * one: games in progress finish on the old box while new rooms start on the new one, and a
+ * box from an earlier deploy may still be finishing too. A room's code says which slot holds
+ * it, so every box's web server can send reconnects and invite links to the right box without
+ * asking any of them (deploy/README.md).
  */
-export type Slot = 'a' | 'b';
+export const SLOTS = ['a', 'b', 'c', 'd'] as const;
+export type Slot = (typeof SLOTS)[number];
 
 export function isSlot(v: unknown): v is Slot {
-  return v === 'a' || v === 'b';
+  return (SLOTS as readonly unknown[]).includes(v);
 }
 
 export function slotOfCode(code: string): Slot {
   let sum = 0;
   for (const c of code) sum += ROOM_CODE_ALPHABET.indexOf(c);
-  return sum % 2 === 0 ? 'a' : 'b';
+  return SLOTS[sum % SLOTS.length];
 }
 
 export type RoomKind = 'public' | 'private';
@@ -116,8 +118,12 @@ export type ClientMessage =
   | { t: 'voice'; join: boolean }
   /** WebRTC set-up for one other voice member, relayed by the server. */
   | { t: 'rtc'; to: string; data: RtcSignal }
-  /** Start a game from the lobby (private rooms). */
+  /** At the table between games (private rooms): pick the game to play next (it starts once everyone is ready). */
   | { t: 'pick'; game: GameId }
+  /** At the table: sit at a seat (0-3) for the picked game (Hearts, Spades, Dominoes). */
+  | { t: 'sit'; seat: number }
+  /** At the table: you're ready to start the picked game (or not, any more). */
+  | { t: 'ready'; ready: boolean }
   /** End the current game and take everyone back to the lobby (private rooms). */
   | { t: 'lobby' }
   /** Private rooms: change how swearing in chat is handled (anyone in the room can). */
@@ -283,6 +289,17 @@ export type PuzzleServerMessage =
   /** Saved puzzles you asked about; `gone` are ones that no longer exist (forget them). */
   | { t: 'pz-saves'; saves: PuzzleSummary[]; gone: string[] };
 
+/**
+ * At the table between games: the game picked to play next, who sits where (seated games only:
+ * an alias or null per seat; empty otherwise) and who is ready. The game starts once everyone at
+ * the table is ready; empty seats are played by the computer.
+ */
+export interface TableSetup {
+  pick: GameId | null;
+  seats: (string | null)[];
+  ready: string[];
+}
+
 export type GameServerMessage = TankServerMessage | HeartsServerMessage | SpadesServerMessage | DominoesServerMessage | PuzzleServerMessage;
 
 export type ServerMessage =
@@ -304,9 +321,13 @@ export type ServerMessage =
       chat: ChatMessage[];
       /** How swearing in chat is handled here (public rooms: always 'block'). */
       chatFilter: ChatFilterMode;
+      /** Between games: what the table is setting up. */
+      table: TableSetup;
     }
   /** The room switched games (null: back to the lobby). */
   | { t: 'game'; game: GameId | null }
+  /** Between games: the pick, seats or who's ready changed. */
+  | { t: 'table'; table: TableSetup }
   | { t: 'members'; members: MemberInfo[] }
   /** A message from the current game. */
   | { t: 'g'; m: GameServerMessage }
@@ -422,6 +443,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     }
     case 'pick':
       return isGameId(o.game) ? { t: 'pick', game: o.game } : null;
+    case 'sit':
+      return Number.isInteger(o.seat) && (o.seat as number) >= 0 && (o.seat as number) < 4 ? { t: 'sit', seat: o.seat as number } : null;
+    case 'ready':
+      return typeof o.ready === 'boolean' ? { t: 'ready', ready: o.ready } : null;
     case 'lobby':
       return { t: 'lobby' };
     case 'filter':

@@ -1,10 +1,11 @@
+import type { IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { Rng, type ClientMessage, type ServerMessage } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
-import { SessionSigner, TokenBucket, WindowCounter } from '../src/guard';
+import { clientIp, SessionSigner, TokenBucket, WindowCounter } from '../src/guard';
 import { RoomManager } from '../src/manager';
-import { ANNOUNCE_COOLDOWN_MS, RENAME_COOLDOWN_MS, type Conn } from '../src/room';
+import { ANNOUNCE_COOLDOWN_MS, QUIET_DROP_MS, RENAME_COOLDOWN_MS, type Conn } from '../src/room';
 
 class FakeConn implements Conn {
   sent: ServerMessage[] = [];
@@ -266,6 +267,16 @@ describe('guards', () => {
     expect(s.verify(null)).toBe(false);
     expect(s.verify({})).toBe(false);
   });
+
+  it('client addresses: CloudFront’s viewer address first, then X-Forwarded-For, and only behind our proxy', () => {
+    const req = (headers: Record<string, string>) => ({ headers, socket: { remoteAddress: '10.0.0.9' } }) as unknown as IncomingMessage;
+    expect(clientIp(req({ 'cloudfront-viewer-address': '198.51.100.7:46532', 'x-forwarded-for': '203.0.113.1' }), true)).toBe('198.51.100.7');
+    // IPv6 comes unbracketed: the port is after the last colon.
+    expect(clientIp(req({ 'cloudfront-viewer-address': '2001:db8::7:443' }), true)).toBe('2001:db8::7');
+    expect(clientIp(req({ 'x-forwarded-for': '203.0.113.1, 10.0.0.2' }), true)).toBe('203.0.113.1');
+    // Without our proxy in front, nobody's say-so counts.
+    expect(clientIp(req({ 'cloudfront-viewer-address': '198.51.100.7:46532' }), false)).toBe('10.0.0.9');
+  });
 });
 
 describe('chat reports', () => {
@@ -357,5 +368,40 @@ describe('voice signalling', () => {
     expect(a.room.voicePeers()).toHaveLength(1);
     a.room.join(new FakeConn(), 'session-aaaa', 'x', 'phone');
     expect(a.room.voicePeers()).toHaveLength(0);
+  });
+});
+
+describe('dropping out for a moment', () => {
+  it('says nothing if they are back quickly, and "left" then "is back" if they were gone a while', () => {
+    const { mgr, clock } = setup();
+    const a = join(mgr, 'session-aaaa', 'Alice');
+    const watcher = join(mgr, 'session-bbbb');
+    const said = () => watcher.conn.chats().map((m) => m.text);
+    const before = said().length;
+    // A reload: gone for 3 seconds. Nothing is posted, then or later.
+    a.room.disconnect('session-aaaa', null, 'disconnect');
+    clock.now += 3000;
+    a.room.join(new FakeConn(), 'session-aaaa', 'Alice', 'desktop');
+    clock.now += QUIET_DROP_MS * 2;
+    a.room.housekeeping();
+    expect(said().length).toBe(before);
+    // Gone longer: "Alice left." after QUIET_DROP_MS, then "Alice is back." when she returns.
+    clock.now += ANNOUNCE_COOLDOWN_MS;
+    a.room.disconnect('session-aaaa', null, 'disconnect');
+    a.room.housekeeping();
+    expect(said().some((t) => t.startsWith('Alice left'))).toBe(false);
+    clock.now += QUIET_DROP_MS;
+    a.room.housekeeping();
+    expect(said().some((t) => t.startsWith('Alice left'))).toBe(true);
+    a.room.join(new FakeConn(), 'session-aaaa', 'Alice', 'desktop');
+    expect(said().at(-1)).toBe('Alice is back.');
+  });
+
+  it('says so straight away when someone leaves on purpose', () => {
+    const { mgr } = setup();
+    const a = join(mgr, 'session-aaaa', 'Alice');
+    const watcher = join(mgr, 'session-bbbb');
+    a.room.handle('session-aaaa', { t: 'leave' });
+    expect(watcher.conn.chats().some((m) => m.text.startsWith('Alice left'))).toBe(true);
   });
 });

@@ -1,7 +1,8 @@
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
-import { bootScript, GamesDrawerStack, type GamesDrawerProps } from '../lib/stack';
+import { GamesDrawerEdgeStack } from '../lib/edge';
+import { bootScript, GamesDrawerStack, LAUNCH_TEMPLATE_NAME, type GamesDrawerProps } from '../lib/stack';
 
 function synth(over: Partial<GamesDrawerProps> = {}) {
   const app = new cdk.App();
@@ -17,25 +18,45 @@ function synth(over: Partial<GamesDrawerProps> = {}) {
   return Template.fromStack(stack);
 }
 
-describe('Games Drawer AWS stack', () => {
+type Ingress = { FromPort: number; ToPort: number; IpProtocol: string; CidrIp?: string; SourcePrefixListId?: unknown; SourceSecurityGroupId?: unknown };
+
+describe('Games Drawer AWS stack (the boxes)', () => {
   const t = synth();
 
-  it('runs one small server that cannot bill extra for CPU', () => {
-    t.resourceCountIs('AWS::EC2::Instance', 1);
-    t.hasResourceProperties('AWS::EC2::Instance', { InstanceType: 't4g.micro', CreditSpecification: { CPUCredits: 'standard' } });
-    t.hasResourceProperties('AWS::EC2::LaunchTemplate', { LaunchTemplateData: { MetadataOptions: { HttpTokens: 'required' } } });
-    t.hasResourceProperties('AWS::EC2::Instance', { BlockDeviceMappings: [{ Ebs: { Encrypted: true, VolumeType: 'gp3' } }] });
+  it('launches boxes from a template: small, unable to bill extra for CPU, and gone once shut down', () => {
+    t.resourceCountIs('AWS::EC2::Instance', 0);
+    t.hasResourceProperties('AWS::EC2::LaunchTemplate', {
+      LaunchTemplateName: LAUNCH_TEMPLATE_NAME,
+      LaunchTemplateData: {
+        InstanceType: 't4g.micro',
+        CreditSpecification: { CpuCredits: 'standard' },
+        InstanceInitiatedShutdownBehavior: 'terminate',
+        MetadataOptions: { HttpTokens: 'required', InstanceMetadataTags: 'enabled' },
+        BlockDeviceMappings: [{ Ebs: { Encrypted: true, VolumeType: 'gp3', DeleteOnTermination: true } }],
+        NetworkInterfaces: [Match.objectLike({ AssociatePublicIpAddress: true, DeviceIndex: 0 })],
+      },
+    });
   });
 
-  it('has none of the pricey extras: no NAT gateway, load balancer or Lambda', () => {
-    for (const type of ['AWS::EC2::NatGateway', 'AWS::ElasticLoadBalancingV2::LoadBalancer', 'AWS::Lambda::Function']) t.resourceCountIs(type, 0);
+  it('keeps what matters off the boxes: a shared disk that survives them, reachable only from them', () => {
+    t.hasResource('AWS::EFS::FileSystem', { DeletionPolicy: 'Retain', Properties: Match.objectLike({ Encrypted: true }) });
+    t.hasResourceProperties('AWS::EC2::SecurityGroupIngress', { IpProtocol: 'tcp', FromPort: 2049, ToPort: 2049, SourceSecurityGroupId: Match.anyValue() });
   });
 
-  it('opens only web and voice-relay ports (no SSH)', () => {
-    const groups = t.findResources('AWS::EC2::SecurityGroup');
-    const rules = Object.values(groups).flatMap((g) => (g as { Properties: { SecurityGroupIngress?: { FromPort: number; ToPort: number; IpProtocol: string }[] } }).Properties.SecurityGroupIngress ?? []);
-    const ports = rules.map((r) => `${r.IpProtocol}:${r.FromPort}-${r.ToPort}`).sort();
-    expect(ports).toEqual(['tcp:3478-3478', 'tcp:443-443', 'tcp:80-80', 'udp:3478-3478', 'udp:443-443', 'udp:49152-49352'].sort());
+  it('has none of the pricey extras: no NAT gateway, load balancer or fixed address', () => {
+    for (const type of ['AWS::EC2::NatGateway', 'AWS::ElasticLoadBalancingV2::LoadBalancer', 'AWS::EC2::EIP']) t.resourceCountIs(type, 0);
+  });
+
+  it('opens the voice relay to everyone, web only to CloudFront, port 80 between boxes, and no SSH', () => {
+    const groups = Object.values(t.findResources('AWS::EC2::SecurityGroup')) as { Properties: { SecurityGroupIngress?: Ingress[] } }[];
+    const inline = groups.flatMap((g) => g.Properties.SecurityGroupIngress ?? []);
+    const separate = (Object.values(t.findResources('AWS::EC2::SecurityGroupIngress')) as { Properties: Ingress }[]).map((r) => r.Properties);
+    const rules = [...inline, ...separate];
+    const open = rules.filter((r) => r.CidrIp === '0.0.0.0/0').map((r) => `${r.IpProtocol}:${r.FromPort}-${r.ToPort}`).sort();
+    expect(open).toEqual(['tcp:3478-3478', 'udp:3478-3478', 'udp:49152-49352']);
+    expect(rules.some((r) => r.FromPort === 80 && r.SourcePrefixListId)).toBe(true);
+    expect(rules.some((r) => r.FromPort === 80 && r.SourceSecurityGroupId)).toBe(true);
+    expect(rules.some((r) => r.FromPort === 22 || r.FromPort === 443)).toBe(false);
   });
 
   it('keeps release bundles private', () => {
@@ -55,16 +76,21 @@ describe('Games Drawer AWS stack', () => {
     });
   });
 
-  it('stops the server by itself when real spend reaches the kill-switch amount', () => {
-    t.hasResourceProperties('AWS::Budgets::Budget', { Budget: { BudgetName: 'games-drawer-kill-switch', BudgetLimit: { Amount: 75 } } });
-    t.hasResourceProperties('AWS::Budgets::BudgetsAction', {
-      BudgetName: 'games-drawer-kill-switch',
-      ApprovalModel: 'AUTOMATIC',
-      ActionType: 'RUN_SSM_DOCUMENTS',
-      NotificationType: 'ACTUAL',
-      ActionThreshold: { Type: 'PERCENTAGE', Value: 100 },
-      Definition: { SsmActionDefinition: { Subtype: 'STOP_EC2_INSTANCES', Region: 'us-east-2', InstanceIds: [{ Ref: Match.stringLikeRegexp('Server') }] } },
+  it('stops every box by itself when real spend reaches the kill-switch amount', () => {
+    t.hasResourceProperties('AWS::Budgets::Budget', {
+      Budget: { BudgetName: 'games-drawer-kill-switch', BudgetLimit: { Amount: 75 } },
+      NotificationsWithSubscribers: [
+        {
+          Notification: { NotificationType: 'ACTUAL', Threshold: 100 },
+          Subscribers: [{ SubscriptionType: 'EMAIL', Address: 'alerts@example.com' }, { SubscriptionType: 'SNS', Address: { Ref: Match.stringLikeRegexp('KillSwitchTopic') } }],
+        },
+      ],
     });
+    t.hasResourceProperties('AWS::SNS::Subscription', { Protocol: 'lambda' });
+    t.hasResourceProperties('AWS::Lambda::Function', { Description: Match.stringLikeRegexp('kill switch'), Code: { ZipFile: Match.stringLikeRegexp('StopInstancesCommand') } });
+    // It can stop only our boxes.
+    const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+    expect(policies).toMatch(/"ec2:StopInstances","Condition":\{"StringEquals":\{"aws:ResourceTag\/project":"games-drawer"\}\}/);
   });
 
   it('lets only this repo’s staging and production deploy jobs sign in, and only to deploy', () => {
@@ -80,11 +106,14 @@ describe('Games Drawer AWS stack', () => {
           }),
         ],
       },
-      MaxSessionDuration: 3600,
     });
     const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
-    // The server may read the admin password hash, and no other parameter.
+    // The boxes may read the admin password hash and their shared secrets, and no other parameter.
     expect(policies).toContain('parameter/games-drawer/admin-password-hash');
+    expect(policies).toContain('parameter/games-drawer/secrets');
+    // Deploys may only move the front door's origin record, and only end our own boxes.
+    expect(policies).toContain('"route53:ChangeResourceRecordSetsNormalizedRecordNames":["origin.games.example.com"]');
+    expect(policies).toMatch(/"ec2:TerminateInstances"\],"Condition":\{"StringEquals":\{"aws:ResourceTag\/project":"games-drawer"\}\}/);
     // Nothing broad: no wildcard actions anywhere.
     expect(policies).not.toMatch(/"Action":"\*"|"[a-z0-9]+:\*"/);
   });
@@ -107,11 +136,39 @@ describe('Games Drawer AWS stack', () => {
   });
 });
 
+describe('Games Drawer edge stack (the front door)', () => {
+  const app = new cdk.App();
+  const t = Template.fromStack(new GamesDrawerEdgeStack(app, 'Edge', { env: { region: 'us-east-1' }, domain: 'games.example.com' }));
+
+  it('answers for the domain, www and staging over HTTPS, and passes everything to the box uncached', () => {
+    t.hasResourceProperties('AWS::CertificateManager::Certificate', { DomainName: 'games.example.com', SubjectAlternativeNames: ['www.games.example.com', 'staging.games.example.com'] });
+    t.hasResourceProperties('AWS::CloudFront::Distribution', {
+      DistributionConfig: Match.objectLike({
+        Aliases: ['games.example.com', 'www.games.example.com', 'staging.games.example.com'],
+        Origins: [Match.objectLike({ DomainName: 'origin.games.example.com', CustomOriginConfig: Match.objectLike({ OriginProtocolPolicy: 'http-only', HTTPPort: 80 }) })],
+        DefaultCacheBehavior: Match.objectLike({
+          ViewerProtocolPolicy: 'redirect-to-https',
+          // CachingDisabled, and every header (with CloudFront's) to the box.
+          CachePolicyId: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+          OriginRequestPolicyId: '33f36d7e-f396-46d9-90e0-52428a34d9dc',
+        }),
+        CacheBehaviors: [Match.objectLike({ PathPattern: '/assets/*', CachePolicyId: '658327ea-f89d-4fab-a63d-7e88639e58f6' })],
+      }),
+    });
+  });
+
+  it('keeps the domain’s DNS zone even if the stack goes', () => {
+    t.hasResource('AWS::Route53::HostedZone', { DeletionPolicy: 'Retain', Properties: { Name: 'games.example.com.' } });
+    // The site, www and staging all point at CloudFront (IPv4 and IPv6). origin. is left to deploys.
+    t.resourceCountIs('AWS::Route53::RecordSet', 6);
+  });
+});
+
 describe('first-boot script', () => {
-  it('records the domain, bucket and region and installs the deploy command intact', () => {
-    const lines = bootScript({ domain: 'games.example.com', bucket: 'bucket-1', region: 'us-east-2' });
+  it('records the domain, bucket, region and shared disk, and installs the deploy command intact', () => {
+    const lines = bootScript({ domain: 'games.example.com', bucket: 'bucket-1', region: 'us-east-2', fileSystem: 'fs-123' });
     const script = lines.join('\n');
-    expect(script).toContain("'games.example.com' 'bucket-1' 'us-east-2' > /etc/games-drawer/deploy.env");
+    expect(script).toContain("'games.example.com' 'bucket-1' 'us-east-2' 'fs-123' > /etc/games-drawer/deploy.env");
     expect(script).toContain('exec /usr/local/bin/node "$dir/deploy/rollout.mjs"');
     expect(script).not.toContain('\r');
     // The heredoc is quoted, so $variables reach the file unexpanded.

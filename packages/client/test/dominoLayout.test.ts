@@ -46,7 +46,7 @@ describe('domino table layout', () => {
     expect(problems).toEqual([]);
   });
 
-  it('bends east and west both downward (mirror images) and keeps north and south straight: never a pinwheel', () => {
+  it('bends east and west both downward, north east, and keeps south straight: never a pinwheel', () => {
     const line = (id: string, pips: number[]) => ({
       id,
       from: 'root' as const,
@@ -56,23 +56,56 @@ describe('domino table layout', () => {
       {
         root: { tile: '6-6', inner: 6, outer: 6, seat: 0 },
         spinner: 'root',
-        // Each tile appears once, as in a real game.
-        arms: [line('e', [6, 1, 1, 2, 2, 3]), line('w', [6, 0, 0, 3, 3, 4]), line('n', [6, 4, 4, 5, 5, 1]), line('s', [6, 5, 0, 2, 4, 0])],
+        // Each tile appears once, as in a real game (no doubles: those never turn a corner).
+        arms: [line('e', [6, 1, 2, 3, 4, 5]), line('w', [6, 0, 1, 3, 5, 2]), line('n', [6, 2, 4, 0, 3, 6]), line('s', [6, 5, 1, 4])],
       },
       { across: 4, upDown: 4 },
     );
     const end = (tile: string) => spots.find((s) => s.tile === tile)!;
     // East and west both end up below the centre line, on their own sides...
-    expect(end('2-3').y).toBeGreaterThan(1);
-    expect(end('2-3').x).toBeGreaterThan(1);
-    expect(end('3-4').y).toBeGreaterThan(1);
-    expect(end('3-4').x).toBeLessThan(-1);
-    // ...while north and south stay in the centre column.
-    expect(end('1-5').x).toBeCloseTo(0);
-    expect(end('0-4').x).toBeCloseTo(0);
+    expect(end('4-5').y).toBeGreaterThan(1);
+    expect(end('4-5').x).toBeGreaterThan(1);
+    expect(end('2-5').y).toBeGreaterThan(1);
+    expect(end('2-5').x).toBeLessThan(-1);
+    // ...north bends east into the open space above (no tall column), and south runs straight
+    // down between the two bent sides: the four lines never all turn one way round.
+    expect(end('3-6').x).toBeGreaterThan(1);
+    expect(end('3-6').y).toBeLessThan(-1);
+    expect(end('1-4').x).toBeCloseTo(0);
   });
 
-  it('turns a corner cleanly right after a double', () => {
+  it('turns a corner as an L: the turning tile just past the end of the line, touching it', () => {
+    const spots = layoutSpots(
+      {
+        root: { tile: '6-6', inner: 6, outer: 6, seat: 0 },
+        spinner: 'root',
+        arms: [
+          {
+            id: 'e',
+            from: 'root',
+            tiles: [
+              { tile: '4-6', inner: 6, outer: 4, seat: 0 },
+              { tile: '1-4', inner: 4, outer: 1, seat: 1 },
+              { tile: '1-3', inner: 1, outer: 3, seat: 2 },
+            ],
+          },
+          { id: 'w', from: 'root', tiles: [] },
+          { id: 'n', from: 'root', tiles: [] },
+          { id: 's', from: 'root', tiles: [] },
+        ],
+      },
+      { across: 4, upDown: 8 },
+    );
+    const last = spots.find((s) => s.tile === '1-4')!;
+    const turned = spots.find((s) => s.tile === '1-3')!;
+    // Heading down, its top half (the 1) just past the line's end, level with the line.
+    expect(turned.horizontal).toBe(false);
+    expect(turned.first).toBe(1);
+    expect(turned.x - 0.5).toBeCloseTo(last.x + 1);
+    expect(turned.y - 1).toBeCloseTo(last.y - 0.5);
+  });
+
+  it('never turns at a double, or right after one: the line carries on straight', () => {
     // The case from the screenshot: a line runs into its edge on a crosswise double.
     const spots = layoutSpots(
       {
@@ -97,11 +130,12 @@ describe('domino table layout', () => {
       { across: 5, upDown: 8 },
     );
     const dbl = spots.find((s) => s.tile === '2-2')!;
-    const turned = spots.find((s) => s.tile === '2-3')!;
-    expect(turned.horizontal).toBe(false);
-    expect(overlap(dbl, turned)).toBe(false);
-    // Tucked right under the double, touching it.
-    expect(turned.x).toBeCloseTo(dbl.x);
-    expect(turned.y - 1 - (dbl.y + 1)).toBeCloseTo(0);
+    const next = spots.find((s) => s.tile === '2-3')!;
+    // The double stays crosswise in the line, and the tile after it carries on east, level.
+    expect(dbl.horizontal).toBe(false);
+    expect(dbl.y).toBeCloseTo(0);
+    expect(next.horizontal).toBe(true);
+    expect(next.y).toBeCloseTo(0);
+    expect(next.x - 1).toBeCloseTo(dbl.x + 0.5);
   });
 });

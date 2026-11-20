@@ -37,9 +37,9 @@ test('Dominoes in a private room: pick a tile and play it where it glows', async
       );
       for (const look of looks) {
         expect(look.filter).toBe('none');
-        // Playable tiles are card stock (the shared paper pattern); the others a flat greyed stock.
+        // Playable tiles are ceramic (a shared gradient); the others a flat, darker ceramic.
         if (look.legal) expect(look.face).toContain('url(');
-        else expect(look.face).toBe('rgb(185, 171, 152)');
+        else expect(look.face).toBe('rgb(205, 197, 183)');
       }
       const placedBefore = await view.locator('.dm-placed').count();
       await legal.first().click();

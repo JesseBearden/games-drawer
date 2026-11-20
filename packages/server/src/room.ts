@@ -10,7 +10,9 @@ import {
   type ChatFilterMode,
   INVITE_TOKEN_ALPHABET,
   INVITE_TOKEN_LENGTH,
+  isSeated,
   PROTOCOL_VERSION,
+  SEAT_COUNT,
   Rng,
   uniqueName,
   type ChatMessage,
@@ -23,6 +25,7 @@ import {
   type RoomKind,
   type ServerMessage,
   type TableInfo,
+  type TableSetup,
   type VoicePeer,
   type VoiceSettings,
 } from '@tank/shared';
@@ -82,8 +85,11 @@ export const REPORTS_PER_MINUTE = 5;
 export const RENAME_COOLDOWN_MS = 10_000;
 /** Join/leave/back notices for the same player at most this often. */
 export const ANNOUNCE_COOLDOWN_MS = 20_000;
-/** Starting or ending a game, at most this often per room. */
-export const GAME_SWITCH_COOLDOWN_MS = 1500;
+/**
+ * Someone who drops out and is back within this long (a page reload, a phone waking up) never
+ * shows as having left: "Liz left." is only posted if they're still gone after it.
+ */
+export const QUIET_DROP_MS = 10_000;
 /** Three caught messages within a minute pause that player's chat for 30 seconds. */
 export const CAUGHT_LIMIT = 3;
 export const CAUGHT_WINDOW_MS = 60_000;
@@ -98,11 +104,16 @@ interface Player extends Member {
   connectedAt: number;
   /** When a disconnected player's reservation ends (Infinity in private rooms). */
   reservedUntil: number;
+  /** When they dropped out (null while connected). */
+  awaySince: number | null;
   limiter: RateLimiter;
   lastRename: number;
   /** Last arrival / departure notice, so reconnect loops cannot spam chat. */
   lastArrive: number;
   lastLeave: number;
+  /** "Liz left." waiting to be posted (see QUIET_DROP_MS), and whether it was. */
+  pendingLeave: { at: number; text: string } | null;
+  leaveAnnounced: boolean;
   lastNotice: number;
   inVoice: boolean;
   reportTimes: number[];
@@ -158,7 +169,6 @@ export class Room {
   emptySince: number | null;
   closed = false;
   private rng: Rng;
-  private lastSwitch = -Infinity;
   /** How swearing in chat is handled. Public rooms always block; private rooms start on hide. */
   chatFilter: ChatFilterMode;
   private readonly cfg: GameConfig;
@@ -168,8 +178,11 @@ export class Room {
   /** Whoever started the table (the first to join): named on the join page for a bare code. */
   private starter: string | null = null;
   private readonly inviteTimes = new Map<string, number[]>();
-  /** A game picked too soon after the last switch, waiting for the cooldown (see startGame). */
-  private pendingPick: { session: string; game: GameId } | null = null;
+  /**
+   * Between games (private tables): the game picked to play next, who picked which seat
+   * (sessions; seated games only) and who is ready. It starts once everyone here is ready.
+   */
+  private setup: { pick: GameId | null; seats: (string | null)[]; ready: Set<string> } = { pick: null, seats: [], ready: new Set() };
 
   constructor(
     readonly code: string,
@@ -187,10 +200,15 @@ export class Room {
     this.emptySince = this.createdAt;
     this.host = this.makeHost();
     this.log('room_created', {});
-    const first = firstGame ?? (kind === 'public' ? 'tanks' : null);
-    if (first) {
+    if (kind === 'public') {
+      // Public tables go straight into their game (Tanks unless another was asked for).
+      const first = firstGame ?? 'tanks';
       this.game = this.makeGame(first);
       this.beginSession(first);
+    } else if (firstGame) {
+      // Private tables open at the table, with this game picked: people gather, take seats and
+      // start it together once everyone is ready.
+      this.setPick(firstGame);
     }
   }
 
@@ -287,10 +305,36 @@ export class Room {
     return this.cfg.maxTanksPerRoom;
   }
 
-  /** Places a newcomer could take. */
+  /** Places a newcomer could take: the free ones, and any that people gone a while give up. */
   openSlots() {
-    return this.capacity() - this.players.size;
+    return this.capacity() - this.players.size + this.makingWay().length;
   }
+
+  /**
+   * At a private table, someone who dropped out and is still gone after QUIET_DROP_MS (the table
+   * has said "Liz left.") keeps their place only until someone new needs it: longest gone first.
+   * Otherwise a few dropped phones (each coming back in a new tab, as a new person) fill the table.
+   */
+  private makingWay(now = this.deps.now()) {
+    if (this.kind !== 'private') return [];
+    return [...this.players.values()]
+      .filter((p) => !p.conn && p.awaySince !== null && now - p.awaySince >= QUIET_DROP_MS)
+      .sort((a, b) => a.awaySince! - b.awaySince!);
+  }
+
+  /** Take someone off the table for good: their place, seat and readiness go to others. */
+  private removeForGood(p: Player, logAs?: string) {
+    this.players.delete(p.session);
+    // So a leave-and-rejoin loop still only gets a notice now and then (ANNOUNCE_COOLDOWN_MS).
+    this.goneNotices.set(p.session, { arrive: p.lastArrive, leave: p.lastLeave });
+    if (this.goneNotices.size > 64) this.goneNotices.delete(this.goneNotices.keys().next().value!);
+    if (this.forgetAtTable(p.session)) this.broadcastTable();
+    this.game?.removePlayer(p);
+    if (logAs) this.log(logAs, { pid: p.pid });
+  }
+
+  /** When people who've gone for good last had a join or leave notice (session -> times). */
+  private readonly goneNotices = new Map<string, { arrive: number; leave: number }>();
 
   hasSession(session: string) {
     return this.players.has(session);
@@ -323,18 +367,30 @@ export class Room {
       existing.device = device;
       existing.connectedAt = now;
       existing.reservedUntil = Infinity;
+      existing.awaySince = null;
       const seatBack = this.game ? this.game.reconnect(existing) : true;
       this.countPeople();
       this.emptySince = null;
-      if (wasAway) this.announce(existing, 'arrive', `${existing.name} is back.`);
+      // Back quickly: nothing was said, so nothing to say. Back after "Liz left.": say so.
+      existing.pendingLeave = null;
+      if (wasAway && existing.leaveAnnounced) this.announce(existing, 'arrive', `${existing.name} is back.`);
+      existing.leaveAnnounced = false;
       this.broadcastMembers();
       return { ok: true, reclaimed: wasAway && seatBack, name: existing.name };
     }
 
-    if (this.openSlots() <= 0) return { ok: false, code: 'room-full', message: 'Room is full.' };
+    if (this.players.size >= this.capacity()) {
+      const gone = this.makingWay(now)[0];
+      if (!gone) return { ok: false, code: 'room-full', message: 'Room is full.' };
+      // Their "left" notice first, if housekeeping hasn't got to it yet.
+      this.postPendingLeaves(now);
+      this.removeForGood(gone, 'made_way');
+    }
     const wanted = this.acceptableName(requestedName);
     const name = uniqueName(wanted ?? this.randomName(), this.takenNames());
     this.accrue();
+    const notices = this.goneNotices.get(session);
+    this.goneNotices.delete(session);
     const p: Player = {
       session,
       pid: pseudonym(session),
@@ -344,10 +400,13 @@ export class Room {
       color: this.freeColor(),
       connectedAt: now,
       reservedUntil: Infinity,
+      awaySince: null,
       limiter: new RateLimiter(),
       lastRename: -Infinity,
-      lastArrive: -Infinity,
-      lastLeave: -Infinity,
+      lastArrive: notices?.arrive ?? -Infinity,
+      lastLeave: notices?.leave ?? -Infinity,
+      pendingLeave: null,
+      leaveAnnounced: false,
       lastNotice: -Infinity,
       alias: this.newAlias(),
       inVoice: false,
@@ -399,16 +458,41 @@ export class Room {
     this.accrue();
     p.conn = null;
     p.welcomed = false;
+    p.awaySince = now;
     if (p.inVoice) {
       p.inVoice = false;
       this.broadcastVoice();
     }
-    p.reservedUntil = this.kind === 'public' ? now + this.deps.publicReclaimMs : Infinity;
-    const note = this.game?.disconnect(p, reason) ?? null;
     this.log('disconnect', { pid: p.pid, reason, sessionMs: now - p.connectedAt, device: p.device });
+    if (reason === 'left') {
+      // Leaving on purpose (Leave table) is said straight away, and gives up your place, your
+      // seat and your readiness for good: coming back is joining again.
+      this.announce(p, 'leave', `${p.name} left.`);
+      this.removeForGood(p);
+    } else {
+      p.reservedUntil = this.kind === 'public' ? now + this.deps.publicReclaimMs : Infinity;
+      const note = this.game?.disconnect(p, reason) ?? null;
+      // Posted by housekeeping once they've been gone QUIET_DROP_MS (a quick reload says nothing).
+      p.pendingLeave = { at: now, text: note ? `${p.name} left. ${note}` : `${p.name} left.` };
+      p.leaveAnnounced = false;
+    }
     if (this.humansConnected() === 0) this.emptySince = now;
-    this.announce(p, 'leave', note ? `${p.name} left. ${note}` : `${p.name} left.`);
     this.broadcastMembers();
+    // At the table, someone gone doesn't hold up the start.
+    if (!this.game) this.startIfReady();
+  }
+
+  /** "Liz left." for anyone still gone QUIET_DROP_MS after dropping out. */
+  postPendingLeaves(now = this.deps.now()) {
+    for (const p of this.players.values()) {
+      if (!p.pendingLeave || p.conn || now - p.pendingLeave.at < QUIET_DROP_MS) continue;
+      const { text } = p.pendingLeave;
+      p.pendingLeave = null;
+      // A reconnect loop still only says so now and then (ANNOUNCE_COOLDOWN_MS).
+      const before = p.lastLeave;
+      this.announce(p, 'leave', text);
+      p.leaveAnnounced = p.lastLeave !== before;
+    }
   }
 
   private idleWarned = false;
@@ -425,12 +509,11 @@ export class Room {
   housekeeping(): false | 'empty' | 'idle' {
     const now = this.deps.now();
     this.flushRateLimitCounts();
+    this.postPendingLeaves(now);
     let changed = false;
     for (const p of [...this.players.values()]) {
       if (!p.conn && now >= p.reservedUntil) {
-        this.players.delete(p.session);
-        this.log('reservation_expired', { pid: p.pid });
-        this.game?.removePlayer(p);
+        this.removeForGood(p, 'reservation_expired');
         changed = true;
       }
     }
@@ -489,45 +572,113 @@ export class Room {
 
   // ------------------------------------------------------------------ games
 
-  private startGame(p: Player, id: GameId) {
+/** Anyone at the table picks the game to play next. Seats and readiness start over. */
+  private pickGame(p: Player, id: GameId) {
     if (this.kind !== 'private') return;
     if (!canPlayPrivately(id)) {
       this.notice(p, 'That game isn’t available right now.');
       return;
     }
     if (this.game) {
-      this.notice(p, 'Go back to the lobby to pick another game.');
+      this.notice(p, 'Go back to the table to pick another game.');
       return;
     }
-    const now = this.deps.now();
-    if (now - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) {
-      // Too soon after the last switch (say, a pick right after Switch game): hold the pick and
-      // start it when the wait is over, rather than ignore the tap. The latest pick wins.
-      this.pendingPick = { session: p.session, game: id };
+    if (this.setup.pick === id) return;
+    this.setPick(id);
+    this.systemChat(`${p.name} picked ${GAME_NAMES[id]}.`);
+    this.broadcastTable();
+  }
+
+  private setPick(id: GameId | null) {
+    this.setup = { pick: id, seats: isSeated(id) ? Array<string | null>(SEAT_COUNT).fill(null) : [], ready: new Set() };
+  }
+
+  /** Sit at a seat for the picked game (Hearts, Spades, Dominoes); moving leaves your old one. */
+  private sit(p: Player, seat: number) {
+    if (this.game || !isSeated(this.setup.pick) || seat < 0 || seat >= SEAT_COUNT) return;
+    const holder = this.setup.seats[seat];
+    if (holder === p.session) return;
+    const other = holder ? this.players.get(holder) : undefined;
+    if (other) {
+      this.notice(p, `${other.name} is sitting there.`);
       return;
     }
-    this.pendingPick = null;
-    this.lastSwitch = now;
+    this.setup.seats = this.setup.seats.map((s) => (s === p.session ? null : s));
+    this.setup.seats[seat] = p.session;
+    this.broadcastTable();
+  }
+
+  private setReady(p: Player, ready: boolean) {
+    if (this.game || !this.setup.pick) return;
+    if (ready) this.setup.ready.add(p.session);
+    else this.setup.ready.delete(p.session);
+    this.broadcastTable();
+    this.startIfReady();
+  }
+
+  /**
+   * Everyone at the table right now has said they're ready: start the picked game. (Someone who
+   * dropped out doesn't hold it up; their seat is played for them until they're back.)
+   */
+  private startIfReady() {
+    const pick = this.setup.pick;
+    if (this.game || !pick || this.kind !== 'private') return;
+    const here = [...this.players.values()].filter((m) => m.conn);
+    if (!here.length || !here.every((m) => this.setup.ready.has(m.session))) return;
+    this.startGame(pick);
+  }
+
+  private startGame(id: GameId) {
+    const seats = this.setup.seats;
+    this.setPick(null);
     this.game = this.makeGame(id);
     this.beginSession(id);
+    this.broadcastTable();
     this.broadcast({ t: 'game', game: id });
-    for (const m of this.players.values()) this.game.addPlayer(m);
-    for (const m of this.players.values()) if (m.conn && m.welcomed) this.game.sendInit(m, false);
-    this.systemChat(`${p.name} started ${GAME_NAMES[id]}.`);
-    this.log('game_start', { game: id, by: p.pid, humans: this.humansConnected() });
+    // People who picked a seat sit there; everyone else takes a free one; the computer plays the rest.
+    const members = [...this.players.values()];
+    const chosen = (m: Player) => {
+      const i = seats.indexOf(m.session);
+      return i >= 0 ? i : undefined;
+    };
+    for (const m of members) if (chosen(m) !== undefined) this.game.addPlayer(m, chosen(m));
+    for (const m of members) if (chosen(m) === undefined) this.game.addPlayer(m);
+    for (const m of members) if (m.conn && m.welcomed) this.game.sendInit(m, false);
+    this.systemChat(`Everyone’s ready: ${GAME_NAMES[id]} is starting.`);
+    this.log('game_start', { game: id, humans: this.humansConnected() });
+  }
+
+  tableSetup(): TableSetup {
+    const alias = (s: string | null) => (s ? (this.players.get(s)?.alias ?? null) : null);
+    return {
+      pick: this.setup.pick,
+      seats: this.setup.seats.map(alias),
+      ready: [...this.setup.ready].map((s) => this.players.get(s)?.alias).filter((a): a is string => !!a),
+    };
+  }
+
+  private broadcastTable() {
+    this.broadcast({ t: 'table', table: this.tableSetup() });
+  }
+
+  /** Someone left for good: free their seat and readiness at the table. */
+  private forgetAtTable(session: string) {
+    const had = this.setup.ready.delete(session) || this.setup.seats.includes(session);
+    this.setup.seats = this.setup.seats.map((s) => (s === session ? null : s));
+    return had;
   }
 
   private endGame(p: Player) {
+    // (No cooldown: a game only starts again once everyone at the table is ready.)
     if (this.kind !== 'private' || !this.game) return;
-    const now = this.deps.now();
-    if (now - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) return;
-    this.lastSwitch = now;
     const id = this.game.id;
     this.endSession('lobby');
     this.game.dispose();
     this.game = null;
+    this.setPick(null);
+    this.broadcastTable();
     this.broadcast({ t: 'game', game: null });
-    this.systemChat(`${p.name} ended ${GAME_NAMES[id]}. Back to the lobby.`);
+    this.systemChat(`${p.name} ended ${GAME_NAMES[id]}. Pick a game to play next.`);
     this.log('game_end', { game: id, by: p.pid });
   }
 
@@ -574,7 +725,13 @@ export class Room {
         return;
       }
       case 'pick':
-        this.startGame(p, msg.game);
+        this.pickGame(p, msg.game);
+        return;
+      case 'sit':
+        this.sit(p, msg.seat);
+        return;
+      case 'ready':
+        this.setReady(p, msg.ready);
         return;
       case 'lobby':
         this.endGame(p);
@@ -640,7 +797,7 @@ export class Room {
       ok: true,
       from,
       for: invite?.for ?? null,
-      game: this.game?.id ?? null,
+      game: this.game?.id ?? this.setup.pick,
       people: [...this.players.values()].filter((p) => p.conn).map((p) => p.name),
       away: [...this.players.values()].filter((p) => !p.conn).map((p) => p.name),
       full: this.openSlots() <= 0,
@@ -869,6 +1026,7 @@ export class Room {
       members: this.members(),
       chat: this.chatHistory.slice(),
       chatFilter: this.chatFilter,
+      table: this.tableSetup(),
     };
   }
 
@@ -890,17 +1048,7 @@ export class Room {
   step(): number {
     const start = performance.now();
     this.game?.step();
-    this.startPendingPick();
     return performance.now() - start;
-  }
-
-  /** A game picked during the switch cooldown starts once the cooldown is over. */
-  private startPendingPick() {
-    const pick = this.pendingPick;
-    if (!pick || this.deps.now() - this.lastSwitch < GAME_SWITCH_COOLDOWN_MS) return;
-    this.pendingPick = null;
-    const p = this.players.get(pick.session);
-    if (p?.conn && !this.game) this.startGame(p, pick.game);
   }
 
   stats() {

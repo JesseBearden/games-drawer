@@ -55,12 +55,12 @@ and builds never look for them.
 ## Deploying
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) tests every pull request.
-Pushes to `main` deploy to staging, run smoke tests there, then start the new version in
-production as a canary that gets 10% of new rooms for 10 minutes. If it stays healthy, it
-takes all new rooms; games already running finish on the old version, so a deploy never cuts
-anyone off. If it isn't, everything rolls back. The AWS side (one small server, budgets and a
-spending kill switch) is code in [infra/](infra/README.md); how a deploy works on the server
-is in [deploy/README.md](deploy/README.md).
+Pushes to `main` launch a new server box with the new version. It shows on staging for smoke
+tests, then gets 10% of new tables for 10 minutes. If it stays healthy, it takes all new tables
+and the front door (CloudFront); the old box finishes its games and shuts itself down, so a
+deploy never cuts anyone off. If it isn't, the new box is removed. The AWS side (CloudFront and
+DNS, the boxes' launch template, a shared disk, budgets and a spending kill switch) is code in
+[infra/](infra/README.md); how a deploy moves between boxes is in [deploy/README.md](deploy/README.md).
 
 ## Adding a game
 
@@ -83,8 +83,10 @@ is in [deploy/README.md](deploy/README.md).
 - `packages/client` — Vite + TypeScript client. `shell.ts` is the room (chat, voice, menu); the
   lobby, tanks (Canvas 2D) and Hearts (HTML cards) are views it swaps in.
 - `e2e/` — browser tests (Playwright) that play the site like people do.
-- `deploy/` — what runs on the server: machine setup, Caddy, coturn, and the rollout tool.
-- `infra/` — the AWS stack (CDK): server, firewall, budgets, kill switch, deploy access.
+- `deploy/` — deploys: the fleet tool (launches, promotes and retires boxes) and what runs on
+  each box (machine setup, Caddy routing between boxes, coturn, the rollout tool).
+- `infra/` — the AWS stacks (CDK): CloudFront and DNS, the boxes' launch template, shared disk,
+  firewall, budgets, kill switch, deploy access.
 
 ## Server settings (environment variables)
 
@@ -94,7 +96,7 @@ is in [deploy/README.md](deploy/README.md).
 | `NODE_ENV=production` | | Serve the built client, lock down `/stats` |
 | `SESSION_SECRET` | random per boot | Signs reclaim credentials |
 | `ALLOWED_ORIGINS` | same origin | Comma-separated origins allowed to open sockets |
-| `TRUST_PROXY=1` | off | Read client IPs from `X-Forwarded-For` (only behind our own Caddy) |
+| `TRUST_PROXY=1` | off | Read client IPs from CloudFront's `CloudFront-Viewer-Address`, else `X-Forwarded-For` (only behind our own Caddy) |
 | `STATS_TOKEN` | none | Required as `?token=` for `/stats` in production |
 | `EMPTY_ROOM_MS`, `RECLAIM_MS` | 60000 | Shorten to test room expiry and reclaim |
 | `MAX_PUBLIC_ROOMS`, `MAX_PRIVATE_ROOMS` | 10 | Room caps |
@@ -103,11 +105,11 @@ is in [deploy/README.md](deploy/README.md).
 | `TURN_TTL_SECONDS` | 86400 | How long each player's relay credentials last |
 | `GAME_CONFIG` | none | JSON gameplay overrides for playtests, e.g. `{"winLevel":3}` |
 | `LIMITS` | none | JSON overrides for the abuse limits in `server.ts`, e.g. `{"privateRoomsPer10Min":50}` |
-| `SLOT`, `RELEASE` | none | Set by deploys: which copy this is (a or b) and its git commit, shown on `/healthz` |
+| `SLOT`, `RELEASE` | none | Set by deploys: this box's slot letter (a-d; its table codes all name it) and its git commit, shown on `/healthz` |
 | `DRAIN_MAX_MS` | 3 hours | On `SIGUSR2`, finish games for at most this long, then exit |
 | `PUZZLE_DIR` | `./data/puzzles` | Where jigsaw saves go (one small JSON file each; untouched for 90 days, deleted) |
 | `ADMIN_PASSWORD_HASH` | none (no admin page) | Turns on `/admin`. A one-way hash from `npm run admin-password`, never the password |
-| `ADMIN_LOG_DIRS` | `LOG_DIR` | Comma-separated log folders `/admin` adds up |
+| `ADMIN_LOG_DIRS` | `LOG_DIR` | Comma-separated log folders `/admin` adds up, with the folders directly inside them (one per box on AWS) |
 
 ## Admin page
 

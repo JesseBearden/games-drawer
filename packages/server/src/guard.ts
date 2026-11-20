@@ -78,9 +78,17 @@ export class SessionSigner {
   }
 }
 
-/** Client IP. Only trust X-Forwarded-For when a reverse proxy we control sets it. */
+/**
+ * Client IP. Only trust forwarded addresses when a reverse proxy we control sets them. On AWS
+ * the player's address comes from CloudFront (CloudFront-Viewer-Address: "ip:port", the IP
+ * unbracketed even for IPv6); our boxes only take traffic from CloudFront and each other.
+ */
 export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
   if (trustProxy) {
+    const viewer = req.headers['cloudfront-viewer-address'];
+    const v = (Array.isArray(viewer) ? viewer[0] : viewer)?.trim();
+    const cut = v ? v.lastIndexOf(':') : -1;
+    if (v && cut > 0) return v.slice(0, cut);
     const fwd = req.headers['x-forwarded-for'];
     const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim();
     if (first) return first;

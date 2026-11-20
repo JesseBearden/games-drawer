@@ -19,6 +19,7 @@
   padding: 22px 20px 20px;
   border: 0;
   border-radius: 18px;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-2);
   color: var(--ink);
@@ -43,9 +44,11 @@
 
 /* Choices (piece counts, tools): small white paper pills; the chosen one cobalt. */
 #game .pz-btn {
-  min-height: 44px;
+  min-height: 48px;
+  min-width: 48px;
   border: 0;
   border-radius: 999px;
+  --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   box-shadow:
     0 0 0 2px var(--cobalt),
@@ -55,6 +58,7 @@
 }
 #game .pz-btn.picked,
 #game .pz-btn[aria-pressed='true'] {
+  --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
 }
@@ -70,6 +74,7 @@
 #game .pz-image {
   border: 0;
   border-radius: 10px;
+  --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   color: var(--ink);
@@ -91,6 +96,7 @@
 /* Start stays in reach: a strip of paper along the bottom of the sheet. */
 #game .pz-start-bar {
   border-top: 1.5px solid var(--rule);
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: 0 -6px 12px rgb(17 40 117 / 0.06);
 }
@@ -102,35 +108,48 @@
   color: var(--ink);
 }
 
-/* Puzzles to continue: notes on mat paper. */
+/* Puzzles to continue: pieces of white felt lying on the sheet (the grey read too dark for the
+   words on it, user 2026-11-20). */
 #game .pz-saves li {
-  background: var(--mat) var(--mat-img) 0 0 / var(--paper-size);
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   border-radius: 12px;
-  box-shadow: var(--lift-0);
+  box-shadow: var(--lift-1);
   color: var(--ink);
+  /* On a phone there isn't room for the picture, the words and both buttons in one row: the
+     buttons drop to a row of their own, on the right. */
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+#game .pz-saves span {
+  flex: 1 1 150px;
+}
+#game .pz-saves [data-resume] {
+  margin-left: auto;
+}
+/* A long puzzle name takes two lines rather than being cut short. */
+#game .pz-saves b {
+  white-space: normal;
 }
 #game .pz-saves small {
   color: var(--ink-soft);
 }
 #game .pz-saves .pc-btn {
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 14px;
   font-size: 0.95rem;
 }
-#game .pz-forget {
-  width: auto;
-  height: 40px;
-  padding: 0 6px;
-  border-radius: 8px;
-  color: var(--cobalt);
-  font: 800 0.85rem var(--font);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+/* Remove: a raised tomato button with a bin on it. */
+#game .pz-saves .pz-forget {
+  flex: none;
+  width: 44px;
+  padding: 0;
+  border-radius: var(--radius);
+  color: #fff;
 }
-#game .pz-forget:hover,
-#game .pz-forget:focus-visible {
-  background: rgb(16 61 182 / 0.08);
-  color: var(--cobalt);
+#game .pz-forget svg {
+  display: block;
 }
 
 /* ------------------------------------------------------------------ playing */
@@ -139,6 +158,7 @@
 #game .pz-status {
   border-radius: var(--radius);
   padding: 6px 14px;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   color: var(--ink);
@@ -162,11 +182,12 @@
   gap: 8px;
   padding: 8px;
   border-radius: 16px;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-2);
 }
 #game .pz-tools .pz-btn {
-  min-height: 42px;
+  min-height: 48px;
 }
 /* Phones: the five tools share one row (a little smaller), stretched across the strip. */
 @media (max-width: 640px) {
@@ -182,7 +203,7 @@
   #game .pz-tools .pz-btn {
     flex: 1 1 auto;
     min-width: 0;
-    min-height: 44px;
+    min-height: 48px;
     padding: 4px clamp(4px, 1.8vw, 10px);
     font-size: clamp(0.8rem, 3.9vw, 0.95rem);
     white-space: nowrap;
@@ -199,6 +220,7 @@
 #game .pz-loading,
 #game .pz-done {
   border-radius: 16px;
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-3);
   color: var(--ink);

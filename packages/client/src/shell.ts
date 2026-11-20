@@ -1,4 +1,4 @@
-import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type MemberInfo, type ServerMessage } from '@tank/shared';
+import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type MemberInfo, type ServerMessage, type TableSetup } from '@tank/shared';
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
 import { SpadesTable } from './spadesView';
 import { DominoesTable } from './dominoesView';
@@ -46,6 +46,8 @@ export class RoomApp {
   private alias: string;
   private room: Welcome['room'];
   private membersList: MemberInfo[];
+  /** Between games: what's picked, who sits where, who's ready. */
+  private tableState: TableSetup;
   private chatOpen: boolean;
   private unread = 0;
   private liveChat = false;
@@ -87,6 +89,7 @@ export class RoomApp {
     this.alias = welcome.alias;
     this.room = welcome.room;
     this.membersList = welcome.members;
+    this.tableState = welcome.table;
     this.chatFilter = welcome.chatFilter;
     this.voice = this.makeVoice(welcome);
     this.api = this.makeApi();
@@ -121,7 +124,10 @@ export class RoomApp {
       },
       members: () => this.membersList,
       sendGame: (m) => this.net.send({ t: 'g', m }),
+      table: () => this.tableState,
       pickGame: (game) => this.net.send({ t: 'pick', game }),
+      sit: (seat) => this.net.send({ t: 'sit', seat }),
+      setReady: (ready) => this.net.send({ t: 'ready', ready }),
       toLobby: () => this.net.send({ t: 'lobby' }),
       toast: (t) => this.toast(t),
       share: () => void this.share(),
@@ -168,7 +174,7 @@ export class RoomApp {
     this.view.onMembers?.(this.membersList);
     this.view.onSpeaking?.(this.speaking);
     // Help: how to play what's on screen (the game picker has its own few words).
-    $('help-title').textContent = id ? `How to play ${gameInfo(id).name}` : 'Picking a game';
+    $('help-title').textContent = id ? `How to play ${gameInfo(id).name}` : 'At the table';
     $('help-body').innerHTML = this.view.helpHtml;
     $('menu-lobby').hidden = !(this.room.kind === 'private' && id !== null);
     if (!$('menu').hidden) this.openSheet(null);
@@ -194,6 +200,10 @@ export class RoomApp {
         this.membersList = msg.members;
         this.view?.onMembers?.(msg.members);
         return;
+      case 'table':
+        this.tableState = msg.table;
+        this.view?.onTable?.(msg.table);
+        return;
       case 'voice':
         this.voice.onPeers(msg.peers);
         return;
@@ -213,7 +223,6 @@ export class RoomApp {
         this.chatFilter = msg.mode;
         this.renderFilterSetting();
         this.updateChatInput();
-        this.view?.onChatFilter?.();
         return;
       case 'chatPaused':
         this.chatPausedUntil = Date.now() + msg.ms;
@@ -253,6 +262,7 @@ export class RoomApp {
     this.alias = w.alias;
     this.room = w.room;
     this.membersList = w.members;
+    this.tableState = w.table;
     this.chatFilter = w.chatFilter;
     this.renderFilterSetting();
     this.updateChatInput();
@@ -522,9 +532,12 @@ export class RoomApp {
   // ------------------------------------------------------------------ toolbar, menu, keys
 
   toast(text: string) {
+    const box = $('toasts');
+    // The same note again (tapping a tile that doesn't fit twice) replaces it rather than stacking.
+    const last = box.lastElementChild;
+    if (last?.textContent === text) last.remove();
     const el = document.createElement('div');
     el.textContent = text;
-    const box = $('toasts');
     box.append(el);
     while (box.children.length > 3) box.firstElementChild!.remove();
     setTimeout(() => el.remove(), 3500);
@@ -532,7 +545,10 @@ export class RoomApp {
 
   private updateSoundButton() {
     $('btn-sound').textContent = this.sfx.muted ? 'Turn sound on' : 'Turn sound off';
-    ($<HTMLInputElement>('menu-volume')).value = String(Math.round(this.sfx.volume * 100));
+    const volume = $<HTMLInputElement>('menu-volume');
+    volume.value = String(Math.round(this.sfx.volume * 100));
+    // How far along the slider is filled (styles draw the filled part from this).
+    volume.style.setProperty('--fill', `${volume.value}%`);
   }
 
   private updateRoomInfo() {
@@ -560,6 +576,15 @@ export class RoomApp {
     $('menu-fullscreen').hidden = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     on('chat-collapse', () => this.setChatOpen(false));
     on('btn-fullscreen', () => this.toggleFullscreen());
+    // The button says what it will do: "Exit full screen" while the page is full screen.
+    const fullscreenLabel = () => {
+      const doc = document as Document & { webkitFullscreenElement?: Element };
+      $('btn-fullscreen').textContent = document.fullscreenElement || doc.webkitFullscreenElement ? 'Exit full screen' : 'Full screen';
+    };
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+      document.addEventListener(ev, fullscreenLabel);
+      this.cleanups.push(() => document.removeEventListener(ev, fullscreenLabel));
+    }
     on('btn-share', () => this.share());
     on('btn-menu', () => this.openSheet($('menu').hidden ? 'menu' : null));
     on('btn-mic', this.onMicButton);
@@ -584,6 +609,11 @@ export class RoomApp {
     // Using the bar folds it again (Mute mic a moment later, so you see it change), and so does
     // touching the battlefield.
     on('bar-tab', () => this.setBarOpen(!$('game').classList.contains('bar-open')));
+    // Turning the phone folds it too: it was laid out for the way the phone was held.
+    const upright = matchMedia('(orientation: portrait)');
+    const foldOnTurn = () => this.setBarOpen(false);
+    upright.addEventListener('change', foldOnTurn);
+    this.cleanups.push(() => upright.removeEventListener('change', foldOnTurn));
     const toolbar = $('game').querySelector<HTMLElement>('.toolbar')!;
     const foldAfterUse = (e: Event) => {
       const btn = (e.target as HTMLElement).closest('button');
@@ -704,6 +734,12 @@ export class RoomApp {
       } else if (e.code === 'KeyF') {
         this.toggleFullscreen();
       } else if (e.key === 'Escape') {
+        // A game's own sheet (Scores) closes first, and never gets the Menu stacked on top of it.
+        const gameSheet = document.querySelector<HTMLElement>('#game .view:not([hidden]) .ht-overlay:not([hidden])');
+        if (gameSheet && !this.openSheetName()) {
+          gameSheet.querySelector<HTMLElement>('[data-act="close-scores"]')?.click();
+          return;
+        }
         this.openSheet(this.openSheetName() ? null : 'menu');
       }
     };

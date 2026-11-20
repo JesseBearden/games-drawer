@@ -144,6 +144,10 @@ export const GAMES: GameInfo[] = [
 ];
 
 export const GAME_IDS: GameId[] = GAMES.map((g) => g.id);
+/** Games where where you sit matters (turn order, partners): people pick their seats first. */
+export const SEATED_GAMES: readonly GameId[] = ['hearts', 'spades', 'dominoes'];
+export const isSeated = (g: GameId | null): boolean => !!g && SEATED_GAMES.includes(g);
+export const SEAT_COUNT = 4;
 export const GAME_NAMES = Object.fromEntries(GAMES.map((g) => [g.id, g.name])) as Record<GameId, string>;
 
 export function isGameId(v: unknown): v is GameId {

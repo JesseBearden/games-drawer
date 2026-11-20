@@ -24,6 +24,10 @@
     <meta name="theme-color" content="#fffcf5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <!-- From the home screen on an iPhone the page sits below the status bar. ("black-translucent"
+         would run it underneath, but iOS 26 then leaves a band the status bar's height empty at
+         the bottom and cuts the page off there: tried 2026-11-20.) The page moves by the status
+         bar's height each time the phone turns; styles.css keeps taps lined up when it does. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/art/drawer.svg" type="image/svg+xml" />
@@ -35,7 +39,7 @@
   </head>
   <body>
     <!-- Shared SVG paper: the card stock as a fill (domino faces use it). -->
-    <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id="gd-stock" patternUnits="userSpaceOnUse" width="300" height="300"><image href="/art/card-stock.webp" width="300" height="300" /></pattern></defs></svg>
+    <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id="gd-stock" patternUnits="userSpaceOnUse" width="300" height="300"><image href="/art/card-stock.webp" width="300" height="300" /></pattern><linearGradient id="gd-ivory" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#fffbf2" /><stop offset="0.55" stop-color="#f6eedd" /><stop offset="1" stop-color="#ebdfc6" /></linearGradient><linearGradient id="gd-ceramic" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4efe7" /><stop offset="0.6" stop-color="#ede7dd" /><stop offset="1" stop-color="#e4ddd1" /></linearGradient><linearGradient id="gd-pip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070d1c" /><stop offset="0.55" stop-color="#141d33" /><stop offset="1" stop-color="#2c3754" /></linearGradient><linearGradient id="gd-bevel" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.75" /><stop offset="0.12" stop-color="#fff" stop-opacity="0.2" /><stop offset="0.5" stop-color="#fff" stop-opacity="0" /><stop offset="0.88" stop-color="#8a7046" stop-opacity="0.12" /><stop offset="1" stop-color="#7d6342" stop-opacity="0.4" /></linearGradient></defs></svg>
     <!-- The way in: home (/), starting a table (/start, or a game's own address like /jigsaw),
          and joining one (/r/CODE, an invite link). Cut Paper look: paper.css + entry.css. -->
     <main id="landing" class="entry pc-page">
@@ -43,7 +47,7 @@
         <a class="pc-brand" href="/" data-nav="/"><img src="/art/brand.webp" alt="" width="44" height="44" />Games Drawer</a>
 
         <section id="page-home" class="entry-page" hidden>
-          <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="522" /></div>
+          <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="498" /></div>
           <div class="entry-welcome">
             <h1 class="pc-h1">Play a game together.</h1>
             <p class="pc-lead">Talk and play at your own private table. Just you and the people you invite, up to four in all.</p>
@@ -61,12 +65,10 @@
         </section>
 
         <section id="page-start" class="entry-page" hidden>
+          <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="498" /></div>
           <h1 class="pc-h2">Start a table</h1>
+          <p id="start-detail" class="pc-lead entry-detail"></p>
           <form id="start-form" class="entry-form" novalidate>
-            <fieldset class="entry-games">
-              <legend class="pc-h3">Choose a game</legend>
-              <div id="start-games" class="pc-choices"></div>
-            </fieldset>
             <div class="entry-name" data-name-for="start"></div>
             <div class="entry-mic">
               <button class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="submit" value="on">Start with mic on</button>
@@ -77,7 +79,7 @@
         </section>
 
         <section id="page-join" class="entry-page" hidden>
-          <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="522" /></div>
+          <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="498" /></div>
           <h1 id="join-title" class="pc-h2">Join the table</h1>
           <p id="join-detail" class="pc-lead entry-detail"></p>
           <form id="join-form" class="entry-form" novalidate>
@@ -111,9 +113,8 @@
           <span id="wind-speed">0</span>
         </div>
 
+        <!-- Angle and power show in the control strip; this corner only says when a spread shot is ready. -->
         <div id="aim-box" class="aim-box">
-          <div><span class="aim-label">Angle</span> <span id="aim-angle">60°</span></div>
-          <div><span class="aim-label">Power</span> <span id="aim-power">55%</span></div>
           <div id="spread-badge" class="spread-badge" hidden>Spread ready</div>
         </div>
 
@@ -122,25 +123,24 @@
         <div id="feed" class="feed" aria-live="polite"></div>
 
 
-        <!-- Touch controls -->
+        <!-- The control strip (every device): move (from level 4), angle, power and fire, with the
+             angle and power readings between their buttons. -->
         <div id="touch" class="touch" hidden>
-          <div class="pad pad-left">
-            <div class="pad-row">
-              <button class="tbtn" data-act="angle-left" aria-label="Turret left">⟲</button>
-              <button class="tbtn" data-act="angle-right" aria-label="Turret right">⟳</button>
-            </div>
-            <div class="pad-row">
-              <button class="tbtn" data-act="power-down" aria-label="Less power">−</button>
-              <button class="tbtn" data-act="power-up" aria-label="More power">+</button>
-            </div>
+          <div id="move-row" class="cs-group" hidden>
+            <button class="tbtn" data-act="move-left" aria-label="Move left">◀</button>
+            <button class="tbtn" data-act="move-right" aria-label="Move right">▶</button>
           </div>
-          <div class="pad pad-right">
-            <div id="move-row" class="pad-row" hidden>
-              <button class="tbtn" data-act="move-left" aria-label="Move left">◀</button>
-              <button class="tbtn" data-act="move-right" aria-label="Move right">▶</button>
-            </div>
-            <button id="fire-btn" class="tbtn fire" data-act="fire">Fire</button>
+          <div class="cs-group">
+            <button class="tbtn" data-act="angle-left" aria-label="Turret left">⟲</button>
+            <div class="cs-read"><span class="aim-label">Angle</span><span id="aim-angle">60°</span></div>
+            <button class="tbtn" data-act="angle-right" aria-label="Turret right">⟳</button>
           </div>
+          <div class="cs-group">
+            <button class="tbtn" data-act="power-down" aria-label="Less power">−</button>
+            <div class="cs-read"><span class="aim-label">Power</span><span id="aim-power">55%</span></div>
+            <button class="tbtn" data-act="power-up" aria-label="More power">+</button>
+          </div>
+          <button id="fire-btn" class="tbtn fire" data-act="fire">Fire</button>
         </div>
         <div id="scores" class="scores" hidden></div>
         <div id="rotate" class="overlay rotate"><div class="overlay-card">Turn your screen sideways to play</div></div>
@@ -185,7 +185,7 @@
             <p>Send them a link. When they open it, they come straight to this table.</p>
             <div class="pc-field">
               <label for="invite-name">Their name <span class="pc-small">(you can leave it blank)</span></label>
-              <input id="invite-name" class="pc-input" maxlength="20" placeholder="Like Penny" autocomplete="off" autocapitalize="words" spellcheck="false" />
+              <input id="invite-name" class="pc-input" maxlength="15" placeholder="Like Penny" autocomplete="off" autocapitalize="words" spellcheck="false" />
             </div>
             <p class="pc-small sheet-note">With a name, it’s filled in for them, so they just tap Join.</p>
             <button id="invite-send" class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="button">Send the invite</button>
@@ -245,7 +245,7 @@
             <section class="sheet-part">
               <h3 class="pc-h3">Your name</h3>
               <div class="entry-row">
-                <input id="menu-name" class="pc-input" maxlength="20" autocomplete="off" spellcheck="false" aria-label="Your name" />
+                <input id="menu-name" class="pc-input" maxlength="15" autocomplete="off" spellcheck="false" aria-label="Your name" />
                 <button id="menu-name-save" class="pc-btn pc-btn-plain" type="button">Save</button>
               </div>
             </section>

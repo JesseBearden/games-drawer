@@ -23,8 +23,8 @@ const PAD_ACTIONS: Partial<Record<PadButton, Action>> = {
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const EMPTY_HEART =
-  '<svg viewBox="0 0 64 58" aria-hidden="true"><path d="M32 52 C14 40 5 30 5 18 C5 10 11 5 18 5 C24 5 29 9 32 13 C35 9 40 5 46 5 C53 5 59 10 59 18 C59 30 50 40 32 52 Z" fill="rgba(17,40,117,0.12)" stroke="#112875" stroke-opacity=".45" stroke-width="4" stroke-dasharray="6 5" stroke-linejoin="round"/></svg>';
+/** A lost life: the felt heart's outline. */
+const EMPTY_HEART = '<img src="/sprites/heart-empty.png" alt="" />';
 
 /** The artillery game: battlefield canvas, HUD and controls. */
 export class TankView implements View {
@@ -52,7 +52,8 @@ export class TankView implements View {
     private sprites: Sprites,
   ) {
     $('tank-view').hidden = false;
-    $('touch').hidden = !shell.device.touch;
+    // The control strip shows on every device (a computer can use it with the mouse, or the keys).
+    $('touch').hidden = false;
     this.input = new Input(
       {
         gameplayPress: () => this.tryDrop(),
@@ -180,7 +181,27 @@ export class TankView implements View {
     this.renderer?.resize();
   }
 
-  private onResize = () => this.renderer?.resize();
+  private onResize = () => {
+    this.renderer?.resize();
+    this.inset = -1;
+  };
+
+  /**
+   * How much of the battlefield the control strip covers: from the bottom, or from the right when
+   * it runs down the side (a phone held sideways). Measured, then kept until a resize.
+   */
+  private inset = -1;
+  private insetRight = 0;
+  private stripInset() {
+    if (this.inset < 0) {
+      const strip = $('touch').getBoundingClientRect();
+      const canvas = $('canvas').getBoundingClientRect();
+      const side = strip.height > strip.width;
+      this.inset = strip.height && !side ? Math.max(0, canvas.bottom - strip.top + 6) : 0;
+      this.insetRight = strip.height && side ? Math.max(0, canvas.right - strip.left + 6) : 0;
+    }
+    return this.inset;
+  }
 
   // ------------------------------------------------------------------ sound
 
@@ -268,7 +289,7 @@ export class TankView implements View {
       // Riding in the helicopter (or floating down): keep it in view, to see where you'll land.
       if (me && (me.phase === 'carried' || me.phase === 'chute')) highest = Math.min(highest, me.y);
       // On touch screens the corner control pads cover roughly the bottom 70px.
-      this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.shell.device.touch ? 70 : 0, Number.isFinite(highest) ? highest : deepest);
+      this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.stripInset(), Number.isFinite(highest) ? highest : deepest, this.insetRight);
       this.renderer.draw(g, this.camera, { angle: this.input.angle, power: this.input.power }, now);
       this.updateAmbience();
       this.updateHud(g);

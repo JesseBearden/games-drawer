@@ -14,6 +14,7 @@
 #game .hud-top-left {
   padding: 6px 10px 6px 8px;
   border-radius: var(--radius);
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
 }
@@ -33,6 +34,7 @@
 #game .status,
 #game .scores {
   border-radius: var(--radius);
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   color: var(--ink);
@@ -48,6 +50,7 @@
   color: var(--ink-soft);
 }
 #game .spread-badge {
+  --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / 200px;
   color: var(--ink);
   font: 800 0.9rem var(--font);
@@ -75,6 +78,7 @@
 
 /* Who knocked out whom: small paper notes. Names in ink, underlined in the tank's colour. */
 #game .feed div {
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-0);
   color: var(--ink);
@@ -97,6 +101,7 @@
 #game .tbtn {
   border: 0;
   border-radius: 14px;
+  --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   box-shadow:
     0 0 0 2px var(--cobalt),
@@ -104,12 +109,14 @@
   color: var(--cobalt);
 }
 #game .tbtn.held {
+  --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
   box-shadow: var(--lift-0);
 }
 /* Fire: the big tomato button. Spread ready and Drop: sunflower. */
 #game .tbtn.fire {
+  --fc: var(--tomato);
   background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
   color: #fff;
   font: 800 1.6rem var(--font);
@@ -121,6 +128,7 @@
 }
 #game .tbtn.fire.spread,
 #game .tbtn.fire.drop {
+  --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
   color: var(--ink);
   animation: none;
@@ -161,4 +169,115 @@
 /* "Turn your phone sideways": a paper note. */
 #game .rotate .overlay-card {
   font: 800 1.4rem var(--font);
+}
+
+/* ------------------------------------------------------------------ the control strip (felt) */
+
+/* Every control in one compact felt strip along the bottom (from the user's felt Tanks mock):
+   move (from level 4), Angle with its reading, Power with its reading, then Fire. It replaces the
+   two corner pads and the Angle / Power tag in the top right. */
+#game .touch {
+  inset: auto auto calc(10px + var(--safe-b)) 50%;
+  transform: translateX(-50%);
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(100% - 16px - var(--safe-l) - var(--safe-r));
+  padding: 8px 10px;
+  border-radius: 18px;
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-2);
+  pointer-events: auto;
+}
+#game .cs-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#game .cs-group[hidden] {
+  display: none;
+}
+#game .cs-read {
+  display: grid;
+  justify-items: center;
+  min-width: 3.6em;
+  line-height: 1.1;
+}
+#game .cs-read .aim-label {
+  display: block;
+  min-width: 0;
+  opacity: 1;
+  font: 400 0.8rem var(--font);
+  color: var(--ink-soft);
+  text-shadow: none;
+}
+#game .cs-read span:last-child {
+  font: 800 1.25rem var(--font);
+  color: var(--ink);
+}
+#game .touch .tbtn {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  font: 800 1.35rem var(--font);
+  box-shadow: var(--lift-1);
+}
+#game .touch .tbtn.fire {
+  width: auto;
+  min-width: 100px;
+  height: 52px;
+  padding: 0 22px;
+  font-size: 1.45rem;
+  box-shadow: var(--lift-1);
+}
+/* The corner tag only shows "Spread ready" now. */
+#game .aim-box {
+  min-width: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+/* Small phones on their side: a little tighter. */
+@media (max-width: 700px) {
+  #game .touch {
+    gap: 10px;
+    padding: 6px 8px;
+  }
+  #game .touch .tbtn {
+    width: 44px;
+    height: 44px;
+  }
+  #game .touch .tbtn.fire {
+    min-width: 84px;
+    padding: 0 14px;
+  }
+}
+
+/* A phone held sideways: height is precious, width isn't (the whole battlefield leaves room at
+   the sides), so the control strip runs down the right edge instead: move, Angle and Power one
+   row each, then Fire. The battlefield is framed to its left (tankView.stripInset). */
+@media (max-height: 500px) {
+  #game.phone .touch {
+    inset: auto calc(8px + var(--safe-r)) calc(8px + var(--safe-b)) auto;
+    transform: none;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+    gap: 10px;
+    max-width: none;
+    padding: 10px 8px;
+  }
+  #game.phone .touch .cs-group {
+    justify-content: space-between;
+  }
+  #game.phone .touch .tbtn {
+    width: 46px;
+    height: 46px;
+  }
+  #game.phone .touch .tbtn.fire {
+    width: 100%;
+    min-width: 0;
+    height: 56px;
+  }
 }

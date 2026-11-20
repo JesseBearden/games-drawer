@@ -118,7 +118,7 @@ Use one word for each thing, everywhere.
 | Invite | share, send link |
 | Switch game | change game, back to lobby |
 | Leave table | exit, quit, disconnect |
-| (a computer player: a robot name and a small computer screen on its tag, no word) | Computer, bot, AI, CPU |
+| the computer (in a sentence that needs it: "the computer plays the empty seats"). On a player's name tag, just a robot name and a small computer screen, since a word there takes room the tag doesn't have. | bot, AI, CPU |
 | Away (someone who dropped out) | disconnected, offline |
 | Your turn / Liz's turn | waiting for Liz… |
 | Work in Progress | under construction, beta, still being built |
@@ -164,6 +164,14 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 
 ## At the table
 
+- **The table comes before the game** (user, 2026-11-20). Starting a table asks only for a name
+  and the mic; everyone gathers at **Your table** first: who's here (with Invite), the mic, the
+  games (anyone picks or changes the pick), and for Hearts, Spades and Dominoes four seats round
+  a small piece of green table (tap to sit; nearest you at the bottom, then round the way play
+  goes). A strip that stays at the bottom says who we're waiting for, with **I'm ready**. The
+  game starts when everyone here is ready: someone away doesn't hold it up, and the computer
+  plays the empty seats. A game's own page (`/dominoes`) opens the table with that game picked.
+  Switch game brings everyone back here with nothing picked.
 - **A paper bar across the top:** Mute mic, Messages, Invite, Menu. The game sits below it, never
   under it.
 - **The mic button says what it will do:** Mute mic (cobalt), or Unmute mic / Turn on mic
@@ -186,18 +194,27 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 
 - **Card and tile games (Hearts, Spades, Dominoes)** are played on the blue mat.
   - **Name tags:** each player has a paper name tag; whose turn it is gets sunflower paper,
-    lifted. Someone who dropped out says "Away". Computer players have made-up robot names
-    (`ROBOT_NAMES`; our own names only, never robots from films, shows or toys) and a small
-    computer screen after the name, which stays in view when a long name is cut. Score sheets
-    leave it off. No "Computer" word, and Spades has no "Partner" label either, since your
-    partner always sits across.
+    lifted. **Every tag is the same size, whatever the name** (user, 2026-11-20): a long name
+    shrinks a little, then ends in "…". On a phone held upright the three across the top split
+    the width evenly, and yours is as wide as one of them. Tags are two lines (name, score) and
+    never grow a third: someone who dropped out gets a small "zzz" after their name (not the
+    word "Away"), and computer players a small computer screen. Both marks stay in view when a
+    long name is cut; score sheets leave them off. Computer players have made-up robot names
+    (`ROBOT_NAMES`; our own names only, never robots from films, shows or toys, and no two that
+    look alike, like Beep Boop and Bleep Bloop). No "Computer" label under the name (it took
+    room the tags don't have; the word is fine in a sentence that needs it, user 2026-11-20), and
+    Spades has no "Partner" label either, since your partner always sits across.
   - **Spades:** your team's tags are lilac, Spades' own color.
-  - **Other players' hands:** a small pile of cobalt card backs and the count.
+  - **Other players' hands:** not shown. In a trick game everyone holds about the same number
+    of cards, so the tags keep just the name and score.
   - **Dominoes:** card stock with navy pips, your hand straight on the mat. The tile just
     played has a sunflower edge, and the places you can play are dashed cobalt (they don't pulse).
+    Lines turn at the edge of the table as an L (the turning tile just past the end of the
+    line), but never at a double or right after one, which would make it look like a spinner:
+    those run on a little past the edge instead (user, 2026-11-20).
   - **Your name and Scores** sit side by side, the same height, their edges lined up with the
     button's outline. Your own tag doesn't lift on your turn (the yellow says it), so the two stay
-    level. Side tags are as wide as their names. There's only ever one Scores
+    level. There's only ever one Scores
     button: after a hand, while you look at the board, it becomes a cobalt "Back to scores".
   - **Dominoes on a phone held sideways:** there's no height for a row of names above the board
     and a row of tiles below it. Everyone's name goes down the left in turn order (yours first)

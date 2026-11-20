@@ -5,6 +5,6 @@
   "instanceType": "t4g.micro",
   "amiId": null,
   "monthlyBudgetUsd": 30,
-  "killSwitchUsd": 75,
+  "killSwitchUsd": 65,
   "anomalyAlerts": false
 }

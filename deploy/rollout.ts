@@ -1,83 +1,47 @@
 /**
- * The rollout tool: runs on the game server, as root, from inside a release bundle
- * (release/deploy/rollout.mjs). games-drawer-deploy calls it:
+ * The rollout tool: runs on one game server box, as root, from inside a release bundle
+ * (release/deploy/rollout.mjs). games-drawer-deploy calls it, and the fleet tool (fleet.ts)
+ * calls that through AWS Systems Manager:
  *
- *   rollout <release> staging            put this release on staging.DOMAIN
- *   rollout <release> canary [percent]   start it in the free slot and send it that share of new rooms
- *   rollout <release> check              is the canary healthy? (exit 1 if not)
- *   rollout <release> promote            send all new rooms to the canary; the old copy drains
- *   rollout <release> rollback           send everything back to the old copy and stop the canary
- *   rollout <release> status             print what's running where
+ *   rollout <release> start <slot> [previous]  set the box up and start this release as <slot>
+ *   rollout <release> route <map>              take the fleet map (base64 JSON) and reroute
+ *   rollout <release> share <running>          copy build files between this release and the
+ *                                              one this box runs, so pages from either load
+ *   rollout <release> check                    is the server healthy? (exit 1 if not)
+ *   rollout <release> retire <minutes>         finish the games here, then shut the box down
+ *   rollout <release> status                   print what's running
  *
- * Two copies of the game server live in slots a and b (ports 8801/8802); staging is a third
- * (8803). Room codes say which slot holds a room (slotOfCode), so reconnects and invite links
- * reach the right copy. A deploy never cuts a game off: the old copy gets SIGUSR2, finishes
- * the games it has, then exits by itself.
+ * Each box runs one copy of the game server; a deploy brings up a new box beside the old one
+ * (deploy/README.md). A deploy never cuts a game off: the old box gets SIGUSR2, finishes the
+ * games it has, then powers off, and AWS removes it (it was launched to terminate on shutdown).
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { GAME_PORT, isFleetMap, routesSnippet, soloMap, SLOTS, type FleetMap, type Slot } from './fleetMap';
 
-export type Slot = 'a' | 'b';
-export type Unit = Slot | 'staging';
-
-export const PORTS: Record<Unit, number> = { a: 8801, b: 8802, staging: 8803 };
 export const ETC = '/etc/games-drawer';
 export const STATE_FILE = `${ETC}/state.json`;
-export const UPSTREAMS_FILE = '/etc/caddy/games-drawer-upstreams.caddy';
+export const ROUTES_FILE = '/etc/caddy/games-drawer-routes.caddy';
+export const RELEASES = '/opt/games-drawer/releases';
+/** How often a retiring box checks whether its games are done. */
+export const RETIRE_POLL_MS = 30_000;
 
 export interface State {
-  /** The slot taking new rooms (all of them, apart from a canary's share). */
-  active: Slot | null;
-  /** A new version on trial in the other slot. */
-  canary: Slot | null;
-  /** The release in each slot. */
-  releases: Partial<Record<Unit, string>>;
+  /** This box's slot (its room codes all name it) and the release it runs. */
+  slot: Slot | null;
+  release: string | null;
+  /** Set once the box is finishing its games before shutting down. */
+  retiring: boolean;
 }
 
-export const EMPTY_STATE: State = { active: null, canary: null, releases: {} };
+export const EMPTY_STATE: State = { slot: null, release: null, retiring: false };
 
-export function otherSlot(s: Slot): Slot {
-  return s === 'a' ? 'b' : 'a';
-}
-
-/** The slot a new release goes into: whichever one isn't taking new rooms. */
-export function canarySlot(state: State): Slot {
-  return state.active ? otherSlot(state.active) : 'a';
-}
-
-/** The Caddy snippet that decides where new rooms (and page loads) go. */
-export function upstreams(state: State, canaryPercent: number): string {
-  const { active, canary } = state;
-  if (active && canary && canaryPercent < 100) {
-    const pct = Math.max(1, Math.min(99, Math.round(canaryPercent)));
-    return [
-      `# ${100 - pct}% to slot ${active} (${state.releases[active]?.slice(0, 7)}), ${pct}% to the canary in slot ${canary} (${state.releases[canary]?.slice(0, 7)})`,
-      `reverse_proxy 127.0.0.1:${PORTS[active]} 127.0.0.1:${PORTS[canary]} {`,
-      `\tlb_policy weighted_round_robin ${100 - pct} ${pct}`,
-      '}',
-      '',
-    ].join('\n');
-  }
-  const only = canary && (!active || canaryPercent >= 100) ? canary : active;
-  if (!only) return 'respond "Starting up. Try again in a minute." 503\n';
-  return `# Everything to slot ${only} (${state.releases[only]?.slice(0, 7)})\nreverse_proxy 127.0.0.1:${PORTS[only]}\n`;
-}
-
-/** The env file for one copy of the server (see games-drawer@.service). */
-export function slotEnv(unit: Unit, release: string, releaseDir: string): string {
-  const lines = [
-    `GAME_PORT=${PORTS[unit]}`,
-    unit === 'staging' ? '' : `SLOT=${unit}`,
-    `RELEASE=${release}`,
-    `RELEASE_DIR=${releaseDir}`,
-    `LOG_DIR=/var/log/games-drawer/${unit}`,
-    // The admin page adds up both production copies' logs (staging keeps to its own).
-    `ADMIN_LOG_DIRS=${unit === 'staging' ? '/var/log/games-drawer/staging' : '/var/log/games-drawer/a,/var/log/games-drawer/b'}`,
-  ];
-  return lines.filter(Boolean).join('\n') + '\n';
+/** The env file for this box's game server (see games-drawer@.service). */
+export function slotEnv(slot: Slot, release: string, releaseDir: string): string {
+  return [`GAME_PORT=${GAME_PORT}`, `SLOT=${slot}`, `RELEASE=${release}`, `RELEASE_DIR=${releaseDir}`].join('\n') + '\n';
 }
 
 export interface Health {
@@ -87,24 +51,24 @@ export interface Health {
   draining: boolean;
 }
 
-export interface CanaryStats {
+export interface ServerStats {
   handlerErrors: number;
   roomErrors: number;
   restarts: number;
   running: boolean;
 }
 
-/** What makes a canary fail its check. Any crash, restart or error counts: real ones are rare. */
-export function canaryProblems(s: CanaryStats): string[] {
+/** What makes a new box fail its check. Any crash, restart or error counts: real ones are rare. */
+export function serverProblems(s: ServerStats): string[] {
   const problems: string[] = [];
-  if (!s.running) problems.push('the canary is not running');
+  if (!s.running) problems.push('the game server is not running');
   if (s.restarts > 0) problems.push(`it restarted ${s.restarts} time(s)`);
   if (s.roomErrors > 0) problems.push(`${s.roomErrors} room(s) crashed`);
   if (s.handlerErrors > 0) problems.push(`${s.handlerErrors} message handler error(s)`);
   return problems;
 }
 
-/** Copy build assets each release lacks from the other, so a page from either copy can load. */
+/** Copy build assets each release lacks from the other, so a page from either release can load. */
 export function shareAssets(dirA: string, dirB: string) {
   const a = path.join(dirA, 'client', 'assets');
   const b = path.join(dirB, 'client', 'assets');
@@ -120,6 +84,18 @@ export function shareAssets(dirA: string, dirB: string) {
   }
 }
 
+/** The fleet map, as the fleet tool sends it (base64 JSON, so it passes through a shell untouched). */
+export function decodeMap(arg: string | undefined): FleetMap {
+  let v: unknown;
+  try {
+    v = JSON.parse(Buffer.from(arg ?? '', 'base64').toString('utf8'));
+  } catch {
+    throw new Error('The fleet map is not valid base64 JSON.');
+  }
+  if (!isFleetMap(v)) throw new Error('That is not a fleet map.');
+  return v;
+}
+
 // ---------------------------------------------------------------- side effects
 
 /** Everything that touches the machine, so tests can swap it out. */
@@ -128,10 +104,22 @@ export interface System {
   writeState(s: State): void;
   writeFile(file: string, text: string): void;
   sh(cmd: string, args: string[]): string;
-  health(unit: Unit): Promise<Health | null>;
-  stats(unit: Unit): Promise<Record<string, unknown> | null>;
+  health(): Promise<Health | null>;
+  stats(): Promise<Record<string, unknown> | null>;
+  /** This box's private IP and the site's domain (from the instance and deploy.env). */
+  privateIp(): string;
+  domain(): string;
+  now(): number;
   sleep(ms: number): Promise<void>;
   log(msg: string): void;
+}
+
+function envValue(file: string, key: string): string {
+  try {
+    return new RegExp(`^${key}=(.*)$`, 'm').exec(fs.readFileSync(file, 'utf8'))?.[1]?.trim() ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export const realSystem: System = {
@@ -152,23 +140,26 @@ export const realSystem: System = {
   sh(cmd, args) {
     return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
   },
-  async health(unit) {
+  async health() {
     try {
-      const res = await fetch(`http://127.0.0.1:${PORTS[unit]}/healthz`, { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(`http://127.0.0.1:${GAME_PORT}/healthz`, { signal: AbortSignal.timeout(2000) });
       return res.ok ? ((await res.json()) as Health) : null;
     } catch {
       return null;
     }
   },
-  async stats(unit) {
+  async stats() {
     try {
-      const token = /^STATS_TOKEN=(.*)$/m.exec(fs.readFileSync(`${ETC}/secrets.env`, 'utf8'))?.[1] ?? '';
-      const res = await fetch(`http://127.0.0.1:${PORTS[unit]}/stats?token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(2000) });
+      const token = envValue(`${ETC}/secrets.env`, 'STATS_TOKEN');
+      const res = await fetch(`http://127.0.0.1:${GAME_PORT}/stats?token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(2000) });
       return res.ok ? ((await res.json()) as Record<string, unknown>) : null;
     } catch {
       return null;
     }
   },
+  privateIp: () => envValue(`${ETC}/box.env`, 'PRIVATE_IP'),
+  domain: () => envValue(`${ETC}/deploy.env`, 'DOMAIN'),
+  now: () => Date.now(),
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   log: (msg) => console.log(msg),
 };
@@ -180,8 +171,14 @@ export class Rollout {
     private releaseDir: string,
   ) {}
 
-  private unitName(u: Unit) {
-    return `games-drawer@${u}`;
+  private unit(slot: Slot) {
+    return `games-drawer@${slot}`;
+  }
+
+  private mySlot(): Slot {
+    const { slot } = this.sys.readState();
+    if (!slot) throw new Error('This box has no game server yet (run start first).');
+    return slot;
   }
 
   /** Run this release's setup.sh if it differs from the last one that ran. */
@@ -200,140 +197,140 @@ export class Rollout {
     this.sys.writeFile(`${ETC}/setup.sha256`, hash + '\n');
   }
 
-  private async start(unit: Unit) {
-    this.sys.writeFile(`${ETC}/slot-${unit}.env`, slotEnv(unit, this.release, this.releaseDir));
-    this.sys.sh('install', ['-d', '-m', '750', '-o', 'games', '-g', 'games', `/var/log/games-drawer/${unit}`]);
-    this.sys.sh('systemctl', ['restart', this.unitName(unit)]);
+  private writeRoutes(map: FleetMap, slot: Slot) {
+    this.sys.writeFile(ROUTES_FILE, routesSnippet(map, slot, this.sys.domain()));
+    this.sys.sh('systemctl', ['reload', 'caddy']);
+  }
+
+  /** Set the box up and start this release as `slot`. A new box serves everything itself until the fleet tool says otherwise. */
+  async start(slot: Slot, previous?: string) {
+    if (!SLOTS.includes(slot)) throw new Error(`Unknown slot ${slot}.`);
+    const state = this.sys.readState();
+    if (state.slot && state.slot !== slot) throw new Error(`This box is already slot ${state.slot}.`);
+    this.ensureSetup();
+    // Pages loaded from the box this one replaces ask for that release's build files.
+    if (previous && previous !== this.release) {
+      this.sys.sh('/usr/local/bin/games-drawer-deploy', [previous, 'fetch']);
+      shareAssets(this.releaseDir, path.join(RELEASES, previous));
+    }
+    this.sys.writeFile(`${ETC}/slot-${slot}.env`, slotEnv(slot, this.release, this.releaseDir));
+    this.sys.sh('systemctl', ['restart', this.unit(slot)]);
     for (let i = 0; i < 60; i++) {
-      const h = await this.sys.health(unit);
+      const h = await this.sys.health();
       if (h?.ok && h.release === this.release) {
-        this.sys.log(`Slot ${unit} is up with ${this.release.slice(0, 7)}.`);
+        this.sys.sh('systemctl', ['enable', this.unit(slot)]);
+        this.sys.writeState({ slot, release: this.release, retiring: false });
+        if (!state.slot) this.writeRoutes(soloMap(slot, this.sys.privateIp()), slot);
+        this.sys.log(`Slot ${slot} is up with ${this.release.slice(0, 7)}.`);
         return;
       }
       await this.sys.sleep(1000);
     }
-    this.sys.sh('systemctl', ['stop', this.unitName(unit)]);
-    throw new Error(`Slot ${unit} didn't come up with release ${this.release.slice(0, 7)} within a minute.`);
+    this.sys.sh('systemctl', ['stop', this.unit(slot)]);
+    throw new Error(`Slot ${slot} didn't come up with release ${this.release.slice(0, 7)} within a minute.`);
   }
 
-  private routeTo(state: State, canaryPercent: number) {
-    this.sys.writeFile(UPSTREAMS_FILE, upstreams(state, canaryPercent));
-    this.sys.sh('systemctl', ['reload', 'caddy']);
+  /** Reroute this box from the fleet map. */
+  route(map: FleetMap) {
+    const slot = this.mySlot();
+    if (!map.boxes[slot]) throw new Error(`The fleet map doesn't include this box (slot ${slot}).`);
+    this.writeRoutes(map, slot);
+    this.sys.log(`Box ${slot}: new tables → ${map.newTables.map(([s, w]) => `${s} ${w}%`).join(', ')}; staging → ${map.staging ?? 'none'}.`);
   }
 
-  async staging() {
-    this.ensureSetup();
-    await this.start('staging');
-    this.sys.sh('systemctl', ['enable', this.unitName('staging')]);
-    const state = this.sys.readState();
-    state.releases.staging = this.release;
-    this.sys.writeState(state);
-  }
-
-  async canary(percent: number) {
-    this.ensureSetup();
-    const state = this.sys.readState();
-    const slot = canarySlot(state);
-    // The slot may still hold an older copy finishing its games from two deploys ago.
-    const old = state.releases[slot];
-    if (old && old !== this.release) this.sys.log(`Replacing ${old.slice(0, 7)} in slot ${slot}; any games still on it end now.`);
-    if (state.active) {
-      const activeDir = path.join(path.dirname(this.releaseDir), state.releases[state.active] ?? '');
-      shareAssets(this.releaseDir, activeDir);
-    }
-    await this.start(slot);
-    state.canary = slot;
-    state.releases[slot] = this.release;
-    this.routeTo(state, state.active ? percent : 100);
-    this.sys.writeState(state);
-    this.sys.log(`CANARY_SLOT=${slot}`);
-    this.sys.log(state.active ? `Slot ${slot} gets ${percent}% of new rooms.` : `First deploy: slot ${slot} gets everything.`);
+  /** This release (just fetched) and the one this box runs swap build files. */
+  share(running: string) {
+    shareAssets(this.releaseDir, path.join(RELEASES, running));
+    this.sys.log(`Shared build files between ${this.release.slice(0, 7)} and ${running.slice(0, 7)}.`);
   }
 
   async check(): Promise<boolean> {
-    const state = this.sys.readState();
-    const slot = state.canary;
-    if (!slot) {
-      this.sys.log('No canary running.');
-      return false;
-    }
+    const slot = this.mySlot();
     let running = false;
     try {
-      running = this.sys.sh('systemctl', ['is-active', this.unitName(slot)]).trim() === 'active';
+      running = this.sys.sh('systemctl', ['is-active', this.unit(slot)]).trim() === 'active';
     } catch {
       /* is-active exits non-zero when the unit isn't running */
     }
-    const restarts = Number(/NRestarts=(\d+)/.exec(this.sys.sh('systemctl', ['show', '-p', 'NRestarts', this.unitName(slot)]))?.[1] ?? 0);
-    const s = (await this.sys.stats(slot)) ?? {};
-    const stats: CanaryStats = { running, restarts, handlerErrors: Number(s.handlerErrors ?? 0), roomErrors: Number(s.roomErrors ?? 0) };
-    const problems = canaryProblems(stats);
-    this.sys.log(`Canary in slot ${slot}: ${s.players ?? 0} players in ${s.roomCount ?? 0} rooms. ${problems.length ? `Problems: ${problems.join('; ')}.` : 'Healthy.'}`);
+    const restarts = Number(/NRestarts=(\d+)/.exec(this.sys.sh('systemctl', ['show', '-p', 'NRestarts', this.unit(slot)]))?.[1] ?? 0);
+    const s = (await this.sys.stats()) ?? {};
+    const stats: ServerStats = { running, restarts, handlerErrors: Number(s.handlerErrors ?? 0), roomErrors: Number(s.roomErrors ?? 0) };
+    const problems = serverProblems(stats);
+    this.sys.log(`Box ${slot}: ${s.players ?? 0} players in ${s.roomCount ?? 0} rooms. ${problems.length ? `Problems: ${problems.join('; ')}.` : 'Healthy.'}`);
     return problems.length === 0;
   }
 
-  async promote() {
+  /**
+   * Finish the games here, then shut down. The server gets SIGUSR2 (it exits once its games
+   * end, or after DRAIN_MAX_MS); a background job powers the box off once it has, and not
+   * before `graceMinutes` (until then, players still reaching this box for the front door's
+   * old address are passed to the new one).
+   */
+  retire(graceMinutes: number) {
+    const slot = this.mySlot();
     const state = this.sys.readState();
-    const slot = state.canary;
-    if (!slot) throw new Error('No canary to promote.');
-    const old = state.active;
-    state.active = slot;
-    state.canary = null;
-    this.routeTo(state, 100);
-    this.sys.sh('systemctl', ['enable', this.unitName(slot)]);
-    if (old) {
-      this.sys.sh('systemctl', ['disable', this.unitName(old)]);
-      // Finish the games in progress, then exit (see SIGUSR2 in packages/server/src/main.ts).
-      this.sys.sh('systemctl', ['kill', '--signal=SIGUSR2', '--kill-whom=main', this.unitName(old)]);
-    }
-    this.sys.writeState(state);
-    this.sys.log(`Slot ${slot} (${state.releases[slot]?.slice(0, 7)}) now takes all new rooms.${old ? ` Slot ${old} is finishing its games.` : ''}`);
-  }
-
-  async rollback() {
-    const state = this.sys.readState();
-    const slot = state.canary;
-    if (!slot) {
-      this.sys.log('No canary to roll back.');
+    if (state.retiring) {
+      this.sys.log(`Box ${slot} is already finishing its games.`);
       return;
     }
-    state.canary = null;
-    this.routeTo(state, 100);
-    this.sys.sh('systemctl', ['stop', this.unitName(slot)]);
-    delete state.releases[slot];
-    this.sys.writeState(state);
-    this.sys.log(`Rolled back: slot ${slot} stopped${state.active ? `, slot ${state.active} takes everything again` : ''}.`);
+    this.sys.sh('systemctl', ['disable', this.unit(slot)]);
+    this.sys.sh('systemctl', ['kill', '--signal=SIGUSR2', '--kill-whom=main', this.unit(slot)]);
+    const notBefore = this.sys.now() + graceMinutes * 60_000;
+    const self = path.join(this.releaseDir, 'deploy', 'rollout.mjs');
+    this.sys.sh('systemd-run', ['--unit=games-drawer-retire', '--description=Games Drawer: shut down once the games are done', '/usr/local/bin/node', self, this.release, 'finish', String(notBefore)]);
+    this.sys.writeState({ ...state, retiring: true });
+    this.sys.log(`Box ${slot} is finishing its games; it shuts down once they're done (not before ${graceMinutes} minutes).`);
+  }
+
+  /** The background half of retire: wait for the server to exit and the grace time to pass, then power off. */
+  async finish(notBefore: number) {
+    const slot = this.mySlot();
+    for (;;) {
+      let active = true;
+      try {
+        active = this.sys.sh('systemctl', ['is-active', this.unit(slot)]).trim() === 'active';
+      } catch {
+        active = false;
+      }
+      if (!active && this.sys.now() >= notBefore) break;
+      await this.sys.sleep(RETIRE_POLL_MS);
+    }
+    this.sys.log(`Box ${slot}'s games are done. Shutting down.`);
+    this.sys.sh('systemctl', ['poweroff']);
   }
 
   async status() {
     const state = this.sys.readState();
-    this.sys.log(JSON.stringify(state, null, 2));
-    for (const u of ['a', 'b', 'staging'] as Unit[]) {
-      const h = await this.sys.health(u);
-      this.sys.log(`${u}: ${h ? `${h.release.slice(0, 7)}${h.draining ? ' (finishing its games)' : ''}` : 'not running'}`);
-    }
+    const h = await this.sys.health();
+    this.sys.log(JSON.stringify(state));
+    this.sys.log(h ? `Running ${h.release.slice(0, 7)} as slot ${h.slot}${h.draining ? ' (finishing its games)' : ''}.` : 'The game server is not running.');
   }
 }
 
 async function main() {
-  const [release, cmd, arg] = process.argv.slice(2);
+  const [release, cmd, arg, arg2] = process.argv.slice(2);
   const releaseDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const r = new Rollout(realSystem, release, releaseDir);
   switch (cmd) {
-    case 'staging':
-      return r.staging();
-    case 'canary':
-      return r.canary(Number(arg ?? 10));
+    case 'fetch':
+      return; // games-drawer-deploy already fetched the release
+    case 'start':
+      return r.start(arg as Slot, arg2 && arg2 !== 'none' ? arg2 : undefined);
+    case 'route':
+      return r.route(decodeMap(arg));
+    case 'share':
+      return r.share(arg);
     case 'check':
       if (!(await r.check())) process.exitCode = 1;
       return;
-    case 'promote':
-      return r.promote();
-    case 'rollback':
-      return r.rollback();
+    case 'retire':
+      return r.retire(Number(arg ?? 15));
+    case 'finish':
+      return r.finish(Number(arg));
     case 'status':
       return r.status();
     default:
-      console.error('usage: rollout <release> staging|canary [percent]|check|promote|rollback|status');
+      console.error('usage: rollout <release> start <slot> [previous]|route <map>|share <running>|check|retire [minutes]|status');
       process.exitCode = 2;
   }
 }

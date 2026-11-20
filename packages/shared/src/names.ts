@@ -50,12 +50,14 @@ export const NAME_SNACKS = [
   'Fudge', 'Toffee', 'Tamale', 'Strudel', 'Croissant', 'Hotcake', 'Pop Tart', 'Fish Stick', 'Jelly Roll', 'Cheese Puff',
 ];
 
-export const MAX_NAME_LENGTH = 20;
+/** First names, or a first name and an initial ("Mike B"), not full names (the user, 2026-11-21). */
+export const MAX_NAME_LENGTH = 15;
 
 /**
  * Computer players in the card games have made-up robot names, so it's plain who isn't a
  * person (their name tags also carry a small computer symbol). Our own names only: no robots
- * from films, shows or toys.
+ * from films, shows or toys. No two that look alike at a glance (Beep Boop and Bleep Bloop
+ * were too close: user, 2026-11-20).
  */
 export const ROBOT_NAMES = [
   'Robo-Bob',
@@ -65,7 +67,6 @@ export const ROBOT_NAMES = [
   'Botley',
   'Widget',
   'Unit 7',
-  'Bleep Bloop',
   'Tin Can Tom',
   'Sparky 3000',
 ];

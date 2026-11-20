@@ -177,7 +177,7 @@ export class SpadesTable implements View {
     const us = v.teams[this.myTeam()];
     const them = v.teams[1 - this.myTeam()];
     const line = (label: string, t: (typeof v.teams)[number]) =>
-      `<span><b>${label} ${t.score}</b>${v.phase === 'playing' ? ` <small>${t.tricks}/${t.bid}</small>` : ''}${t.bags ? ` <small>${t.bags} bag${t.bags === 1 ? '' : 's'}</small>` : ''}</span>`;
+      `<span><b>${label} ${t.score}</b>${v.phase === 'playing' ? ` <small>${t.tricks} of ${t.bid} tricks</small>` : ''}${t.bags ? ` <small>${t.bags} bag${t.bags === 1 ? '' : 's'}</small>` : ''}</span>`;
     q<HTMLElement>('.sp-score').innerHTML = `${line('Us', us)}${line('Them', them)}`;
 
     for (let p = 0; p < 4; p++) q<HTMLElement>(`.ht-slot-${p}`).innerHTML = '';
@@ -204,11 +204,11 @@ export class SpadesTable implements View {
       if (myBidTurn) {
         const pb = v.seats[(v.seat + 2) % 4].bid;
         text = `How many tricks will you take?${pb === null ? '' : ` Your partner bid ${pb === 0 ? 'nil' : pb}.`}`;
-      } else if (v.turn !== null) text = `Waiting for ${escapeHtml(this.name(v.turn))} to bid…`;
+      } else if (v.turn !== null) text = `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>'s turn to bid`;
     } else if (v.phase === 'playing') {
       if (v.trickWinner !== null) text = v.trickWinner === v.seat ? 'You take the trick' : `${escapeHtml(this.name(v.trickWinner))} takes the trick`;
       else if (v.turn === v.seat) text = this.shell.device.touch ? (this.lifted ? 'Tap it again to play' : 'Your turn: tap a card') : 'Your turn';
-      else if (v.turn !== null) text = `Waiting for ${escapeHtml(this.name(v.turn))}…`;
+      else if (v.turn !== null) text = `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>'s turn`;
       if (v.spadesBroken) text += ` <span class="ht-broken">${suitSvg('S')} broken</span>`;
     } else if (v.phase === 'handEnd') text = 'Next hand coming up…';
     q<HTMLElement>('.ht-status').innerHTML = text;

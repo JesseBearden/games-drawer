@@ -89,7 +89,7 @@ export interface ServerOptions {
   gameConfig?: Partial<GameConfig>;
   /** Run the tick loop (tests can drive ticks by hand). */
   autoTick?: boolean;
-  /** Deploy slot (a or b) when two copies run side by side; room codes then map to it. */
+  /** This box's deploy slot (a-d); room codes then map to it (deploy/README.md). */
   slot?: Slot;
   /** Which build this is (the git commit), reported by /healthz. */
   release?: string;

@@ -5,8 +5,8 @@ import { colorCss, type ClientTank, type Effect, type GameState } from './state'
 
 const DEG = Math.PI / 180;
 
-/** Turret sprite pivot (dome centre, on the barrel's axis) in sprite pixels (the paper sprites are 2x). */
-const TURRET_PIVOT = { x: 64, y: 48 };
+/** Turret sprite pivot (dome centre, on the barrel's axis) in sprite pixels (scripts/felt-sprites.cjs prints it). */
+const TURRET_PIVOT = { x: 61, y: 29 };
 
 export interface LocalAim {
   angle: number;
@@ -27,10 +27,14 @@ export class Renderer {
     private cfg: GameConfig,
   ) {
     this.ctx = canvas.getContext('2d')!;
-    // Torn-paper hills behind the battlefield: lilac far away, mint nearer.
-    this.far = mountains(cfg.worldWidth * 1.3, 520, 3, sprites.paper.lilac, 'rgba(255, 255, 255, 0.35)', 0.55);
-    this.near = mountains(cfg.worldWidth * 1.15, 460, 9, sprites.paper.mint, null, 0.7);
-    this.skyPattern = this.ctx.createPattern(sprites.paper.sky, 'repeat');
+    // Felt mountains behind the battlefield, in slate blues: pale far away, deeper nearer.
+    this.far = mountains(cfg.worldWidth * 1.3, 520, 3, sprites.paper.mist, 'rgba(255, 255, 255, 0.08)', 0.55);
+    this.near = mountains(cfg.worldWidth * 1.15, 460, 9, sprites.paper.slate, null, 0.7);
+    // The sky's pattern comes from a canvas copy of the felt, never the <img> itself: an image
+    // pattern next to the canvases drawn each frame (hills, terrain, tanks) makes Chrome draw the
+    // whole battlefield on the CPU, which stuttered badly on big screens (2026-11-21: 21 fps at
+    // 1440x900 @2x, 104 fps with the copy).
+    this.skyPattern = this.ctx.createPattern(canvasCopy(sprites.paper.air), 'repeat');
     for (let i = 0; i < 7; i++) {
       this.clouds.push({ x: Math.random() * cfg.worldWidth, y: 60 + Math.random() * 220, s: 0.6 + Math.random() * 0.8, v: 0.6 + Math.random() * 0.6 });
     }
@@ -62,15 +66,15 @@ export class Renderer {
     const S = cam.scale;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    // Sky: a sheet of sky paper (shown at half its pixels, like the page's paper), washed lighter.
-    ctx.fillStyle = '#85bee3';
+    // Sky: a sheet of muted blue felt (shown at half its pixels, like the page's felt), washed a touch lighter.
+    ctx.fillStyle = '#a3bfd9';
     ctx.fillRect(0, 0, vw, vh);
     if (this.skyPattern) {
       this.skyPattern.setTransform(new DOMMatrix([0.5, 0, 0, 0.5, 0, 0]));
       ctx.fillStyle = this.skyPattern;
       ctx.fillRect(0, 0, vw, vh);
     }
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
     ctx.fillRect(0, 0, vw, vh);
 
     // World transform
@@ -106,21 +110,29 @@ export class Renderer {
     // Terrain
     ctx.imageSmoothingEnabled = S < 1;
     ctx.drawImage(g.terrainView.canvas, 0, 0);
-    // Past the map edges (only seen when zoomed in near an edge) the ground simply carries on:
-    // the edge column of terrain stretched outward, dimmed so it reads as out of bounds.
-    if (cam.x < 0 || cam.x + this.viewW / S > cfg.worldWidth || cam.y + this.viewH / S > cfg.worldHeight) {
-      const W2 = cfg.worldWidth;
-      const H2 = cfg.worldHeight;
+    // Past the map edges (seen when zoomed in near an edge, or on short, wide screens) the hills
+    // carry on as a mirror of the map, faded into the sky so they read as out of bounds.
+    const W2 = cfg.worldWidth;
+    const H2 = cfg.worldHeight;
+    const pastLeft = cam.x < 0;
+    const pastRight = cam.x + this.viewW / S > W2;
+    if (pastLeft || pastRight) {
       const tv = g.terrainView.canvas;
-      const lt = g.terrain.topAt(0);
-      const rt = g.terrain.topAt(W2 - 1);
-      ctx.drawImage(tv, 0, 0, 1, H2, -3000, 0, 3000, H2);
-      ctx.drawImage(tv, W2 - 1, 0, 1, H2, W2, 0, 3000, H2);
-      ctx.drawImage(tv, 0, H2 - 2, W2, 1, -3000, H2, W2 + 6000, 3000);
-      ctx.fillStyle = 'rgba(17, 40, 117, 0.25)';
-      ctx.fillRect(-3000, lt, 3000, H2 - lt + 3000);
-      ctx.fillRect(W2, rt, 3000, H2 - rt + 3000);
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.scale(-1, 1);
+      if (pastLeft) ctx.drawImage(tv, 0, 0); // mirrored: x from -W2 to 0
+      if (pastRight) ctx.drawImage(tv, -2 * W2, 0); // mirrored: x from W2 to 2 * W2
+      ctx.restore();
+    }
+    if (cam.y + this.viewH / S > H2) {
+      // Below the map: the deepest ground (charcoal felt) carries on, faded past the sides too.
+      ctx.fillStyle = '#3e3d43';
       ctx.fillRect(0, H2, W2, 3000);
+      ctx.globalAlpha = 0.55;
+      ctx.fillRect(-W2, H2, W2, 3000);
+      ctx.fillRect(W2, H2, W2, 3000);
+      ctx.globalAlpha = 1;
     }
     ctx.imageSmoothingEnabled = true;
 
@@ -550,9 +562,9 @@ export class Renderer {
 }
 
 /**
- * A torn-paper hill line behind the battlefield, generated once: the shape filled with a sheet
- * of paper (optionally washed lighter for distance), a ragged top edge with a pale line of torn
- * fibres, and a soft shadow so it sits in front of what's behind it.
+ * A felt mountain line behind the battlefield, generated once: soft, rounded peaks cut from a
+ * sheet of felt (optionally washed lighter for distance), its top edge catching a little light,
+ * and a soft warm shadow so it sits in front of what's behind it.
  */
 function mountains(width: number, height: number, seed: number, paper: HTMLImageElement, wash: string | null, roughness: number) {
   const c = document.createElement('canvas');
@@ -568,7 +580,7 @@ function mountains(width: number, height: number, seed: number, paper: HTMLImage
     r = (r * 9301 + 49297) % 233280;
     return r / 233280;
   };
-  const n = 60;
+  const n = 34;
   const peaks: number[] = [];
   for (let i = 0; i <= n; i++) peaks.push(rand());
   for (let x = 0; x <= width; x += 6) {
@@ -578,8 +590,8 @@ function mountains(width: number, height: number, seed: number, paper: HTMLImage
     const s = t * t * (3 - 2 * t);
     const v = peaks[i] + (peaks[Math.min(n, i + 1)] - peaks[i]) * s;
     const ridge = Math.abs(Math.sin(x * 0.004 + seed)) * 0.35;
-    // A little ragged, like a torn edge.
-    const tear = (rand() - 0.5) * 7;
+    // Cut felt: the edge wanders very slightly, it isn't ragged.
+    const tear = (rand() - 0.5) * 1.5;
     pts.push(height * (0.15 + (1 - v * roughness - ridge * 0.6) * 0.55) + tear);
   }
   const shape = () => {
@@ -593,10 +605,10 @@ function mountains(width: number, height: number, seed: number, paper: HTMLImage
   const pattern = ctx.createPattern(paper, 'repeat');
   shape();
   ctx.save();
-  ctx.shadowColor = 'rgba(17, 40, 117, 0.22)';
-  ctx.shadowBlur = 10;
+  ctx.shadowColor = 'rgba(34, 26, 18, 0.3)';
+  ctx.shadowBlur = 12;
   ctx.shadowOffsetY = -2;
-  ctx.fillStyle = pattern ?? '#c6b5dc';
+  ctx.fillStyle = pattern ?? '#8ea6c0';
   ctx.fill();
   ctx.restore();
   if (wash) {
@@ -604,12 +616,21 @@ function mountains(width: number, height: number, seed: number, paper: HTMLImage
     ctx.fillStyle = wash;
     ctx.fill();
   }
-  // Torn fibres along the top.
+  // The felt's top edge catches a little light.
   ctx.beginPath();
   pts.forEach((y, i) => (i ? ctx.lineTo(i * 6, y + 2) : ctx.moveTo(0, y + 2)));
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+  ctx.lineWidth = 3;
   ctx.lineJoin = 'round';
   ctx.stroke();
+  return c;
+}
+
+/** A canvas copy of an image (patterns made from canvases keep the battlefield drawn on the GPU). */
+function canvasCopy(img: HTMLImageElement): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  c.getContext('2d')!.drawImage(img, 0, 0);
   return c;
 }

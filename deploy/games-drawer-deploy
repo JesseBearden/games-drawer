@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # games-drawer-deploy <release> <command> [args]
 #
-# Runs on the game server (installed as /usr/local/bin/games-drawer-deploy). GitHub Actions
-# calls it through AWS Systems Manager. It makes sure Node and the AWS CLI are installed,
-# fetches the release bundle from S3 if this machine doesn't have it yet, and hands over to
-# that release's rollout tool. Commands: staging, canary [percent], check, promote, rollback,
-# status (see deploy/rollout.ts).
+# Runs on a game server box (installed as /usr/local/bin/games-drawer-deploy when the box is
+# launched). The fleet tool (deploy/fleet.ts) calls it through AWS Systems Manager. It makes
+# sure Node and the AWS CLI are installed, fetches the release bundle from S3 if this box
+# doesn't have it yet, and hands over to that release's rollout tool. Commands: fetch,
+# start <slot> [previous], route <map>, share <running>, check, retire [minutes], status
+# (see deploy/rollout.ts).
 set -euo pipefail
 source /etc/games-drawer/deploy.env
 NODE_MAJOR=24

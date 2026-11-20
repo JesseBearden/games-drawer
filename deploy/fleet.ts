@@ -1,0 +1,337 @@
+/**
+ * The fleet tool: runs a deploy across game server boxes. GitHub Actions runs it (with the
+ * deploy role), and so can you, from the repo, with the games-drawer AWS profile:
+ *
+ *   npx tsx deploy/fleet.ts launch <release>             a new box with this release (staging shows it)
+ *   npx tsx deploy/fleet.ts canary <release> <percent>   send it that share of new tables
+ *   npx tsx deploy/fleet.ts check <release>              is it healthy? (exit 1 if not)
+ *   npx tsx deploy/fleet.ts promote <release>            it takes every new table and the front
+ *                                                        door; the old box finishes its games and
+ *                                                        shuts down
+ *   npx tsx deploy/fleet.ts rollback <release>           remove the new box; the current one keeps everything
+ *   npx tsx deploy/fleet.ts status                       the live boxes, and where the front door points
+ *
+ * Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (the stack's LaunchTemplateName output) in
+ * the environment, and the AWS CLI. Boxes are EC2 instances tagged project=games-drawer; their
+ * gd:role tag says what each one is doing:
+ *   candidate  the new release, on trial (staging, then maybe a canary share of new tables)
+ *   current    takes new tables; CloudFront's origin (origin.<domain>) points at it
+ *   retiring   finishing its games, then it shuts itself down (and AWS terminates it)
+ * See deploy/README.md.
+ */
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { SLOTS, type FleetMap, type Slot } from './fleetMap';
+
+export type Role = 'candidate' | 'current' | 'retiring';
+
+export interface Box {
+  id: string;
+  slot: Slot;
+  release: string;
+  role: Role;
+  privateIp: string;
+  publicIp: string;
+  launchedAt: string;
+}
+
+/** Minutes a retired box keeps passing players on before it may shut down (the front door's DNS settles well within this). */
+export const RETIRE_GRACE_MINUTES = 15;
+
+/** A slot no live box uses; if all are taken, the oldest retiring box gives up its own. */
+export function chooseSlot(boxes: Box[]): { slot: Slot; evict: Box | null } {
+  const used = new Set(boxes.map((b) => b.slot));
+  const free = SLOTS.find((s) => !used.has(s));
+  if (free) return { slot: free, evict: null };
+  const oldest = boxes.filter((b) => b.role === 'retiring').sort((a, b) => a.launchedAt.localeCompare(b.launchedAt))[0];
+  if (!oldest) throw new Error('Every slot is taken and no box is retiring.');
+  return { slot: oldest.slot, evict: oldest };
+}
+
+/** The map every box routes by. */
+export function fleetMap(boxes: Box[], newTables: [Slot, number][], staging: Slot | null): FleetMap {
+  const map: FleetMap = { boxes: {}, newTables, staging };
+  for (const b of boxes) map.boxes[b.slot] = b.privateIp;
+  return map;
+}
+
+/** The box taking new tables now (the newest, if somehow there are two). */
+export function currentBox(boxes: Box[]): Box | null {
+  return boxes.filter((b) => b.role === 'current').sort((a, b) => b.launchedAt.localeCompare(a.launchedAt))[0] ?? null;
+}
+
+export function candidateBox(boxes: Box[], release: string): Box {
+  const c = boxes.find((b) => b.role === 'candidate' && b.release === release);
+  if (!c) throw new Error(`No new box with release ${release.slice(0, 7)} (run launch first).`);
+  return c;
+}
+
+const encode = (map: FleetMap) => Buffer.from(JSON.stringify(map)).toString('base64');
+
+// ---------------------------------------------------------------- side effects
+
+/** Everything that talks to AWS, so tests can swap it out. */
+export interface Cloud {
+  /** Live boxes (pending or running). */
+  boxes(): Box[];
+  /** Launch a box from the launch template; returns once it runs and Systems Manager can reach it. */
+  launch(release: string, slot: Slot): Promise<Box>;
+  /** Run a shell command on a box through Systems Manager; throws if it fails. */
+  run(box: Box, command: string): Promise<string>;
+  setRole(box: Box, role: Role): void;
+  terminate(box: Box): void;
+  /** Point the front door (origin.<domain>) at a box's public address. */
+  setOrigin(ip: string): Promise<void>;
+  origin(): string | null;
+  log(msg: string): void;
+}
+
+export class Fleet {
+  constructor(private cloud: Cloud) {}
+
+  /** Tell every live box the map. */
+  private async route(boxes: Box[], map: FleetMap) {
+    for (const b of boxes) this.cloud.log((await this.cloud.run(b, `games-drawer-deploy ${b.release} route ${encode(map)}`)).trim());
+  }
+
+  async launch(release: string): Promise<Box> {
+    let boxes = this.cloud.boxes();
+    // A new box left over from a deploy that didn't finish.
+    for (const b of boxes.filter((x) => x.role === 'candidate')) {
+      this.cloud.log(`Removing box ${b.slot} (${b.release.slice(0, 7)}), left from an unfinished deploy.`);
+      this.cloud.terminate(b);
+    }
+    boxes = boxes.filter((b) => b.role !== 'candidate');
+    const { slot, evict } = chooseSlot(boxes);
+    if (evict) {
+      this.cloud.log(`Every slot is taken: box ${evict.slot} (${evict.release.slice(0, 7)}) stops now, ending any games still on it.`);
+      this.cloud.terminate(evict);
+      boxes = boxes.filter((b) => b !== evict);
+    }
+    const current = currentBox(boxes);
+    this.cloud.log(`Launching box ${slot} with ${release.slice(0, 7)}…`);
+    const box = await this.cloud.launch(release, slot);
+    this.cloud.log((await this.cloud.run(box, `games-drawer-deploy ${release} start ${slot} ${current?.release ?? 'none'}`)).trim());
+    const all = [...boxes, box];
+    // Staging shows the new box at once; new tables stay where they were (or come here, on the very first deploy).
+    await this.route(all, fleetMap(all, current ? [[current.slot, 100]] : [[slot, 100]], slot));
+    // With no box taking players, the front door points here straight away (otherwise not even
+    // staging, which comes in through it, could be reached).
+    if (!current) await this.cloud.setOrigin(box.publicIp);
+    this.cloud.log(`CANARY_SLOT=${slot}`);
+    return box;
+  }
+
+  async canary(release: string, percent: number) {
+    const boxes = this.cloud.boxes();
+    const candidate = candidateBox(boxes, release);
+    const current = currentBox(boxes);
+    if (!current) {
+      this.cloud.log('No current box: the new box already takes every new table.');
+      return;
+    }
+    const pct = Math.max(1, Math.min(99, Math.round(percent)));
+    // Pages from either box load build files through whichever box a request reaches.
+    this.cloud.log((await this.cloud.run(current, `games-drawer-deploy ${release} share ${current.release}`)).trim());
+    await this.route(boxes, fleetMap(boxes, [[current.slot, 100 - pct], [candidate.slot, pct]], candidate.slot));
+  }
+
+  async check(release: string): Promise<boolean> {
+    const candidate = candidateBox(this.cloud.boxes(), release);
+    try {
+      this.cloud.log((await this.cloud.run(candidate, `games-drawer-deploy ${release} check`)).trim());
+      return true;
+    } catch (err) {
+      this.cloud.log(String(err instanceof Error ? err.message : err));
+      return false;
+    }
+  }
+
+  async promote(release: string) {
+    const boxes = this.cloud.boxes();
+    const candidate = candidateBox(boxes, release);
+    const current = currentBox(boxes);
+    await this.route(boxes, fleetMap(boxes, [[candidate.slot, 100]], candidate.slot));
+    await this.cloud.setOrigin(candidate.publicIp);
+    this.cloud.setRole(candidate, 'current');
+    this.cloud.log(`Box ${candidate.slot} (${release.slice(0, 7)}) now takes every new table, and the front door points at it.`);
+    if (current) {
+      this.cloud.setRole(current, 'retiring');
+      this.cloud.log((await this.cloud.run(current, `games-drawer-deploy ${current.release} retire ${RETIRE_GRACE_MINUTES}`)).trim());
+    }
+  }
+
+  async rollback(release: string) {
+    const boxes = this.cloud.boxes();
+    const candidate = boxes.find((b) => b.role === 'candidate' && b.release === release);
+    const rest = boxes.filter((b) => b !== candidate);
+    const current = currentBox(rest);
+    if (current) await this.route(rest, fleetMap(rest, [[current.slot, 100]], current.slot));
+    if (candidate) {
+      this.cloud.terminate(candidate);
+      this.cloud.log(`Rolled back: box ${candidate.slot} (${release.slice(0, 7)}) removed${current ? `; box ${current.slot} keeps everything` : ''}.`);
+    } else this.cloud.log('No new box to roll back.');
+  }
+
+  status() {
+    const boxes = this.cloud.boxes().sort((a, b) => a.launchedAt.localeCompare(b.launchedAt));
+    if (!boxes.length) this.cloud.log('No boxes running.');
+    for (const b of boxes) this.cloud.log(`${b.slot}  ${b.role.padEnd(9)} ${b.release.slice(0, 7)}  ${b.id}  ${b.publicIp || '-'} / ${b.privateIp || '-'}  since ${b.launchedAt}`);
+    this.cloud.log(`Front door (origin) → ${this.cloud.origin() ?? 'not set'}`);
+  }
+}
+
+// ---------------------------------------------------------------- AWS, through the AWS CLI
+
+function aws(args: string[]): unknown {
+  const out = execFileSync('aws', [...args, '--output', 'json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+  return out.trim() ? JSON.parse(out) : null;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type Tagged = { Key: string; Value: string }[] | undefined;
+const tag = (tags: Tagged, key: string) => tags?.find((t) => t.Key === key)?.Value ?? '';
+
+export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
+  const domain = env.SITE_DOMAIN;
+  const template = env.LAUNCH_TEMPLATE;
+  if (!domain || !template || !env.AWS_REGION) throw new Error('Set AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (see infra/README.md).');
+  const originName = `origin.${domain}`;
+  let zoneId: string | null = null;
+  const zone = () => {
+    if (zoneId) return zoneId;
+    const res = aws(['route53', 'list-hosted-zones-by-name', '--dns-name', domain, '--max-items', '1']) as { HostedZones: { Id: string; Name: string }[] };
+    const z = res.HostedZones.find((h) => h.Name === `${domain}.`);
+    if (!z) throw new Error(`No Route 53 hosted zone for ${domain}.`);
+    return (zoneId = z.Id.replace('/hostedzone/', ''));
+  };
+  const toBox = (i: { InstanceId: string; PrivateIpAddress?: string; PublicIpAddress?: string; LaunchTime: string; Tags?: Tagged }): Box => ({
+    id: i.InstanceId,
+    slot: tag(i.Tags, 'gd:slot') as Slot,
+    release: tag(i.Tags, 'gd:release'),
+    role: tag(i.Tags, 'gd:role') as Role,
+    privateIp: i.PrivateIpAddress ?? '',
+    publicIp: i.PublicIpAddress ?? '',
+    launchedAt: i.LaunchTime,
+  });
+  const describe = (filters: string[]) => {
+    const res = aws(['ec2', 'describe-instances', '--filters', ...filters]) as { Reservations: { Instances: Parameters<typeof toBox>[0][] }[] };
+    return res.Reservations.flatMap((r) => r.Instances).map(toBox);
+  };
+  const cloud: Cloud = {
+    boxes: () =>
+      describe(['Name=tag:project,Values=games-drawer', 'Name=instance-state-name,Values=pending,running', 'Name=tag-key,Values=gd:role']).filter((b) =>
+        (SLOTS as readonly string[]).includes(b.slot),
+      ),
+    async launch(release, slot) {
+      const tags = [
+        { Key: 'project', Value: 'games-drawer' },
+        { Key: 'Name', Value: `games-drawer-${slot}-${release.slice(0, 7)}` },
+        { Key: 'gd:slot', Value: slot },
+        { Key: 'gd:release', Value: release },
+        { Key: 'gd:role', Value: 'candidate' },
+      ];
+      const res = aws([
+        'ec2',
+        'run-instances',
+        '--launch-template',
+        `LaunchTemplateName=${template},Version=$Latest`,
+        '--tag-specifications',
+        JSON.stringify([
+          { ResourceType: 'instance', Tags: tags },
+          { ResourceType: 'volume', Tags: tags.slice(0, 2) },
+        ]),
+      ]) as { Instances: { InstanceId: string }[] };
+      const id = res.Instances[0].InstanceId;
+      this.log(`Started ${id}; waiting for it to boot…`);
+      execFileSync('aws', ['ec2', 'wait', 'instance-running', '--instance-ids', id], { stdio: 'inherit' });
+      for (let i = 0; i < 72; i++) {
+        const info = aws(['ssm', 'describe-instance-information', '--filters', `Key=InstanceIds,Values=${id}`]) as { InstanceInformationList: { PingStatus: string }[] };
+        if (info.InstanceInformationList[0]?.PingStatus === 'Online') return describe([`Name=instance-id,Values=${id}`])[0];
+        await sleep(5000);
+      }
+      throw new Error(`Box ${id} never came online in Systems Manager.`);
+    },
+    async run(box, command) {
+      const params = JSON.stringify({ commands: [command], executionTimeout: ['1800'] });
+      const sent = aws(['ssm', 'send-command', '--instance-ids', box.id, '--document-name', 'AWS-RunShellScript', '--comment', 'games-drawer deploy', '--parameters', params]) as {
+        Command: { CommandId: string };
+      };
+      const id = sent.Command.CommandId;
+      for (let i = 0; i < 400; i++) {
+        await sleep(3000);
+        let inv: { Status: string; StandardOutputContent: string; StandardErrorContent: string };
+        try {
+          inv = aws(['ssm', 'get-command-invocation', '--command-id', id, '--instance-id', box.id]) as typeof inv;
+        } catch {
+          continue; // not registered yet
+        }
+        if (['Pending', 'InProgress', 'Delayed'].includes(inv.Status)) continue;
+        if (inv.Status !== 'Success') throw new Error(`On box ${box.slot}: ${command.split(' ').slice(0, 3).join(' ')} … ended ${inv.Status}.\n${inv.StandardOutputContent}\n${inv.StandardErrorContent}`.trim());
+        return inv.StandardOutputContent;
+      }
+      throw new Error(`On box ${box.slot}: timed out waiting for ${command}.`);
+    },
+    setRole(box, role) {
+      aws(['ec2', 'create-tags', '--resources', box.id, '--tags', `Key=gd:role,Value=${role}`]);
+    },
+    terminate(box) {
+      aws(['ec2', 'terminate-instances', '--instance-ids', box.id]);
+    },
+    async setOrigin(ip) {
+      const batch = { Changes: [{ Action: 'UPSERT', ResourceRecordSet: { Name: originName, Type: 'A', TTL: 60, ResourceRecords: [{ Value: ip }] } }] };
+      const res = aws(['route53', 'change-resource-record-sets', '--hosted-zone-id', zone(), '--change-batch', JSON.stringify(batch)]) as { ChangeInfo: { Id: string } };
+      execFileSync('aws', ['route53', 'wait', 'resource-record-sets-changed', '--id', res.ChangeInfo.Id], { stdio: 'inherit' });
+      this.log(`${originName} → ${ip}`);
+    },
+    origin() {
+      try {
+        const res = aws(['route53', 'list-resource-record-sets', '--hosted-zone-id', zone(), '--start-record-name', originName, '--start-record-type', 'A', '--max-items', '1']) as {
+          ResourceRecordSets: { Name: string; ResourceRecords?: { Value: string }[] }[];
+        };
+        const r = res.ResourceRecordSets.find((s) => s.Name === `${originName}.`);
+        return r?.ResourceRecords?.[0]?.Value ?? null;
+      } catch {
+        return null;
+      }
+    },
+    log: (msg) => console.log(msg),
+  };
+  return cloud;
+}
+
+async function main() {
+  const [cmd, release, arg] = process.argv.slice(2);
+  const needRelease = () => {
+    if (!release || !/^[0-9a-f]{7,40}$/.test(release)) throw new Error('Give the release (a git commit).');
+    return release;
+  };
+  const fleet = new Fleet(awsCloud());
+  switch (cmd) {
+    case 'launch':
+      await fleet.launch(needRelease());
+      return;
+    case 'canary':
+      return fleet.canary(needRelease(), Number(arg ?? 10));
+    case 'check':
+      if (!(await fleet.check(needRelease()))) process.exitCode = 1;
+      return;
+    case 'promote':
+      return fleet.promote(needRelease());
+    case 'rollback':
+      return fleet.rollback(needRelease());
+    case 'status':
+      return fleet.status();
+    default:
+      console.error('usage: fleet.ts launch|canary|check|promote|rollback <release> [percent] | status');
+      process.exitCode = 2;
+  }
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  main().catch((err) => {
+    console.error(String(err instanceof Error ? err.message : err));
+    process.exitCode = 1;
+  });
+}

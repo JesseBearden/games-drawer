@@ -26,10 +26,16 @@ export class PuzzleStore {
       this.memory.set(state.id, structuredClone(state));
       return;
     }
-    // Write then rename, so a crash mid-write never leaves half a file.
-    const tmp = `${this.file(state.id)}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(state));
-    fs.renameSync(tmp, this.file(state.id));
+    // Write then rename, so a crash mid-write never leaves half a file. On AWS the folder is
+    // on the shared disk (EFS): if it ever can't be written, the puzzle plays on and the next
+    // save tries again.
+    try {
+      const tmp = `${this.file(state.id)}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(state));
+      fs.renameSync(tmp, this.file(state.id));
+    } catch (err) {
+      console.error(`Couldn't save puzzle ${state.id}:`, err);
+    }
   }
 
   /** Forget a puzzle (fine if it was never saved). */

@@ -44,9 +44,8 @@ const EDGE_SPEED = 460;
 const TOUCH_AID = 'loupe' as 'loupe' | 'lift';
 /** The magnifier's gap above the finger. (When it shows, and how much it enlarges: loupe.ts.) */
 const LOUPE_GAP = 46;
-/** Remembered per browser: '0' once you turn the magnifier off; and that you've been told what it is. */
+/** Remembered per browser: '0' once you turn the magnifier off. */
 const MAGNIFIER_KEY = 'gd.magnifier';
-const MAGNIFIER_HINT_KEY = 'gd.magnifierHint';
 /** The lift: the piece's bottom ends up LIFT_GAP pixels above the fingertip, gliding over LIFT_MS. */
 const LIFT_MS = 140;
 const LIFT_GAP = 36;
@@ -81,6 +80,10 @@ interface PieceArt {
   /** The bitmap's size in board units (big pieces are stored at lower resolution). */
   w: number;
   h: number;
+  /** The piece's soft shadow (its own, lower-resolution bitmap), and how much wider than the
+   *  piece's bitmap it is on each side, in board units. */
+  shadow: HTMLCanvasElement;
+  sp: number;
 }
 
 interface Saved {
@@ -122,6 +125,10 @@ function store(key: string, value: string) {
   }
 }
 
+/** A rubbish bin, for taking a puzzle off your list. */
+const TRASH_ICON =
+  '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/></svg>';
+
 function forget(ids: string[]) {
   if (!ids.length) return;
   try {
@@ -136,6 +143,15 @@ function forget(ids: string[]) {
  * drawn on a canvas you can pan and zoom. Dragging moves the piece straight away; the server
  * confirms on drop (and snaps it to neighbours that fit).
  */
+/** How the table under the pieces looks (see JigsawView.tableLook). */
+interface TableLook {
+  area: string;
+  frame: string;
+  edge: string;
+  img: HTMLImageElement | null;
+  pattern: CanvasPattern | null;
+}
+
 export class JigsawTable implements View {
   readonly landscape = false;
   readonly helpHtml =
@@ -371,7 +387,7 @@ export class JigsawTable implements View {
       html += '<h3>Continue a puzzle</h3><ul class="pz-saves">';
       for (const s of [...this.saves].sort((a, b) => b.updatedAt - a.updatedAt)) {
         const when = new Date(s.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
-        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${s.pieces} pieces · ${s.done ? 'finished' : `${Math.round(s.progress * 100)}% done`} · ${when}</small></span><button type="button" class="pc-btn pc-btn-plain" data-resume="${s.id}">${s.done ? 'Look again' : 'Continue'}</button><button type="button" class="pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">Remove</button></li>`;
+        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${s.pieces} pieces · ${s.done ? 'finished' : `${Math.round(s.progress * 100)}% done`} · ${when}</small></span><button type="button" class="pc-btn pc-btn-plain" data-resume="${s.id}">${s.done ? 'Look again' : 'Continue'}</button><button type="button" class="pc-btn pc-btn-alert pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">${TRASH_ICON}</button></li>`;
       }
       html += '</ul><h3>Or start a new one</h3>';
     }
@@ -516,7 +532,34 @@ export class JigsawTable implements View {
     g.lineWidth = Math.max(1, short * 0.018);
     g.stroke(path);
     g.restore();
-    return { canvas, path, w, h };
+    return { canvas, path, w, h, ...this.pieceShadow(path, w, h, short, k) };
+  }
+
+  /**
+   * A thin piece of card lying on the felt casts a small, soft shadow, mostly downward. It's kept
+   * as its own bitmap (at half the piece's resolution: it's blurred anyway) so a group's shadows
+   * can all go down before its pieces, and never fall across the seams of joined pieces.
+   */
+  private pieceShadow(path: Path2D, w: number, h: number, short: number, k: number) {
+    const sp = short * 0.14;
+    const blur = short * 0.05;
+    const drop = short * 0.03;
+    const ks = k * 0.5;
+    const shadow = document.createElement('canvas');
+    shadow.width = Math.ceil((w + sp * 2) * ks);
+    shadow.height = Math.ceil((h + sp * 2) * ks);
+    const g = shadow.getContext('2d')!;
+    // Shadows ignore the canvas's scale, so blur and offset are in its pixels: draw the piece far
+    // off to the left, and let only its shadow fall back into view.
+    const away = shadow.width + 100;
+    g.setTransform(ks, 0, 0, ks, sp * ks - away, sp * ks);
+    g.shadowColor = 'rgba(34, 26, 18, 0.55)';
+    g.shadowBlur = blur * ks;
+    g.shadowOffsetX = away;
+    g.shadowOffsetY = drop * ks;
+    g.fillStyle = '#000';
+    g.fill(path);
+    return { shadow, sp };
   }
 
   // ------------------------------------------------------------------ groups
@@ -577,8 +620,13 @@ export class JigsawTable implements View {
     if (!w || !h) return;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
-    // A new screen size (rotating a phone): stay zoomed sensibly and on the table.
+    // A new screen size (rotating a phone, resizing a window): if you were looking at the whole
+    // table, look at the whole table again; zoomed in, stay zoomed sensibly and on the table.
     if (this.state && this.art.length) {
+      if (this.lastFit > 0 && this.cam.s <= this.lastFit * 1.03) {
+        this.fit();
+        return;
+      }
       const { min, max } = this.zoomRange();
       this.cam.s = Math.min(max, Math.max(min, this.cam.s));
       this.clampCam();
@@ -616,6 +664,7 @@ export class JigsawTable implements View {
   private zoomRange() {
     const s = this.state!;
     const fit = this.fitScale();
+    this.lastFit = fit;
     const short = Math.min(s.width / s.cols, s.height / s.rows);
     return { min: fit * 0.85, max: Math.max(fit * 3, 220 / short) };
   }
@@ -639,9 +688,12 @@ export class JigsawTable implements View {
     this.cam.y = axis(this.cam.y, b.minY, b.maxY, hud.top, hud.bottom, this.canvas.clientHeight);
   }
 
+  /** The whole-table zoom when it was last worked out (so a resize can tell if you were there). */
+  private lastFit = 0;
+
   private fit() {
     if (!this.state) return;
-    this.cam.s = this.fitScale();
+    this.cam.s = this.lastFit = this.fitScale();
     this.clampCam();
     this.invalidate();
   }
@@ -685,6 +737,69 @@ export class JigsawTable implements View {
     });
   }
 
+  /** The last cloth position handed to the page, so it's only updated when the view moves. */
+  private feltKey = '';
+
+  /**
+   * The felt look's table cloth zooms and pans with the puzzle, as if leaning over a real table
+   * (felt.css reads --felt-zoom, --felt-x and --felt-y on #game). It's tied to the board: the
+   * whole-table view shows it at its normal size, and the board's corner is the cloth's corner.
+   */
+  private moveFelt(on: boolean) {
+    const game = this.canvas.closest<HTMLElement>('#game');
+    if (!game) return;
+    if (!on || !this.state) {
+      if (this.feltKey) for (const p of ['--felt-zoom', '--felt-x', '--felt-y']) game.style.removeProperty(p);
+      this.feltKey = '';
+      return;
+    }
+    const g = game.getBoundingClientRect();
+    const c = this.canvas.getBoundingClientRect();
+    const zoom = this.cam.s / this.fitScale();
+    const x = c.left - g.left - this.cam.x * this.cam.s;
+    const y = c.top - g.top - this.cam.y * this.cam.s;
+    const key = `${zoom.toFixed(4)} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    if (key === this.feltKey) return;
+    this.feltKey = key;
+    game.style.setProperty('--felt-zoom', zoom.toFixed(4));
+    game.style.setProperty('--felt-x', `${x.toFixed(1)}px`);
+    game.style.setProperty('--felt-y', `${y.toFixed(1)}px`);
+  }
+
+  /**
+   * How the table under the pieces looks, from the page's styles: the felt look gives the frame
+   * a sheet of felt (--pz-frame-img) and the piece area a warm tint (--pz-area); the paper look
+   * gives neither, and the frame is cream paper.
+   */
+  private look: TableLook | null = null;
+
+  private tableLook() {
+    if (this.look) return this.look;
+    const css = getComputedStyle(this.canvas.closest('#game') ?? document.documentElement);
+    const area = css.getPropertyValue('--pz-area').trim() || 'rgba(17, 40, 117, 0.06)';
+    const frame = css.getPropertyValue('--pz-frame').trim();
+    const edge = css.getPropertyValue('--pz-frame-edge').trim() || 'rgba(17, 40, 117, 0.4)';
+    const url = /url\(\s*['"]?([^'")]+)['"]?\s*\)/.exec(css.getPropertyValue('--pz-frame-img'))?.[1] ?? null;
+    const look: TableLook = { area, frame, edge, img: null, pattern: null };
+    if (url) {
+      const img = new Image();
+      img.onload = () => {
+        // From a canvas copy, not the <img>: an image pattern beside the pieces' canvases makes
+        // Chrome draw the whole table on the CPU (see renderer.ts, the Tanks sky).
+        const copy = document.createElement('canvas');
+        copy.width = img.naturalWidth;
+        copy.height = img.naturalHeight;
+        copy.getContext('2d')!.drawImage(img, 0, 0);
+        look.pattern = this.ctx.createPattern(copy, 'repeat');
+        this.invalidate();
+      };
+      img.src = url;
+      look.img = img;
+    }
+    this.look = look;
+    return look;
+  }
+
   private draw() {
     const s = this.state;
     const ctx = this.ctx;
@@ -692,7 +807,11 @@ export class JigsawTable implements View {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawLoupe(dpr);
-    if (!s || this.phase === 'setup') return;
+    if (!s || this.phase === 'setup') {
+      this.moveFelt(false);
+      return;
+    }
+    this.moveFelt(true);
     const k = this.cam.s * dpr;
     ctx.setTransform(k, 0, 0, k, -this.cam.x * k, -this.cam.y * k);
     // Where the view is (browser tests use it to find pieces on screen).
@@ -745,14 +864,40 @@ export class JigsawTable implements View {
   private drawTable(ctx: CanvasRenderingContext2D, zoom: number, dpr: number, view: { x0: number; y0: number; x1: number; y1: number }) {
     const s = this.state!;
     const b = tableBounds(s.width, s.height, s.cols, s.rows);
-    // On the blue mat (the page shows through): the area pieces can go a shade darker, and the
-    // frame where the finished picture goes a sheet of cream paper with a dashed ink edge.
-    ctx.fillStyle = 'rgba(17, 40, 117, 0.06)';
+    // On the table (the page shows through): the area pieces can go a shade darker, and the
+    // frame where the finished picture goes a sheet of cream paper (or felt) with a dashed ink edge.
+    const look = this.tableLook();
+    ctx.fillStyle = look.area;
     ctx.fillRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
-    ctx.fillStyle = 'rgba(255, 252, 245, 0.8)';
-    ctx.fillRect(0, 0, s.width, s.height);
+    if (look.frame) {
+      // A sheet of felt laid on the table: its texture tied to the board (the same size as the
+      // cloth at the whole-table view), and the felt look's shadow hugging it.
+      const t = 0.5 / this.fitScale();
+      look.pattern?.setTransform(new DOMMatrix([t, 0, 0, t, 0, 0]));
+      // Not quite opaque (invisible to the eye): only pieces are drawn fully opaque, which is how
+      // the browser tests find them on the canvas.
+      ctx.save();
+      ctx.globalAlpha = 0.97;
+      ctx.shadowColor = 'rgba(34, 26, 18, 0.45)';
+      ctx.shadowBlur = 7 * dpr;
+      ctx.shadowOffsetY = 3 * dpr;
+      ctx.fillStyle = look.frame;
+      ctx.fillRect(0, 0, s.width, s.height);
+      ctx.restore();
+      if (look.pattern) {
+        // The felt's grain on top, keeping the frame's own (not quite opaque) alpha.
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = look.pattern;
+        ctx.fillRect(0, 0, s.width, s.height);
+        ctx.restore();
+      }
+    } else {
+      ctx.fillStyle = 'rgba(255, 252, 245, 0.8)';
+      ctx.fillRect(0, 0, s.width, s.height);
+    }
     ctx.setLineDash([8 / zoom, 6 / zoom]);
-    ctx.strokeStyle = 'rgba(17, 40, 117, 0.4)';
+    ctx.strokeStyle = look.edge;
     ctx.lineWidth = 2 / zoom;
     ctx.strokeRect(0, 0, s.width, s.height);
     ctx.setLineDash([]);
@@ -767,6 +912,7 @@ export class JigsawTable implements View {
       return x < view.x1 + margin && y < view.y1 + margin && x + a.w > view.x0 - margin && y + a.h > view.y0 - margin;
     };
     const colorOf = (alias: string) => colorCss(this.shell.members().find((m) => m.id === alias)?.color ?? 0);
+    const locked = new Set(s.locked);
     for (const g of this.order) {
       if (this.hidden(g)) continue;
       const list = this.groups.get(g)?.filter(seen);
@@ -784,6 +930,13 @@ export class JigsawTable implements View {
           ctx.drawImage(a.canvas, p.x - this.pad, p.y - this.pad, a.w, a.h);
         }
         ctx.restore();
+      } else if (!locked.has(g)) {
+        // Loose pieces cast a small shadow on the felt (pieces locked into the frame lie flat in it).
+        for (const i of list) {
+          const p = s.pieces[i];
+          const a = this.art[i];
+          ctx.drawImage(a.shadow, p.x - this.pad - a.sp, p.y - this.pad - a.sp, a.w + a.sp * 2, a.h + a.sp * 2);
+        }
       }
       for (const i of list) {
         const p = s.pieces[i];
@@ -843,11 +996,6 @@ export class JigsawTable implements View {
       el.classList.remove('on');
       return;
     }
-    // The first time, say what it is (it's a surprise otherwise).
-    if (!el.classList.contains('on') && !stored(MAGNIFIER_HINT_KEY)) {
-      store(MAGNIFIER_HINT_KEY, '1');
-      this.shell.toast('That’s the magnifier: it shows the piece under your finger. The Magnifier button turns it off.');
-    }
     const size = v.r * 2;
     const px = Math.round(size * dpr);
     if (el.width !== px) {
@@ -894,6 +1042,15 @@ export class JigsawTable implements View {
 
   private onDown = (e: PointerEvent) => {
     if (!this.state || this.phase === 'setup') return;
+    // A first finger (or the mouse) means nothing else is touching. Forget any finger whose lift
+    // never arrived (an iPhone can lose one when it's turned), or this touch would count as its
+    // second finger and pinch, and a piece it held would stay stuck to it.
+    if (e.isPrimary && this.pointers.size) {
+      if (this.dragging) this.release(this.dragging.pointer);
+      this.pointers.clear();
+      this.pinch = null;
+      this.panning = null;
+    }
     try {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -1084,13 +1241,16 @@ export class JigsawTable implements View {
     this.dragPointer = null;
   }
 
-  private onUp = (e: PointerEvent) => {
-    this.pointers.delete(e.pointerId);
+  private onUp = (e: PointerEvent) => this.release(e.pointerId);
+
+  /** A finger lifted (or the mouse let go): end its pinch, drag or look-around. */
+  private release(pointerId: number) {
+    this.pointers.delete(pointerId);
     if (this.pinch) {
       if (this.pointers.size < 2) this.pinch = null;
       return;
     }
-    if (this.dragging && this.dragging.pointer !== e.pointerId) return;
+    if (this.dragging && this.dragging.pointer !== pointerId) return;
     if (this.dragging && this.state) {
       const p = this.state.pieces[this.dragging.piece];
       // The server answers with where it ended up (snapped to neighbours if it fits).
@@ -1100,7 +1260,7 @@ export class JigsawTable implements View {
     if (this.dragging) this.invalidate(); // the magnifier and the shadow go away
     this.dragging = null;
     this.panning = null;
-  };
+  }
 
   /**
    * A pinch on a trackpad (an iPad's or a Mac's, in Safari) zooms the puzzle around the pointer.
@@ -1170,8 +1330,6 @@ export class JigsawTable implements View {
       case 'loupe':
         this.magnifier = !this.magnifier;
         store(MAGNIFIER_KEY, this.magnifier ? '1' : '0');
-        // You know what it is now.
-        store(MAGNIFIER_HINT_KEY, '1');
         t.closest('[data-pz]')!.setAttribute('aria-pressed', String(this.magnifier));
         this.shell.toast(this.magnifier ? 'Magnifier on: it shows the piece under your finger.' : 'Magnifier off.');
         this.clampCam();
@@ -1211,6 +1369,7 @@ export class JigsawTable implements View {
 
   dispose() {
     cancelAnimationFrame(this.raf);
+    this.moveFelt(false);
     this.stopEdgeScroll();
     this.observer.disconnect();
     this.el.removeEventListener('click', this.onClick);

@@ -42,6 +42,22 @@ body {
   visibility: visible;
 }
 
+/* Opened from the home screen icon on an iPhone, the page's frame moves by the status bar's
+   height whenever the phone turns (the bar shows upright and hides sideways). After that, an
+   iPhone places taps on anything pinned to the screen (position: fixed) a status bar's height
+   below the finger (the user's bug, 2026-11-20). Things laid out in the page itself aren't
+   affected, so here the page is placed in the page (absolute) rather than pinned to the screen.
+   It looks the same: nothing at the table scrolls the page itself. */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  /* ("html body" and "body .game" so these win over the rules further down that pin them.) */
+  html body,
+  body .entry,
+  body .landing,
+  body .game {
+    position: absolute;
+  }
+}
+
 button {
   font: inherit;
   color: inherit;

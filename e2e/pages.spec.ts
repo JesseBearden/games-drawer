@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 import { E2E_ADMIN_PASSWORD } from './testPassword';
-import { at, createRoom, enterName, newPlayer, watchErrors } from './helpers';
+import { at, createRoom, enterName, newPlayer, openBar, tapBar, watchErrors } from './helpers';
 
 test('home: start a table or type a code; starting lists the games @smoke', async ({ page }) => {
   const errors = watchErrors(page);
@@ -9,13 +9,11 @@ test('home: start a table or type a code; starting lists the games @smoke', asyn
   await expect(page.locator('#page-home h1')).toHaveText('Play a game together.');
   await expect(page.locator('#code-input')).toBeVisible();
 
-  // Start a table: the games as paper tiles, the unfinished ones marked, Jigsaw picked to begin with.
+  // Start a table: just your name and the mic (the game is picked together at the table).
   await page.locator('#home-start').click();
   await expect(page).toHaveURL(/\/start$/);
-  await expect(page.locator('#start-games .pc-choice')).toHaveCount(5);
-  for (const id of ['hearts', 'spades', 'dominoes']) await expect(page.locator(`#start-games label:has(input[value="${id}"]) small`)).toHaveText('Work in Progress');
-  for (const id of ['jigsaw', 'tanks']) await expect(page.locator(`#start-games label:has(input[value="${id}"]) small`)).toHaveCount(0);
-  await expect(page.locator('input[value="jigsaw"]')).toBeChecked();
+  await expect(page.locator('#start-detail')).toContainText('pick a game together');
+  await expect(page.locator('#page-start .pc-choice')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start with mic on' })).toBeVisible();
 
   // No name yet: it asks for one, right there.
@@ -34,9 +32,9 @@ test('home: start a table or type a code; starting lists the games @smoke', asyn
 test('a game’s own address starts a table with that game picked; unknown ones go home', async ({ page }) => {
   await page.goto(at('/tankyouforbeingafriend'));
   await expect(page).toHaveURL(/\/tanks(\?|$)/);
-  await expect(page.locator('input[value="tanks"]')).toBeChecked();
+  await expect(page.locator('#start-detail')).toContainText('Tanks picked');
   await page.goto(at('/dominoes'));
-  await expect(page.locator('input[value="dominoes"]')).toBeChecked();
+  await expect(page.locator('#start-detail')).toContainText('Dominoes picked');
   await page.goto(at('/not-a-game'));
   await expect(page).toHaveURL(/\/(\?|$)/);
   await expect(page.locator('#page-home')).toBeVisible();
@@ -125,7 +123,7 @@ test('an invite made for someone by name fills it in for them @smoke', async ({ 
     nav.canShare = () => true;
   });
   const code = await createRoom(host, 'Holly');
-  await host.locator('#btn-share').click();
+  await tapBar(host, '#btn-share');
   await expect(host.locator('#invite-code')).toHaveText(code);
   await host.locator('#invite-name').fill('Liz');
   await host.locator('#invite-send').click();
@@ -146,6 +144,8 @@ test('an invite made for someone by name fills it in for them @smoke', async ({ 
 
 test('the bar: Help explains the game, Messages shows only while closed, and leaving goes home', async ({ page }) => {
   await createRoom(page, 'Fay', 'hearts');
+  // On a phone the bar is folded behind a caret tab (only the mic shows); the tab opens it.
+  await openBar(page);
   await expect(page.locator('#btn-share')).toBeVisible();
   // Help: how to play the game on screen.
   await page.locator('#btn-help').click();
@@ -155,12 +155,13 @@ test('the bar: Help explains the game, Messages shows only while closed, and lea
   await expect(page.locator('#help')).toBeHidden();
   // Messages: the bar's button opens it and hides; the panel's Close brings the button back.
   const btn = page.locator('#btn-chat');
-  if (await btn.isVisible()) await btn.click();
+  if (!(await page.locator('#chat-input').isVisible())) await tapBar(page, '#btn-chat');
   await expect(page.locator('#chat-input')).toBeVisible();
   await expect(btn).toBeHidden();
   await page.locator('#chat-collapse').click();
+  await openBar(page);
   await expect(btn).toBeVisible();
-  await page.locator('#btn-menu').click();
+  await tapBar(page, '#btn-menu');
   await page.locator('#menu-leave').click();
   await expect(page.locator('#page-home')).toBeVisible();
   await expect(page).toHaveURL(/\/(\?|$)/);
@@ -173,7 +174,7 @@ test('on a phone that can’t go full screen, Full screen explains the home scre
     Object.defineProperty(Document.prototype, 'webkitFullscreenEnabled', { get: () => false });
   });
   await createRoom(page, 'Fern', 'jigsaw');
-  await page.locator('#btn-menu').click();
+  await tapBar(page, '#btn-menu');
   await page.locator('#btn-fullscreen').click();
   const help = page.locator('#home-help');
   await expect(help).toBeVisible();

@@ -3,13 +3,21 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import { PIECE_COUNTS, PUZZLE_IMAGES, Rng, tableBounds, type ServerMessage } from '@tank/shared';
+import { PIECE_COUNTS, PUZZLE_IMAGES, Rng, tableBounds, type ServerMessage, type GameId } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import { JigsawGame } from '../src/games/jigsaw';
 import { RoomManager } from '../src/manager';
 import { PuzzleStore } from '../src/puzzleStore';
-import type { Conn, RoomDeps } from '../src/room';
+import type { Conn, RoomDeps, Room } from '../src/room';
+
+/** Pick a game at the table and have everyone here say they're ready, so it starts. */
+function play(room: Room, game: GameId) {
+  const here = [...room.players.entries()].filter(([, p]) => p.conn);
+  if (here.length) room.handle(here[0][0], { t: 'pick', game });
+  for (const [s] of here) room.handle(s, { t: 'ready', ready: true });
+}
+
 
 class FakeConn implements Conn {
   sent: ServerMessage[] = [];
@@ -66,7 +74,7 @@ function jigsawRoom(over: Partial<RoomDeps> = {}) {
   const env = setup(over);
   const a = joinPrivate(env.mgr, 'session-aaaa');
   const b = joinPrivate(env.mgr, 'session-bbbb', a.room.code);
-  a.room.handle('session-aaaa', { t: 'pick', game: 'jigsaw' });
+  play(a.room, 'jigsaw');
   const game = a.room.game as JigsawGame;
   const send = (who: 'a' | 'b', m: object) => a.room.handle(`session-${who.repeat(4)}`, { t: 'g', m } as never);
   return { ...env, a, b, game, send };

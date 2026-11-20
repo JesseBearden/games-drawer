@@ -8,6 +8,7 @@
 /* Only the background and font here: the games still have their own (light-on-dark) colours
    until each is restyled, so ink goes on the paper parts only. */
 #game {
+  --fc: var(--mat);
   background: var(--mat) var(--mat-img) 0 0 / var(--paper-size);
   font-family: var(--font);
 }
@@ -43,6 +44,7 @@
   justify-content: center;
   align-items: stretch;
   padding: calc(8px + var(--safe-t)) calc(10px + var(--safe-r)) 8px calc(10px + var(--safe-l));
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
 }
@@ -83,23 +85,23 @@
   display: none;
 }
 @media (max-height: 520px) {
-  #game[data-view='tanks'] .arena > .view {
+  #game:not(.phone)[data-view='tanks'] .arena > .view {
     top: 0;
   }
-  #game[data-view='tanks'] .toolbar.pc-toolbar {
+  #game:not(.phone)[data-view='tanks'] .toolbar.pc-toolbar {
     transform: translateY(-100%);
     visibility: hidden;
     transition:
       transform 0.22s var(--settle),
       visibility 0s 0.22s;
   }
-  #game[data-view='tanks'].bar-open .toolbar.pc-toolbar {
+  #game:not(.phone)[data-view='tanks'].bar-open .toolbar.pc-toolbar {
     transform: none;
     visibility: visible;
     box-shadow: var(--lift-2);
     transition: transform 0.22s var(--settle);
   }
-  #game[data-view='tanks'] .bar-tab {
+  #game:not(.phone)[data-view='tanks'] .bar-tab {
     position: absolute;
     z-index: 31;
     top: 0;
@@ -111,6 +113,7 @@
     padding: 0;
     border: 0;
     border-radius: 0 0 14px 14px;
+    --fc: var(--paper);
     background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
     box-shadow: var(--lift-1);
     color: var(--cobalt);
@@ -120,10 +123,10 @@
   #game[data-view='tanks'] .bar-tab svg {
     transition: transform 0.22s var(--settle);
   }
-  #game[data-view='tanks'].bar-open .bar-tab {
+  #game:not(.phone)[data-view='tanks'].bar-open .bar-tab {
     top: var(--bar-h);
   }
-  #game[data-view='tanks'].bar-open .bar-tab svg {
+  #game:not(.phone)[data-view='tanks'].bar-open .bar-tab svg {
     transform: rotate(180deg);
   }
   /* A new message while the bar is folded: a dot on the tab. */
@@ -137,7 +140,7 @@
     background: var(--tomato);
   }
   /* The aim tag steps left of the tab. */
-  #game[data-view='tanks'] .aim-box {
+  #game:not(.phone)[data-view='tanks'] .aim-box {
     right: calc(14px + 58px + 10px + var(--safe-r));
   }
 }
@@ -164,6 +167,7 @@
 /* ------------------------------------------------------------------ toasts and the reconnect card */
 
 #game .toasts div {
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   color: var(--ink);
   border: 0;
@@ -176,6 +180,7 @@
   background: rgb(17 40 117 / 0.35);
 }
 #game .overlay-card {
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   color: var(--ink);
   border: 0;
@@ -285,6 +290,7 @@
   min-height: 44px;
   border: 0;
   border-radius: 10px;
+  --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   color: var(--cobalt);
   box-shadow:
@@ -294,6 +300,7 @@
   cursor: pointer;
 }
 #menu .seg button.active {
+  --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
 }
@@ -367,6 +374,7 @@
   margin: 0 0 8px;
   padding: 7px 12px 9px;
   border-radius: 4px var(--radius) var(--radius) var(--radius);
+  --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   box-shadow: var(--lift-1);
   color: var(--ink);
@@ -400,6 +408,7 @@
 #game .chat-log li.mine {
   margin-left: auto;
   border-radius: var(--radius) 4px var(--radius) var(--radius);
+  --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
 }
@@ -451,6 +460,7 @@
   padding: 4px 12px;
   border: 0;
   border-radius: 10px;
+  --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   color: var(--cobalt);
   box-shadow:
@@ -521,6 +531,221 @@
   letter-spacing: 0.15em;
 }
 
+/* ------------------------------------------------------------------ the table: gathering */
+
+.lobby-paper h2 {
+  margin: 8px 0 0;
+}
+.lobby-paper .tb-sub {
+  margin-top: -10px;
+  color: var(--ink-soft);
+}
+.lobby-paper .tb-seats .tb-sub {
+  margin-top: 0;
+}
+/* Who's here, with Invite right beside them: the reason to be at the table before a game. */
+.tb-here {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+/* Ready: mint felt, lifted, so you can see who's set to go at a glance. */
+.pc-tag.is-ready {
+  --fc: var(--mint);
+  background: var(--mint) var(--mint-img) 0 0 / var(--paper-size);
+  transform: translateY(-2px);
+  box-shadow: var(--lift-2);
+}
+.pc-tag.is-ready .pc-note::before {
+  content: '✓ ';
+}
+/* The picked game: lifted, with its tick (as on home). */
+.lobby-games .pc-choice.is-picked {
+  transform: translateY(-2px);
+  box-shadow: var(--lift-2);
+}
+.lobby-games .pc-choice.is-picked::after {
+  content: '';
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--cobalt)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 20px no-repeat;
+}
+
+/* Seats: four places around a small piece of the green table. Nearest you at the bottom, then on
+   round the way play goes (left, across, right), as the game will show it. */
+.tb-seats {
+  display: grid;
+  gap: 12px;
+}
+.tb-ring {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(64px, 18vw, 112px) minmax(0, 1fr);
+  grid-template-areas:
+    'far far far'
+    'left mat right'
+    'near near near';
+  gap: 12px;
+  align-items: center;
+  justify-items: center;
+  padding: 6px 0;
+}
+.tb-mat {
+  grid-area: mat;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 18px;
+  --fc: var(--baize);
+  background: var(--baize) var(--baize-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-2);
+}
+.tb-mat img {
+  width: 58%;
+  height: auto;
+}
+.tb-seat {
+  appearance: none;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  width: min(100%, 210px);
+  min-height: 64px;
+  padding: 9px 12px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+  font: 800 1.125rem/1.2 var(--font);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    transform 0.15s var(--settle),
+    box-shadow 0.15s;
+}
+.tb-seat small {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+/* A long name in a narrow side seat (a phone): a little smaller first, then "…". */
+.tb-seat {
+  container-type: inline-size;
+}
+@container (max-width: 150px) {
+  .tb-seat .pc-nm {
+    font-size: 0.85rem;
+  }
+}
+.tb-seat.s-near {
+  grid-area: near;
+}
+.tb-seat.s-left {
+  grid-area: left;
+}
+.tb-seat.s-far {
+  grid-area: far;
+}
+.tb-seat.s-right {
+  grid-area: right;
+}
+/* An empty seat lies flat in the page (the computer will play it): tap it to sit. */
+.tb-seat.is-open {
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-0);
+  color: var(--ink-soft);
+}
+.tb-seat[aria-disabled='true'] {
+  cursor: default;
+}
+.tb-seat.is-ready {
+  --fc: var(--mint);
+  background: var(--mint) var(--mint-img) 0 0 / var(--paper-size);
+}
+/* Your seat: sunflower, lifted. */
+.tb-seat.is-mine {
+  --fc: var(--sunflower);
+  background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
+  transform: translateY(-2px);
+  box-shadow: var(--lift-2);
+}
+.tb-seat.is-mine small,
+.tb-seat.is-ready small {
+  color: var(--ink);
+}
+@media (hover: hover) {
+  .tb-seat.is-open:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--lift-2);
+  }
+}
+@media (max-width: 600px) {
+  .tb-ring {
+    gap: 8px;
+  }
+  .tb-seat {
+    min-height: 58px;
+    padding: 8px 8px 9px;
+    font-size: 1rem;
+  }
+  .tb-seat small {
+    font-size: 0.78rem;
+  }
+}
+
+/* Ready: a strip that stays at the bottom of the screen while you look around, with what's next,
+   who we're waiting for, and the button. */
+.tb-go {
+  position: sticky;
+  bottom: calc(10px + var(--safe-b));
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 4px;
+  padding: 12px 12px 12px 18px;
+  border-radius: 16px;
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  background-attachment: local;
+  box-shadow: var(--lift-3);
+}
+.tb-go p {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.tb-next {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.tb-status {
+  color: var(--ink-soft);
+}
+.tb-go .pc-btn {
+  flex: none;
+  min-width: 150px;
+}
+@media (max-width: 420px) {
+  .tb-go {
+    padding: 10px 10px 10px 14px;
+  }
+  .tb-go .pc-btn {
+    min-width: 0;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
 /* Help: the game's instructions, as easy-to-read paragraphs. */
 #help-body {
   display: grid;
@@ -533,4 +758,242 @@
 /* The game's own menu actions sit in the same column as Switch game and Leave table. */
 .menu-game {
   display: contents;
+}
+
+/* The "turn sideways" card covers the bar (Tanks can't be played upright), but never the Menu, a
+   sheet or Messages: if one is open (opened before turning the phone, say), it stays on top and
+   works. */
+#game .rotate {
+  z-index: 33;
+}
+
+/* Someone's message, tapped: Mute and Report stay on one line each (a long name ends in "…") and
+   are big enough to tap. */
+#game .chat-actions button {
+  min-height: 44px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#game .chat-actions button:last-child {
+  flex: none;
+}
+#game .chat-head .pc-btn {
+  min-height: 48px;
+}
+#menu .seg button {
+  min-height: 48px;
+}
+
+/* A tablet held upright: Messages slides over the table like on a phone, instead of squeezing
+   the table into a narrow strip beside it. */
+@media (max-width: 900px) {
+  #game:not(.phone) .chat {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(380px, 62%);
+    z-index: 35;
+  }
+}
+
+/* ------------------------------------------------------------------ the bar, reworked (2026-11-21)
+
+   iPad and computer: your mic on the left (the one button people use all the time), then
+   Messages, Invite, Help and Menu together on the right. Each has a small icon beside its word.
+
+   Phones: the bar folds away. Your mic stays in view as a felt tab hanging from the top-left
+   corner; a tab with a caret in the top-right corner drops the rest of the bar down over the
+   game. Using the bar, or touching the game, folds it again. */
+
+#game .toolbar.pc-toolbar {
+  justify-content: flex-start;
+}
+#game .toolbar.pc-toolbar > :first-child,
+#game .toolbar.pc-toolbar #btn-menu {
+  margin-left: 0;
+  margin-right: 0;
+}
+#game .toolbar.pc-toolbar #btn-mic {
+  order: 0;
+  margin-right: auto;
+}
+#game .toolbar.pc-toolbar #btn-chat {
+  order: 1;
+}
+#game .toolbar.pc-toolbar #btn-share {
+  order: 2;
+}
+#game .toolbar.pc-toolbar #btn-help {
+  order: 3;
+}
+#game .toolbar.pc-toolbar #btn-menu {
+  order: 4;
+}
+/* Messages stays in the group (its panel's own Close hides it while it's open). */
+#game .toolbar.pc-toolbar .pc-btn {
+  gap: 7px;
+}
+#game .toolbar .pc-btn::before {
+  content: '';
+  flex: none;
+  width: 20px;
+  height: 20px;
+  background: currentColor;
+  -webkit-mask: var(--ico) center / contain no-repeat;
+  mask: var(--ico) center / contain no-repeat;
+}
+#btn-mic {
+  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0M12 18v3'/%3E%3C/svg%3E");
+}
+#btn-chat {
+  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v11H9l-5 4z'/%3E%3C/svg%3E");
+}
+#btn-share {
+  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='10' cy='8' r='4'/%3E%3Cpath d='M3 20c1-4 4-6 7-6s6 2 7 6M19 7v6M16 10h6'/%3E%3C/svg%3E");
+}
+#btn-help {
+  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01'/%3E%3C/svg%3E");
+}
+#btn-menu {
+  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 7h16M4 12h16M4 17h16'/%3E%3C/svg%3E");
+}
+
+/* Phones. Held upright, a slim row along the top holds the two tabs (the games' top rows of name
+   tags need it clear); held sideways, height is precious, so the game runs to the top and each
+   game keeps its top corners clear for the tabs (below). */
+#game.phone .arena {
+  --tabs-h: calc(48px + var(--safe-t));
+}
+@media (max-height: 500px) {
+  #game.phone .arena {
+    --tabs-h: 0px;
+  }
+}
+#game.phone .arena > .view {
+  top: var(--tabs-h);
+}
+/* Folded: only the mic tab shows. Open: the mic tab stays, and Messages, Invite, Help and Menu
+   hang in a stack of felt buttons under the caret tab. */
+#game.phone .toolbar.pc-toolbar {
+  height: auto;
+  padding: 0 calc(10px + var(--safe-r)) 0 calc(10px + var(--safe-l));
+  background: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+#game.phone:not(.bar-open) .toolbar.pc-toolbar > :not(#btn-mic) {
+  display: none;
+}
+#game.phone .toolbar.pc-toolbar #btn-mic {
+  flex: none;
+  max-width: none;
+  min-height: calc(46px + var(--safe-t));
+  padding: var(--safe-t) 16px 0;
+  border-radius: 0 0 14px 14px;
+  font-size: 1rem;
+  pointer-events: auto;
+}
+#game.phone.bar-open .toolbar.pc-toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr min(230px, 60vw);
+  grid-auto-rows: auto;
+  align-content: start;
+  align-items: start;
+  gap: 8px 0;
+}
+#game.phone.bar-open .toolbar.pc-toolbar #btn-mic {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+}
+#game.phone.bar-open .toolbar.pc-toolbar > :not(#btn-mic) {
+  grid-column: 3;
+  width: 100%;
+  max-width: none;
+  min-height: 48px;
+  justify-content: flex-start;
+  padding-inline: 16px;
+  font-size: 1.05rem;
+  pointer-events: auto;
+  box-shadow: var(--lift-2);
+}
+#game.phone.bar-open .toolbar.pc-toolbar #btn-chat {
+  grid-row: 2;
+  margin-top: 4px;
+}
+#game.phone.bar-open .toolbar.pc-toolbar #btn-share {
+  grid-row: 3;
+}
+#game.phone.bar-open .toolbar.pc-toolbar #btn-help {
+  grid-row: 4;
+}
+#game.phone.bar-open .toolbar.pc-toolbar #btn-menu {
+  grid-row: 5;
+}
+#game.phone.bar-open .toolbar.pc-toolbar #btn-chat[hidden],
+#game.phone.bar-open .toolbar.pc-toolbar #btn-share[hidden] {
+  display: none;
+}
+/* The caret tab, top right; under the open bar it points up to fold it again. */
+#game.phone .bar-tab {
+  position: absolute;
+  z-index: 31;
+  top: 0;
+  right: calc(10px + var(--safe-r));
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: calc(46px + var(--safe-t));
+  padding: var(--safe-t) 0 0;
+  border: 0;
+  border-radius: 0 0 14px 14px;
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--cobalt);
+  cursor: pointer;
+}
+#game.phone .bar-tab svg {
+  transition: transform 0.22s var(--settle);
+}
+
+#game.phone.bar-open .bar-tab svg {
+  transform: rotate(180deg);
+}
+#game.phone .bar-tab-dot {
+  position: absolute;
+  top: calc(8px + var(--safe-t));
+  right: 10px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--tomato);
+}
+/* The tabs stay usable over Tanks' "turn sideways" card. */
+#game.phone .toolbar.pc-toolbar,
+#game.phone .bar-tab {
+  z-index: 34;
+}
+
+/* Sideways phones: each game keeps its top corners clear for the tabs. */
+@media (max-height: 500px) {
+  #game.phone .dominoes-view .ht-pos-0 {
+    margin-top: 48px;
+  }
+  #game.phone .lobby-view {
+    padding-top: 56px;
+  }
+  #game.phone .sp-score {
+    top: 56px;
+  }
+  #game.phone .pz-status {
+    top: 54px;
+  }
+  #game.phone .tank-view .hud-top-left {
+    top: calc(54px + var(--safe-t));
+  }
+  #game.phone .tank-view .wind {
+    top: calc(130px + var(--safe-t));
+  }
 }

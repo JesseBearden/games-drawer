@@ -1,9 +1,11 @@
-# One copy of the game server. %i is the slot: a, b or staging. setup.sh installs this as
-# /etc/systemd/system/games-drawer@.service; the rollout tool writes each slot's env file.
+# The game server on one box. %i is the box's slot (a-d). setup.sh installs this as
+# /etc/systemd/system/games-drawer@.service; the rollout tool writes the slot's env file.
 [Unit]
-Description=Games Drawer server (%i)
-After=network-online.target
+Description=Games Drawer server (slot %i)
+After=network-online.target remote-fs.target
 Wants=network-online.target
+# Jigsaw saves and logs live on the shared disk (EFS), so a box can be replaced without losing them.
+RequiresMountsFor=/mnt/games-drawer
 
 [Service]
 User=games
@@ -20,7 +22,7 @@ RestartSec=2
 TimeoutStopSec=15
 MemoryMax=450M
 LimitNOFILE=8192
-# Lock it down: it only needs to listen on localhost and write its logs.
+# Lock it down: it only needs to listen on localhost and write to the shared disk.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
@@ -31,7 +33,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 CapabilityBoundingSet=
-ReadWritePaths=/var/log/games-drawer /var/lib/games-drawer
+ReadWritePaths=/mnt/games-drawer
 
 [Install]
 WantedBy=multi-user.target
