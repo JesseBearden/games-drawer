@@ -106,6 +106,8 @@ matched to your swatch sheet (`scripts/felt-textures.cjs`).
       their name, and their tag stays two lines like everyone's.
 - [ ] No "Bleep Bloop" any more (too like Beep Boop).
 - [ ] No "Work in Progress" under Hearts, Spades or Dominoes at the table (turned off for now).
+- [ ] Hearts and Spades: the cards look like thin card stock (a soft shadow close under them, no
+      thick lower edge), not tiles. A picked card and the winning card still lift off the table.
 - [ ] Open an invite link for a table that has closed (or come back to one, say after your phone
       slept a long time): "This table has closed", centred under the picture, with just Back to
       home. No red note under it saying the same thing again.

@@ -151,8 +151,21 @@ body *::after {
     center / 18px no-repeat;
   box-shadow: var(--lift-1);
 }
-#game .ht-hand .card.raised {
-  box-shadow: var(--lift-2);
+/* Playing cards are thin card stock, not felt: no lit edge or rolled-off lower edge, just a
+   close, soft shadow on the cloth (with the felt depth they read as tiles: user, 2026-11-20). */
+#game .card {
+  --card-flat: 0 0 0 0.5px rgb(var(--shade) / 0.16), 0 1px 1.5px rgb(var(--shade) / 0.3), 0 2px 5px rgb(var(--shade) / 0.14);
+  --card-up: 0 0 0 0.5px rgb(var(--shade) / 0.14), 0 3px 5px rgb(var(--shade) / 0.24), 0 9px 18px rgb(var(--shade) / 0.16);
+  box-shadow: var(--card-flat);
+}
+#game .ht-hand .card.raised,
+#game .ht-hand.my-turn .card.legal:hover {
+  box-shadow: var(--card-up);
+}
+#game .card.played.winner {
+  box-shadow:
+    0 0 0 3px var(--sunflower),
+    var(--card-up);
 }
 /* The magnifier: a lens with a white felt rim. */
 #game .pz-loupe {
