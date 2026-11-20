@@ -100,6 +100,12 @@
 .entry-detail {
   margin: -4px 0 0;
 }
+/* A table you can't join (closed, full, too many tries): just the message and Back to home,
+   centred like home's welcome. */
+#page-join.is-closed > h1,
+#page-join.is-closed > .entry-detail {
+  text-align: center;
+}
 
 /* The name: a line with Change when we know it, a box (with a dice for a random one) when we don't. */
 .entry-name .pc-namerow span {

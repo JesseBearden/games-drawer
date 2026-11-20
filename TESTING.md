@@ -105,6 +105,10 @@ matched to your swatch sheet (`scripts/felt-textures.cjs`).
       shrinks a little then ends in "…". Someone who dropped out shows a small "zzz" after
       their name, and their tag stays two lines like everyone's.
 - [ ] No "Bleep Bloop" any more (too like Beep Boop).
+- [ ] No "Work in Progress" under Hearts, Spades or Dominoes at the table (turned off for now).
+- [ ] Open an invite link for a table that has closed (or come back to one, say after your phone
+      slept a long time): "This table has closed", centred under the picture, with just Back to
+      home. No red note under it saying the same thing again.
 - [ ] Dominoes: when a line reaches the edge it turns as an L, the turning tile just past the
       end of the line (not tucked beside the last tile). A line never turns at a double or
       right after one: it runs on a little past the edge, so no double looks like a spinner.

@@ -367,7 +367,6 @@ describe('private rooms are parties', () => {
     for (const game of ['tanks', 'jigsaw'] as const) expect(mgr.resolve({ kind: 'public', game }, `session-${game}`).ok).toBe(true);
     for (const game of ['hearts', 'spades', 'dominoes'] as const) {
       expect(mgr.resolve({ kind: 'public', game }, `session-${game}`).ok).toBe(false);
-      expect(gameInfo(game).underConstruction).toBe(true);
       expect(mgr.resolve({ kind: 'create-private', game }, `session-p-${game}`).ok).toBe(true);
     }
   });

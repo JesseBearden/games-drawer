@@ -247,6 +247,10 @@ let joinTimer = 0;
  * the page's one main button. (Not a page to optimise: it's rare.)
  */
 function setJoinClosed(closed: boolean) {
+  // With no form under it, the message is centred like home's (left-aligned, it looked lopsided).
+  $('page-join').classList.toggle('is-closed', closed);
+  // The page itself says what's wrong: no second, red note saying it again.
+  if (closed) showError(null);
   const home = $('join-home');
   home.classList.toggle('pc-btn-main', closed);
   home.classList.toggle('pc-btn-big', closed);
@@ -479,11 +483,22 @@ async function start(room: RoomRequest, opts: { mic: boolean; name: string; resu
       app?.onMessage(msg);
     },
     onFatal: (err) => {
+      const wasIn = !!app;
       if (app) leave();
       dropEntry(entry);
       setActive(null);
       setBusy(false);
-      showError(err.message.replace(/\broom\b/g, 'table'));
+      const why = err.message.replace(/\broom\b/g, 'table');
+      // Not getting in from a table's join page (it has closed, filled up, too many tries): look
+      // again. If the page now says why itself ("This table has closed"), a red note saying it
+      // twice is noise.
+      if (!wasIn && page.kind === 'join') {
+        void refreshJoin(page).then(() => {
+          if (!$('page-join').classList.contains('is-closed')) showError(why);
+        });
+        return;
+      }
+      showError(why);
     },
     onReconnecting: () => {
       if (app) app.showReconnecting();

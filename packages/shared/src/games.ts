@@ -37,7 +37,8 @@ export interface GameInfo {
   howTo: string[];
   players: string;
   availability: Availability;
-  /** Still being finished: its card and page carry an "Under construction" sign. */
+  /** Still being finished: its tile at the table says "Work in Progress". (All off since
+   *  2026-11-20, at the user's request: switch one back on when it needs it.) */
   underConstruction: boolean;
   /** Phones play it sideways. */
   landscape: boolean;
@@ -80,7 +81,7 @@ export const GAMES: GameInfo[] = [
     players: '4 seats · bots fill in',
     // Back to private rooms while it's finished (it was public).
     availability: 'private',
-    underConstruction: true,
+    underConstruction: false,
     landscape: false,
   },
   {
@@ -100,7 +101,7 @@ export const GAMES: GameInfo[] = [
     players: '2 teams of 2 · bots fill in',
     // New: private rooms first, then everyone (see Availability).
     availability: 'private',
-    underConstruction: true,
+    underConstruction: false,
     landscape: false,
   },
   {
@@ -119,7 +120,7 @@ export const GAMES: GameInfo[] = [
     ],
     players: '4 seats · bots fill in',
     availability: 'private',
-    underConstruction: true,
+    underConstruction: false,
     landscape: false,
   },
   {
