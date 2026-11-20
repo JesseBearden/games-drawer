@@ -182,7 +182,7 @@ describe('the link to GitHub', () => {
   it('is a GitHub connection on its own, waiting to be approved', () => {
     const app = new cdk.App();
     const t = Template.fromStack(new GamesDrawerGitHubStack(app, 'GitHub', { env: { region: 'us-east-2' } }));
-    t.hasResourceProperties('AWS::CodeConnections::Connection', { ConnectionName: 'games-drawer-github', ProviderType: 'GitHub' });
+    t.hasResourceProperties('AWS::CodeConnections::Connection', { ConnectionName: 'games-drawer-repo', ProviderType: 'GitHub' });
   });
 
   it('holds the deploy role, already allowed to use the connection when the project is created', () => {

@@ -111,9 +111,16 @@ Done once, from this computer, after the AWS account is ready.
    ```
 
    It starts out pending. Open the link it prints (`ApproveItHere`), pick
-   **games-drawer-github**, then **Update pending connection**. GitHub asks you to install the
-   **AWS Connector for GitHub** app; let it see the `games-drawer` repository (only that one is
-   needed). The connection then shows **Available**.
+   **games-drawer-repo**, then **Update pending connection**. That has two parts, and both are
+   needed:
+   - **Authorize** the **AWS Connector for GitHub** app (signing in with GitHub).
+   - **Install** it: under **GitHub Apps**, choose **Install a new app**, pick your account, then
+     **Only select repositories** → `games-drawer`, and **Install**. Back on the AWS page, the
+     new installation fills in the box; choose **Connect**.
+
+   The connection then shows **Available**. (Authorizing alone also shows Available, but the app
+   then can't see the repo or set up the push webhook. On GitHub, the app should be listed under
+   **Settings → Applications → Installed GitHub Apps**, not only under Authorized.)
 
 6. Create the rest. The alert email is passed in, never committed, because this repo is public:
 

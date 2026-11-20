@@ -22,7 +22,9 @@ export class GamesDrawerGitHubStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props);
     cdk.Tags.of(this).add('project', 'games-drawer');
-    const connection = new codeconnections.CfnConnection(this, 'Connection', { connectionName: 'games-drawer-github', providerType: 'GitHub' });
+    // (The first connection, games-drawer-github, was approved without installing the app on the
+    // repo, so it could fetch nothing; a new name makes a fresh one to approve.)
+    const connection = new codeconnections.CfnConnection(this, 'Connection', { connectionName: 'games-drawer-repo', providerType: 'GitHub' });
     this.connectionArn = connection.attrConnectionArn;
 
     const deployRole = new iam.Role(this, 'DeployRole', {
@@ -51,7 +53,7 @@ export class GamesDrawerGitHubStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ConnectionArn', { value: this.connectionArn });
     new cdk.CfnOutput(this, 'ApproveItHere', {
       value: `https://${this.region}.console.aws.amazon.com/codesuite/settings/connections`,
-      description: 'Open games-drawer-github, then "Update pending connection", and let the AWS Connector for GitHub see the repo',
+      description: 'Open games-drawer-repo, then "Update pending connection", and let the AWS Connector for GitHub see the repo',
     });
   }
 }
