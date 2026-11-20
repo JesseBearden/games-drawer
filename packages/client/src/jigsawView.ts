@@ -6,6 +6,9 @@ import {
   puzzleProgress,
   puzzleUntouched,
   PUZZLE_IMAGES,
+  addLocalPuzzleImages,
+  allPuzzleImages,
+  parseLocalPuzzles,
   puzzleImage,
   TAB_REACH,
   tabCurve,
@@ -18,7 +21,7 @@ import {
 } from '@tank/shared';
 import { loupeZoom } from './loupe';
 import { colorCss, escapeHtml } from './state';
-import type { ShellApi, View } from './views';
+import type { SafariGesture, ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const SAVES_KEY = 'gd.puzzles';
@@ -190,6 +193,10 @@ export class JigsawTable implements View {
   private pendingGrab: { g: number; from: Map<number, Pt> } | null = null;
   private panning: { x: number; y: number; camX: number; camY: number } | null = null;
   private pinch: { dist: number; s: number; mid: Pt; cam: { x: number; y: number } } | null = null;
+  /** A trackpad pinch (Safari's gesture events): the zoom it started from. */
+  private gesture: { s: number } | null = null;
+  /** Where the mouse or trackpad pointer last was over the board (a pinch zooms around it). */
+  private hoverAt: { x: number; y: number } | null = null;
   private lastDragSent = 0;
   private lastCursorSent = 0;
   /** Where the dragging finger (or mouse) is, for scrolling while it holds still at an edge. */
@@ -229,9 +236,25 @@ export class JigsawTable implements View {
     this.canvas.addEventListener('pointerup', this.onUp);
     this.canvas.addEventListener('pointercancel', this.onUp);
     this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    this.canvas.addEventListener('gesturestart', this.onGestureStart);
+    this.canvas.addEventListener('gesturechange', this.onGestureChange);
+    this.canvas.addEventListener('gestureend', this.onGestureEnd);
     this.observer = new ResizeObserver(() => this.resizeCanvas());
     this.observer.observe(this.canvas);
     shell.sfx.preloadSounds(CARD_SOUNDS);
+    // Pictures that live only on this computer (the git-ignored local-puzzles folder, served by
+    // the dev server). A real build drops this whole block, so the hosted site never asks.
+    if (import.meta.env.DEV) {
+      void fetch('/puzzles/local/puzzles.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((raw) => {
+          const list = parseLocalPuzzles(raw);
+          if (!list.length) return;
+          addLocalPuzzleImages(list);
+          if (this.phase === 'setup' && !this.el.hidden) this.renderSetup();
+        })
+        .catch(() => {});
+    }
   }
 
   // ------------------------------------------------------------------ messages
@@ -341,7 +364,7 @@ export class JigsawTable implements View {
   }
 
   private renderSetup() {
-    const img = PUZZLE_IMAGES.find((i) => i.id === this.pickImage) ?? PUZZLE_IMAGES[0];
+    const img = allPuzzleImages().find((i) => i.id === this.pickImage) ?? PUZZLE_IMAGES[0];
     let html = '<div class="pz-setup-card"><h2>Jigsaw puzzle</h2>';
     // People coming back want their puzzle first.
     if (this.saves.length) {
@@ -358,7 +381,7 @@ export class JigsawTable implements View {
       html += `<button type="button" class="pz-btn${n === this.pickCount ? ' picked' : ''}" data-count="${n}" title="${g.cols * g.rows} pieces">${n}</button>`;
     }
     html += '</div><h4>Choose a puzzle</h4><div class="pz-images">';
-    for (const i of PUZZLE_IMAGES) {
+    for (const i of allPuzzleImages()) {
       html += `<button type="button" class="pz-image${i.id === img.id ? ' picked' : ''}" data-image="${i.id}"><img src="${i.thumb}" alt="" loading="lazy" /><span>${escapeHtml(i.title)}</span></button>`;
     }
     // The grid has to fit the picture, so the real count is close to the one picked.
@@ -925,6 +948,7 @@ export class JigsawTable implements View {
   }
 
   private onMove = (e: PointerEvent) => {
+    this.hoverAt = { x: e.clientX, y: e.clientY };
     if (!this.state) return;
     if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const now = performance.now();
@@ -1076,6 +1100,30 @@ export class JigsawTable implements View {
     if (this.dragging) this.invalidate(); // the magnifier and the shadow go away
     this.dragging = null;
     this.panning = null;
+  };
+
+  /**
+   * A pinch on a trackpad (an iPad's or a Mac's, in Safari) zooms the puzzle around the pointer.
+   * Fingers on the screen already zoom through the pointer events above, so then it's ignored.
+   */
+  private onGestureStart = (e: Event) => {
+    e.preventDefault();
+    this.gesture = this.pointers.size === 0 && this.state && this.phase !== 'setup' ? { s: this.cam.s } : null;
+  };
+
+  private onGestureChange = (e: Event) => {
+    e.preventDefault();
+    if (!this.gesture || this.pointers.size > 0) return;
+    const g = e as SafariGesture;
+    const r = this.canvas.getBoundingClientRect();
+    const x = g.clientX ?? this.hoverAt?.x ?? r.left + r.width / 2;
+    const y = g.clientY ?? this.hoverAt?.y ?? r.top + r.height / 2;
+    this.zoomAt(x - r.left, y - r.top, (this.gesture.s * g.scale) / this.cam.s);
+  };
+
+  private onGestureEnd = (e: Event) => {
+    e.preventDefault();
+    this.gesture = null;
   };
 
   private onWheel = (e: WheelEvent) => {

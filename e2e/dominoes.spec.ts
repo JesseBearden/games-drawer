@@ -59,42 +59,47 @@ test('Dominoes in a private room: pick a tile and play it where it glows', async
   expect(errors).toEqual([]);
 });
 
-test('the board zooms in and out, with the buttons or the mouse wheel', async ({ page }) => {
+test('the board zooms with the mouse wheel; you play by tapping the spot, not the tile again', async ({ page }) => {
+  test.setTimeout(90_000);
   const errors = watchErrors(page);
   await createRoom(page, 'Dot', 'dominoes');
   const view = page.locator('#dominoes-view');
   await expect(view.locator('.dm-mine')).toHaveCount(7);
-  // Wait for the first tile (leading it ourselves if we hold the double six).
-  for (let i = 0; i < 80 && !(await view.locator('.dm-placed').count()); i++) {
+  // No zoom buttons: pinch on a phone or tablet, the mouse wheel on a computer.
+  await expect(view.locator('[data-zoom]')).toHaveCount(0);
+  // Our first play: tapping the picked tile again puts it back; tapping its spot plays it.
+  const status = view.locator('.ht-status');
+  const deadline = Date.now() + 60_000;
+  while ((await view.locator('.dm-mine').count()) === 7 && Date.now() < deadline) {
     const legal = view.locator('.dm-hand.my-turn .dm-mine.legal');
     if (await legal.count()) {
-      await legal.first().click();
-      if (await legal.count()) await legal.first().click();
+      const tile = await legal.first().getAttribute('data-tile');
+      const mine = view.locator(`.dm-mine[data-tile="${tile}"]`);
+      await mine.click();
+      await expect(mine).toHaveClass(/raised/);
+      await expect(view.locator('.dm-ghost').first()).toBeVisible();
+      // Whose turn it is shows on the yellow tag and where it goes on the board: no line of text.
+      await expect(status).toBeHidden();
+      await mine.click();
+      await expect(mine).not.toHaveClass(/raised/);
+      await expect(view.locator('.dm-ghost')).toHaveCount(0);
+      await expect(status).toBeHidden();
+      await mine.click();
+      await view.locator('.dm-ghost').first().click();
+      await expect(view.locator('.dm-mine')).toHaveCount(6);
     }
     await page.waitForTimeout(250);
   }
-  await expect(view.locator('.dm-placed').first()).toBeVisible();
-
-  const layout = view.locator('.dm-layout');
-  const scale = () => layout.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform.replace('none', '')).a);
-  const zoomIn = view.locator('.dm-zoom-in');
-  const zoomOut = view.locator('.dm-zoom-out');
-  await expect(zoomIn).toBeVisible();
-  // Nothing to zoom out from yet: the button keeps its place, unseen.
-  await expect(zoomOut).toBeHidden();
-  await zoomIn.click();
-  await expect.poll(scale).toBeCloseTo(1.5);
-  await expect(zoomOut).toBeVisible();
-  await expect(view.locator('.dm-board')).toHaveClass(/zoomed/);
-  await zoomOut.click();
-  await expect.poll(scale).toBe(1);
-  await expect(zoomOut).toBeHidden();
+  await expect(view.locator('.dm-mine')).toHaveCount(6);
 
   // The mouse wheel over the board zooms around the pointer, in and back out.
+  const layout = view.locator('.dm-layout');
+  const scale = () => layout.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform.replace('none', '')).a);
   const box = (await view.locator('.dm-board').boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -300);
   await expect.poll(scale).toBeGreaterThan(1.2);
+  await expect(view.locator('.dm-board')).toHaveClass(/zoomed/);
   await page.mouse.wheel(0, 1200);
   await expect.poll(scale).toBe(1);
   expect(errors).toEqual([]);

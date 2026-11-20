@@ -138,6 +138,15 @@
 #game .scores td {
   border-top: 1.5px solid var(--rule);
 }
+/* Names on one line; a long one ends in "…". */
+#game .scores td {
+  white-space: nowrap;
+}
+#game .scores td .pc-nm {
+  display: inline-block;
+  max-width: 9em;
+  vertical-align: bottom;
+}
 #game .scores td small {
   color: var(--ink-soft);
 }

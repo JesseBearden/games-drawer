@@ -37,6 +37,21 @@ npm run -s admin-password   # make the admin page's password hash (see "Admin pa
 npm run dev:https   # dev server over https (needed for voice chat on phones)
 ```
 
+## Puzzle pictures only for this computer
+
+Family photos can be puzzles without ever being published:
+
+```bash
+npm run local-puzzle -- "C:\path\to\photo.jpg" "Wedding day"
+```
+
+That saves a copy (upright, standard colours, no camera or location data, at most 2400 px wide)
+and a preview in `local-puzzles/` at the top of the repo, and lists it in
+`local-puzzles/puzzles.json` (edit a title there; delete a line and its files to remove one).
+Git ignores the folder, so it's never committed or deployed. With `npm run dev` running, those
+pictures come first in the puzzle picker (reload the page after adding one). Production servers
+and builds never look for them.
+
 ## Deploying
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) tests every pull request.
@@ -63,7 +78,8 @@ is in [deploy/README.md](deploy/README.md).
   WebSocket message contract. Runs on the server; the client reuses the terrain and shell code.
 - `packages/server` — authoritative Node server. A room (`room.ts`) holds the people, chat and
   voice; the game it's playing (`games/tanks.ts`, `games/hearts.ts`) holds seats and rules. Chat
-  filter, abuse limits, JSONL logs.
+  filter, abuse limits, JSONL logs. Chat text stays in the room's memory and goes when the table
+  closes; the chat log only counts messages, except a reported one, which is saved for review.
 - `packages/client` — Vite + TypeScript client. `shell.ts` is the room (chat, voice, menu); the
   lobby, tanks (Canvas 2D) and Hearts (HTML cards) are views it swaps in.
 - `e2e/` — browser tests (Playwright) that play the site like people do.

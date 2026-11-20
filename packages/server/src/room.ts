@@ -52,6 +52,11 @@ export interface RoomDeps {
   moderator: ChatModerator;
   /** Room closes this long after the last human leaves. */
   emptyRoomMs: number;
+  /**
+   * A table with people still connected closes after this long with nobody playing or talking
+   * (someone who left a game open and walked away). Everyone gets IDLE_WARNING_MS of warning.
+   */
+  idleRoomMs?: number;
   /** Public-room reclaim window. Private rooms hold reservations for the room's lifetime. */
   publicReclaimMs: number;
   cfg?: Partial<GameConfig>;
@@ -66,6 +71,10 @@ export interface RoomDeps {
   /** Where jigsaw puzzles are saved (in memory if not given). */
   puzzles?: PuzzleStore;
 }
+
+/** Default idle time before a table closes, and the warning before it does. */
+export const IDLE_ROOM_MS = 10 * 60_000;
+export const IDLE_WARNING_MS = 60_000;
 
 /** Chat reports per player per minute. */
 export const REPORTS_PER_MINUTE = 5;
@@ -103,6 +112,10 @@ interface Player extends Member {
   caughtTimes: number[];
   /** Chat is paused until then after too many caught messages. */
   chatPausedUntil: number;
+  /** Voice links this player has told us about ("alias:route"), so each is logged once. */
+  voiceRoutes: Set<string>;
+  /** Last time they played, typed, tapped or talked (for closing idle tables). */
+  lastActive: number;
 }
 
 /**
@@ -306,6 +319,7 @@ export class Room {
       }
       existing.conn = conn;
       existing.welcomed = false;
+      existing.lastActive = now;
       existing.device = device;
       existing.connectedAt = now;
       existing.reservedUntil = Infinity;
@@ -341,6 +355,8 @@ export class Room {
       welcomed: false,
       caughtTimes: [],
       chatPausedUntil: 0,
+      voiceRoutes: new Set(),
+      lastActive: now,
     };
     this.players.set(session, p);
     if (this.game && !this.game.addPlayer(p)) {
@@ -395,8 +411,18 @@ export class Room {
     this.broadcastMembers();
   }
 
-  /** Expire public reservations; returns true if the room should close. */
-  housekeeping(): boolean {
+  private idleWarned = false;
+
+  private markActive(p: Player) {
+    p.lastActive = this.deps.now();
+    if (this.idleWarned) {
+      this.idleWarned = false;
+      this.broadcast({ t: 'idle', closesInMs: null });
+    }
+  }
+
+  /** Expire public reservations; returns why the room should close (empty, or idle), or false. */
+  housekeeping(): false | 'empty' | 'idle' {
     const now = this.deps.now();
     this.flushRateLimitCounts();
     let changed = false;
@@ -409,7 +435,20 @@ export class Room {
       }
     }
     if (changed) this.broadcastMembers();
-    return this.emptySince !== null && now - this.emptySince >= this.deps.emptyRoomMs;
+    if (this.emptySince !== null) return now - this.emptySince >= this.deps.emptyRoomMs ? 'empty' : false;
+    // People are connected: close it if none of them has played or talked for a long while,
+    // after a minute's warning (anything anyone does in that minute keeps it open).
+    const idleMs = this.deps.idleRoomMs ?? IDLE_ROOM_MS;
+    let last = -Infinity;
+    for (const p of this.players.values()) if (p.conn) last = Math.max(last, p.lastActive);
+    const quiet = now - last;
+    if (quiet >= idleMs) return 'idle';
+    if (quiet >= idleMs - IDLE_WARNING_MS && !this.idleWarned) {
+      this.idleWarned = true;
+      this.broadcast({ t: 'idle', closesInMs: idleMs - quiet });
+      this.log('idle_warning', {});
+    }
+    return false;
   }
 
   close(reason: string) {
@@ -417,9 +456,14 @@ export class Room {
     this.closed = true;
     this.endSession('room_closed');
     this.game?.dispose();
+    // The table's messages go with it.
+    this.chatHistory.length = 0;
+    this.recentMessages.clear();
+    const minutes = Math.round((this.deps.idleRoomMs ?? IDLE_ROOM_MS) / 60_000);
+    const message = reason === 'idle' ? `This table closed after ${minutes} minute${minutes === 1 ? '' : 's'} with nobody playing or talking.` : 'This room has closed.';
     for (const p of this.players.values()) {
       if (p.conn) {
-        p.conn.send(JSON.stringify({ t: 'error', code: 'room-closed', message: 'This room has closed.' } satisfies ServerMessage));
+        p.conn.send(JSON.stringify({ t: 'error', code: 'room-closed', message } satisfies ServerMessage));
         p.conn.close(4001, 'room closed');
       }
     }
@@ -492,7 +536,11 @@ export class Room {
   handle(session: string, msg: ClientMessage) {
     const p = this.players.get(session);
     if (!p || !p.conn) return;
+    // Anything a person does keeps the table open (not the background heartbeat or voice set-up).
+    if (msg.t !== 'ping' && msg.t !== 'rtc' && msg.t !== 'voice-route') this.markActive(p);
     switch (msg.t) {
+      case 'active':
+        return;
       case 'g':
         this.game?.handle(p, msg.m);
         return;
@@ -537,6 +585,16 @@ export class Room {
       case 'invite':
         this.makeInvite(p, msg.for);
         return;
+      case 'voice-route': {
+        // How a voice link connected, for the admin page: logged once per link and outcome.
+        if (!p.inVoice) return;
+        const to = [...this.players.values()].find((o) => o.alias === msg.to);
+        const key = `${msg.to}:${msg.route}`;
+        if (!to || to === p || p.voiceRoutes.has(key) || p.voiceRoutes.size >= 30) return;
+        p.voiceRoutes.add(key);
+        this.log('voice_link', { pid: p.pid, route: msg.route });
+        return;
+      }
       case 'hello':
         return;
     }
@@ -629,8 +687,11 @@ export class Room {
     return { enabled: this.kind === 'private', iceServers };
   }
 
-  /** Recent delivered messages, so a report can be tied to its sender for review. */
-  private recentMessages = new Map<string, { pid: string; at: number }>();
+  /**
+   * Recent delivered messages, so a report can save the message and its sender for review.
+   * Like the chat history, they live only in memory and go when the table closes.
+   */
+  private recentMessages = new Map<string, { pid: string; name: string; text: string; at: number }>();
 
   private report(p: Player, msgId: string) {
     const now = this.deps.now();
@@ -642,8 +703,19 @@ export class Room {
     const target = this.recentMessages.get(msgId);
     if (!target) return;
     p.reportTimes.push(now);
-    // The chat audit log already holds the message text under this msgId.
-    this.deps.log.chat({ room: this.code, roomKind: this.kind, outcome: 'reported', msgId, reporter: p.pid, reported: target.pid, ruleVersion: RULE_VERSION });
+    // A reported message is the only chat text written to the log, so it can be reviewed after
+    // the table closes. Everything else said at the table is gone when the table is.
+    this.deps.log.chat({
+      room: this.code,
+      roomKind: this.kind,
+      outcome: 'reported',
+      msgId,
+      reporter: p.pid,
+      reported: target.pid,
+      reportedName: target.name,
+      text: target.text,
+      ruleVersion: RULE_VERSION,
+    });
     this.deps.log.event('chat_report', { room: this.code, roomKind: this.kind });
     this.notice(p, 'Thanks. That message was reported for review.');
   }
@@ -667,9 +739,7 @@ export class Room {
       this.notice(p, `You can chat again in ${Math.ceil((p.chatPausedUntil - now) / 1000)} seconds.`);
       return;
     }
-    // The audit log keeps what was submitted, up to twice the accepted length.
-    const submitted = raw.slice(0, MAX_CHAT_LENGTH * 2);
-    const text = cleanText(submitted, MAX_CHAT_LENGTH + 1);
+    const text = cleanText(raw.slice(0, MAX_CHAT_LENGTH * 2), MAX_CHAT_LENGTH + 1);
     const rate = p.limiter.check(now, text);
     if (rate !== 'ok') {
       this.rateLimited[rate]++;
@@ -677,7 +747,8 @@ export class Room {
       return;
     }
     const msgId = randomUUID();
-    const base = { room: this.code, roomKind: this.kind, msgId, sender: p.pid, senderName: p.name, text: submitted, ruleVersion: RULE_VERSION };
+    // The log counts messages (for the admin page) but never keeps what was said or who said it.
+    const base = { room: this.code, roomKind: this.kind, ruleVersion: RULE_VERSION };
     let result;
     try {
       result = this.deps.moderator.screen(text, this.chatFilter);
@@ -696,7 +767,7 @@ export class Room {
     }
     this.deps.log.chat({ ...base, outcome: 'delivered' });
     if (this.session) this.session.chats++;
-    this.recentMessages.set(msgId, { pid: p.pid, at: now });
+    this.recentMessages.set(msgId, { pid: p.pid, name: p.name, text: msg.text, at: now });
     if (this.recentMessages.size > 200) this.recentMessages.delete(this.recentMessages.keys().next().value!);
     this.pushHistory(msg);
     this.broadcast({ t: 'chat', msg });

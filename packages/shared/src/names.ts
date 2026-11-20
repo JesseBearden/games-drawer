@@ -52,6 +52,32 @@ export const NAME_SNACKS = [
 
 export const MAX_NAME_LENGTH = 20;
 
+/**
+ * Computer players in the card games have made-up robot names, so it's plain who isn't a
+ * person (their name tags also carry a small computer symbol). Our own names only: no robots
+ * from films, shows or toys.
+ */
+export const ROBOT_NAMES = [
+  'Robo-Bob',
+  'Beep Boop',
+  'Sprocket',
+  'Rusty Bolts',
+  'Botley',
+  'Widget',
+  'Unit 7',
+  'Bleep Bloop',
+  'Tin Can Tom',
+  'Sparky 3000',
+];
+
+/** A robot name nobody in `taken` (lower-case) is using. */
+export function freshBotName(taken: Set<string>, rng?: IntSource): string {
+  const free = ROBOT_NAMES.filter((n) => !taken.has(n.toLowerCase()));
+  const list = free.length ? free : ROBOT_NAMES;
+  const n = list[rng ? rng.int(0, list.length - 1) : Math.floor(Math.random() * list.length)];
+  return free.length ? n : uniqueName(n, taken);
+}
+
 /** A random "Title Snack" name that fits the name length limit. */
 export function randomName(rng?: IntSource): string {
   const pick = <T>(list: T[]) => list[rng ? rng.int(0, list.length - 1) : Math.floor(Math.random() * list.length)];

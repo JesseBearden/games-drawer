@@ -129,10 +129,10 @@
   letter-spacing: -0.02em;
   text-decoration: none;
 }
+/* The drawer: the user's cut-paper art (art/brand.webp), with its own soft shadow. */
 .pc-brand img {
   width: 44px;
-  height: 40px;
-  filter: drop-shadow(0 1px 1px rgb(17 40 117 / 0.25));
+  height: 44px;
 }
 
 /* A picture sitting straight on the page: cut out (a transparent image), so the paper shows
@@ -354,6 +354,20 @@ body.pad-mode .pc-choice:has(input:focus) {
   height: 52px;
   flex: none;
 }
+/* A narrow tile (four across on a table's "Pick a game", or a small phone): a smaller picture and
+   name, so a long one like "Dominoes" stays inside its paper. */
+.pc-choice {
+  container-type: inline-size;
+}
+@container (max-width: 175px) {
+  .pc-choice img {
+    width: 42px;
+    height: 42px;
+  }
+  .pc-choice > span {
+    font-size: 1rem;
+  }
+}
 /* On coloured paper, small text stays full ink (soft ink is too faint on the deeper colours). */
 .pc-choice small {
   display: block;
@@ -398,9 +412,19 @@ body.pad-mode .pc-choice:has(input:focus) {
   white-space: nowrap;
 }
 
+/* A person's name, wherever it shows: always one line; too long for its room and it ends in "…". */
+.pc-nm {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A player's name tag: its own piece of paper on the mat. */
 .pc-tag {
   display: inline-grid;
+  max-width: 100%;
   gap: 2px;
   min-width: 140px;
   padding: 10px 16px 11px;
@@ -414,6 +438,7 @@ body.pad-mode .pc-choice:has(input:focus) {
 .pc-tag b {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 8px;
   font-size: 1.125rem;
 }

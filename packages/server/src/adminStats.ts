@@ -49,6 +49,12 @@ export interface AdminStats {
   sessions: number;
   personHours: number;
   chat: { delivered: number; blocked: number; reported: number; perPersonHour: number; sessionsWithChat: number };
+  /**
+   * Voice links as each person saw them (a link between two people is counted from both ends):
+   * straight to the other person, through our relay, or never connected. And how many people
+   * ever needed the relay, or couldn't connect at all.
+   */
+  voice: { links: number; relayed: number; failed: number; people: number; peopleRelayed: number; peopleFailed: number };
   games: GameStats[];
   daily: DayStats[];
 }
@@ -67,7 +73,7 @@ export function dayRange(to: string, days: number): string[] {
 }
 
 /** Only the lines the admin page uses, to keep reading cheap. */
-const WANTED = ['"game_session"', '"game_start"', '"join"', '"room_created"'];
+const WANTED = ['"game_session"', '"game_start"', '"join"', '"room_created"', '"voice_link"'];
 
 async function readJsonl(file: string, keep: (line: string) => boolean, into: Row[]) {
   const lines = readline.createInterface({ input: fs.createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
@@ -136,6 +142,17 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
     };
   }).sort((a, b) => b.personHours - a.personHours || b.sessions - a.sessions || b.picks - a.picks);
 
+  const links = ev.filter((e) => e.type === 'voice_link');
+  const peopleWith = (route?: string) => new Set(links.filter((l) => !route || l.route === route).map((l) => l.pid)).size;
+  const voice = {
+    links: links.length,
+    relayed: links.filter((l) => l.route === 'relayed').length,
+    failed: links.filter((l) => l.route === 'failed').length,
+    people: peopleWith(),
+    peopleRelayed: peopleWith('relayed'),
+    peopleFailed: peopleWith('failed'),
+  };
+
   const personMs = sessions.reduce((t, s) => t + num(s.personMs), 0);
   const delivered = ch.filter((c) => c.outcome === 'delivered').length;
   const daily: DayStats[] = days.map((day) => {
@@ -167,6 +184,7 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
       perPersonHour: personMs ? round(delivered / (personMs / HOUR)) : 0,
       sessionsWithChat: sessions.filter((s) => num(s.chats) > 0).length,
     },
+    voice,
     games,
     daily,
   };

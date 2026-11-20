@@ -50,7 +50,7 @@ export class LobbyView implements View {
     html += '</div><h2 class="pc-h3">At the table</h2><ul class="lobby-people">';
     for (const m of this.members) {
       const notes = [m.id === s.alias ? 'You' : '', m.connected ? '' : 'Away'].filter(Boolean).join(' · ');
-      html += `<li data-alias="${escapeHtml(m.id)}" class="pc-tag${m.connected ? '' : ' is-away'}${this.speaking.has(m.id) ? ' is-talking' : ''}"><b><span class="pc-talk"><i></i><i></i><i></i></span>${escapeHtml(m.name)}</b>${notes ? `<span class="pc-note">${notes}</span>` : ''}</li>`;
+      html += `<li data-alias="${escapeHtml(m.id)}" class="pc-tag${m.connected ? '' : ' is-away'}${this.speaking.has(m.id) ? ' is-talking' : ''}"><b><span class="pc-talk"><i></i><i></i><i></i></span><span class="pc-nm">${escapeHtml(m.name)}</span></b>${notes ? `<span class="pc-note">${notes}</span>` : ''}</li>`;
     }
     html += '</ul>';
     if (s.voice.available && !s.voice.inVoice) {

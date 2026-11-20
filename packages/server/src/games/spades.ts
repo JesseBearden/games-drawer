@@ -1,6 +1,6 @@
 import {
   deal,
-  freshName,
+  freshBotName,
   scoreSpadesHand,
   spadesBotBid,
   spadesBotPlay,
@@ -55,7 +55,7 @@ export class SpadesGame implements ServerGame {
     const used = new Set(host.members().map((m) => m.name.toLowerCase()));
     const colors = new Set(host.members().map((m) => m.color));
     this.seats = [0, 1, 2, 3].map(() => {
-      const botName = freshName(used, this.dice);
+      const botName = freshBotName(used, this.dice);
       used.add(botName.toLowerCase());
       let botColor = 0;
       while (colors.has(botColor)) botColor++;
@@ -135,7 +135,7 @@ export class SpadesGame implements ServerGame {
     for (const s of this.seats) taken.add(s.botName.toLowerCase());
     for (const s of this.seats) {
       if (s.session === null && s.botName.toLowerCase() === lower) {
-        s.botName = freshName(taken, this.dice);
+        s.botName = freshBotName(taken, this.dice);
         taken.add(s.botName.toLowerCase());
       }
     }

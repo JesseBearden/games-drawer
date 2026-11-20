@@ -311,11 +311,13 @@
   align-items: center;
   gap: 10px;
 }
+/* The name on one line; "(connecting…)" under it. */
 .mic-people .mic-name {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
   font-weight: 800;
-  overflow-wrap: anywhere;
 }
 .mic-people .pc-btn {
   min-height: 40px;
@@ -381,6 +383,10 @@
   display: block;
 }
 #game .chat-log .who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink) !important;
   font-size: 0.95rem;
   font-weight: 800;

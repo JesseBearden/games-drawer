@@ -67,6 +67,8 @@ export interface ServerOptions {
   log: LogSink;
   blocklistPath?: string;
   emptyRoomMs: number;
+  /** Close a table after this long with nobody playing or talking (default 10 minutes). */
+  idleRoomMs?: number;
   publicReclaimMs: number;
   maxPublicRooms: number;
   maxPrivateRooms: number;
@@ -118,6 +120,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     log: o.log,
     moderator: new ChatModerator(o.blocklistPath),
     emptyRoomMs: o.emptyRoomMs,
+    idleRoomMs: o.idleRoomMs,
     publicReclaimMs: o.publicReclaimMs,
     maxPublicRooms: o.maxPublicRooms,
     maxPrivateRooms: o.maxPrivateRooms,

@@ -61,7 +61,7 @@ Every game now has the paper look. Try each one on the phone (both ways up), the
 computer:
 
 - [ ] **Hearts and Spades**: ivory card stock (lighter than before) with the cut-paper royals, on the blue mat. Name
-      tags are paper; whose turn it is turns yellow and lifts. Computer players say "Computer".
+      tags are paper; whose turn it is turns yellow and lifts.
       The others' hands show a little pile of card backs and "13 cards". On a phone held upright
       the cards are bigger than before; tell me if they're too big or too small.
 - [ ] **Spades**: your team's tags are lilac; the bid buttons are paper; "Us" and "Them" are
@@ -185,10 +185,16 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
 
 - [ ] Pick Dominoes on Start a table (or open /dominoes).
 - [ ] Whoever holds the 6-6 leads it in the first hand; after that the last hand's winner leads.
-- [ ] Tap a tile: green spots show where it can go. Tap a spot to play it there, or tap the tile
-      again when there's only one place.
+- [ ] Tap a tile: dashed blue spots show where it can go. Tap a spot to play it there. Tapping
+      the tile again now puts it back down instead of playing it (even when there's only one
+      place).
+- [ ] No line of text under the board while you play ("Your turn", "Waiting for…" and "Tap where
+      it goes" are gone): the yellow name tag shows whose turn it is, and the board gets the
+      room. The line only comes back to say something ("Nothing fits: you pass", "Hand 1 is
+      over").
 - [ ] Scoring: after each play, if the open ends add up to 5, 10, 15… that player scores it
-      ("+10" floats up). The line under the status shows the current total.
+      ("+10" floats up). "Ends add up to" sits under your tiles (sideways: under the block of
+      tiles on the right).
 - [ ] The spinner (the first double) lets play go off all four sides once both of its main
       sides have tiles.
 - [ ] On your turn, tiles that don't fit go grey. On the iPad (Safari) the grey tiles sit in line
@@ -202,22 +208,41 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       turns into a blue "Back to scores" (just the one button, on that line). The scores say who's ready and who you're still waiting for. Try it with two people.
 - [ ] After the game ends, "See the board" works there too.
 - [ ] Phone held upright: your name and Scores are side by side, the same height.
+- [ ] Phone held upright: every name is on one line. A long name shrinks to fit (the other
+      players' names share one size, so they match), and only past a small size is it cut off
+      with "…".
 - [ ] Phone held sideways (new layout): everyone's names down the left, yours first, in turn
       order, with Scores under them; the board in the middle; your tiles in rows of four on the
       right. Try it with Safari's address bar showing too: Scores and the "Ends add up to" line
-      should both be on screen. The computer players lose their "Computer" line here to make
-      room. Tell me if the tiles are too small, or if Scores belongs somewhere else.
+      should both be on screen. Tell me if the tiles are too small, or if Scores belongs
+      somewhere else.
 - [ ] Hearts and Spades upright: your name and Scores are the same height there too.
-- [ ] **Zoom** (new): once there's a tile on the board, **Zoom in** shows under it, with
-      "Ends add up to" in the middle; **Zoom out** appears once you've zoomed. Try on the phone
-      and iPad: pinch the board to zoom, and drag with one finger to look around. Dragging never
+- [ ] iPad and computer (all three card games): the player on your left has a tag as wide as
+      their name, like the one on your right (it stretched across that side). Your tag and Scores
+      line up exactly, top and bottom, even on your turn (your tag no longer lifts there; the
+      yellow says it's your turn).
+- [ ] **Zoom**: there are no zoom buttons. On the phone and iPad, pinch the board to zoom, and
+      drag with one finger to look around. Dragging never
       plays a tile; tapping a spot while zoomed in still plays it. On the computer, the mouse
       wheel (or a trackpad pinch) zooms around the pointer, and you can drag the board. A new
       hand starts zoomed all the way out. Safari shouldn't zoom the whole page when you pinch the
       board. Controller: the shoulder buttons zoom.
-- [ ] **Score sheets on a phone** (all three games): names stay whole ("Jesse" no longer splits
-      into "Jes / se"); two-word names wrap at the space. Only a very long single word (like a
-      20-letter name) breaks, and only that one.
+- [ ] **Names never wrap, anywhere** (all games): on the name tags in Hearts, Spades and
+      Dominoes, the score sheets, who's at the table on Pick a game, the mic list, Messages and
+      the Tanks scores, every name is on one line. A long one shrinks a little on the name tags
+      and score sheets, then ends in "…".
+- [ ] **Computer players** (Hearts, Spades, Dominoes) have made-up robot names (Robo-Bob, Beep
+      Boop, Sprocket, Tin Can Tom…), never two the same at a table, and a small computer screen
+      after their name on the name tag. A long name gives way to "…" but the screen stays. The
+      score sheets leave the screen off. No "Computer" word anywhere, and no "Partner" in Spades
+      (your partner is the one across from you, on lilac). Tanks keeps its tank-pun names, and
+      its scores no longer say "(computer)". Someone who dropped out still says "Away". Does it
+      make it clear to your mom who's a person?
+- [ ] **Score sheets flipped** (all three): one row per player (Spades: Us and Them), you first,
+      the name on the left with all the room it needs. Across: the points each hand scored
+      ("Hand 1", "Hand 2"…), then a narrow, bold Total. The hand that just ended is darker. On a
+      phone only the last 3 hands show (8 on bigger screens); older ones drop off the left.
+      Before any hand is over it's just names and totals.
 - [ ] As the table fills up, everything shrinks to fit (phone held either way, and computer).
       The east and west lines both bend down at the edges, like the sides of a table, and the
       spinner's up and down lines run straight. Nothing overlaps (you saw an overlap after a
@@ -228,10 +253,19 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
 
 ## Jigsaw puzzle
 
-Up to 4 people build one puzzle together; no bots. 50 pictures: Penny Pickles, your sailboat,
+Up to 4 people build one puzzle together; no bots. 51 pictures: Penny Pickles, your sailboat, Judy Jalapeño,
 and 48 public-domain or CC0 photos and paintings.
 
-- [ ] The picker shows all 50, with "Penny Pickles" (was "Happy pup") and "Sailboat" first.
+- [ ] **iPad with a trackpad or mouse** (new fix): pinching on the trackpad zooms the puzzle around the
+      pointer, not the whole page (you saw the page zoom). Two-finger scrolling zooms too. The same pinch
+      zooms the domino board. Pinching anywhere else at the table does nothing; the home and join
+      pages still zoom like any web page.
+
+- [ ] The picker shows all 51, with "Penny Pickles" (was "Happy pup"), "Sailboat" and "Judy Jalapeño" (new) first.
+- [ ] **Pictures only on this computer** (new): with `npm run dev`, "Tree House" and
+      "Nephews" come first in the picker (53 in all), and play like any other. They're in
+      `local-puzzles/`, which git ignores: `git status` never lists them, and the hosted site
+      won't have them. Add more with `npm run local-puzzle -- photo.jpg "Title"` (see README).
       Scroll through the 28 new ones (monarch butterflies to plankton swirls at the end) and
       tell me any you'd rather swap out. Three spares are ready: a Bierstadt painting of
       Yosemite, a second carousel, and a Bahamas tidal-flats photo from space.
@@ -290,6 +324,19 @@ and 48 public-domain or CC0 photos and paintings.
       retardant, booby trap. Tell me any others you hit and I'll add them to the allow list.
 - [ ] Names with swearing are refused in every room.
 
+## Chat stays at the table (new)
+
+What people type lives only with the table (the last 10 messages, so someone who joins late
+sees them) and is gone when the table closes. The server's daily chat log just counts messages
+for the admin page: no words, no names. The one exception is a message someone reports, which
+is saved with the sender's name so it can be looked at later.
+
+- [ ] Send a few messages at a table, then open `logs/chat-<today's date>.jsonl`: the new lines
+      say `delivered` (or `blocked` for a caught one) with no words or names in them.
+- [ ] Tap someone else's message → Report: its line in that file (`reported`) has the words
+      and who sent them.
+- [ ] The admin page's chat numbers (messages sent, blocked, reported) still count up.
+
 ## Controller (new; an Xbox controller, by USB or Bluetooth)
 
 Press any button on the controller once the page is open (browsers only show it after that).
@@ -321,6 +368,30 @@ Tank sounds are confirmed good. Left to try:
 - [ ] Play a game at a table for a few minutes with two tabs, chat a bit, Switch game, then reload /admin (numbers refresh each minute): the game shows person-hours, time
       with 2+ people, and chat per person-hour. Today / 7 / 30 / 90 days switch the range.
 - [ ] Sign out works, and the page stays signed in for a week otherwise.
+- [ ] **Voice** (new): after two people talk at a table (mic on, two devices), the admin page's
+      Voice section shows people who talked, the share of voice links that went through the
+      relay, how many people needed it, and links that never connected. On home Wi-Fi expect
+      0% relayed; with `?relay=1` on the page address it should say 100%.
+
+## Pick a game at a table
+
+- [ ] On the iPad (either way up) and a computer, every game name sits inside its tile on Pick a
+      game (you saw "Dominoes" run off the edge). Narrow tiles get a slightly smaller picture and
+      name. The browser tab says "Table BXNKZ" (it said "Room").
+
+## Idle tables (new)
+
+A table closes after 10 minutes with nobody playing or talking (someone who left a game open
+and walked away), so it doesn't hold one of the 50 table spots forever. Tapping, typing, a
+controller button or talking (mic on) all count as someone being there.
+
+- [ ] Leave a table alone for 9 minutes (on a computer you can leave the tab open): a "Still
+      playing?" sheet comes up for everyone at the table. "Keep playing" (or tapping anywhere)
+      makes it go away, and the 10 minutes start again.
+- [ ] Leave it alone through the warning: everyone lands on the home page with "This table
+      closed after 10 minutes with nobody playing or talking."
+- [ ] Talking counts: two people with mics on who just chat (no taps) for 20 minutes keep the
+      table.
 
 ## Later, once it's hosted
 

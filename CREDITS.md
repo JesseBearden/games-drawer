@@ -98,6 +98,7 @@ made from the same files. The first 20 were downloaded 2026-11-16, the rest 2026
 | --- | --- | --- | --- |
 | `packages/client/public/puzzles/dog.jpg` | Penny Pickles | Jesse Bearden | Shared by the photographer for use here |
 | `packages/client/public/puzzles/sailboat.jpg` | Sailboat | Jesse Bearden | Shared by the photographer for use here (portrait, 1073 px wide: the size it was shared at) |
+| `packages/client/public/puzzles/judy.jpg` | Judy Jalapeño | Jesse Bearden | Shared by the photographer for use here (2016 px wide: the size it was shared at; camera data removed) |
 | `packages/client/public/puzzles/fruit-market.jpg` | Uptown fruit market, New Orleans — [source](https://www.loc.gov/item/2011633038/) | Carol M. Highsmith | Public domain (Carol M. Highsmith Archive, Library of Congress: "No known restrictions on publication") |
 | `packages/client/public/puzzles/spice-stall.jpg` | Spice stall, Sao Paulo municipal market — [source](https://commons.wikimedia.org/wiki/File:Spices_of_Mercado_Municipal_de_S%C3%A3o_Paulo.jpg) | Wilfredor (Wilfredo Rodriguez) | CC0 1.0 Universal (public domain dedication) |
 | `packages/client/public/puzzles/tulips.jpg` | Tulips at Bayou Bend Gardens, Houston — [source](https://www.loc.gov/item/2014630980/) | Carol M. Highsmith | Public domain (Carol M. Highsmith Archive, Library of Congress: "No known restrictions on publication") |

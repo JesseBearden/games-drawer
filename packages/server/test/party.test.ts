@@ -7,7 +7,7 @@ import { HAND_END_MS, HeartsGame, TRICK_PAUSE_MS } from '../src/games/hearts';
 import { SpadesGame } from '../src/games/spades';
 import { DominoesGame } from '../src/games/dominoes';
 import { RoomManager } from '../src/manager';
-import { GAME_SWITCH_COOLDOWN_MS, turnCredentials, type Conn, type RoomDeps } from '../src/room';
+import { GAME_SWITCH_COOLDOWN_MS, IDLE_ROOM_MS, IDLE_WARNING_MS, turnCredentials, type Conn, type RoomDeps } from '../src/room';
 
 class FakeConn implements Conn {
   sent: ServerMessage[] = [];
@@ -775,4 +775,51 @@ describe('tank resync', () => {
     a.room.handle('session-aaaa', { t: 'g', m: { t: 'resync' } });
     expect(inits()).toBe(start + 2);
   });
+it('says how each voice link connected, once per link, for the admin page', () => {
+    const { mgr, log } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    a.room.handle('session-aaaa', { t: 'voice', join: true });
+    b.room.handle('session-bbbb', { t: 'voice', join: true });
+    const to = a.room.voicePeers().find((p) => p.name === 'bbbb')!.id;
+    const links = () => log.events.filter((e) => e.type === 'voice_link');
+    a.room.handle('session-aaaa', { t: 'voice-route', to, route: 'relayed' });
+    a.room.handle('session-aaaa', { t: 'voice-route', to, route: 'relayed' });
+    // Someone who isn't there, or yourself: ignored.
+    a.room.handle('session-aaaa', { t: 'voice-route', to: 'nobody', route: 'direct' });
+    expect(links()).toHaveLength(1);
+    expect(links()[0]).toMatchObject({ route: 'relayed' });
+  });
+
+  it('a table where nobody plays or talks closes after 10 minutes, with a warning first', () => {
+    const { mgr, clock } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    const code = a.room.code;
+    // Just before the warning: nothing yet.
+    clock.now += IDLE_ROOM_MS - IDLE_WARNING_MS - 1000;
+    mgr.housekeeping();
+    expect(a.conn.of('idle')).toHaveLength(0);
+    // A minute to go: everyone is warned.
+    clock.now += 2000;
+    mgr.housekeeping();
+    expect(a.conn.of('idle').at(-1)!.closesInMs).toBeGreaterThan(IDLE_WARNING_MS - 2000);
+    expect(b.conn.of('idle')).toHaveLength(1);
+    // Someone taps (or talks): the warning goes away and the clock starts again.
+    b.room.handle('session-bbbb', { t: 'active' });
+    expect(a.conn.of('idle').at(-1)!.closesInMs).toBeNull();
+    clock.now += IDLE_ROOM_MS - IDLE_WARNING_MS - 1000;
+    mgr.housekeeping();
+    expect(mgr.rooms.has(code)).toBe(true);
+    // Playing counts too; the heartbeat doesn't.
+    a.room.handle('session-aaaa', { t: 'ping', at: 1 });
+    clock.now += IDLE_WARNING_MS + 2000;
+    mgr.housekeeping();
+    expect(mgr.rooms.has(code)).toBe(false);
+    const closed = a.conn.of('error').at(-1)!;
+    expect(closed.code).toBe('room-closed');
+    expect(closed.message).toBe('This table closed after 10 minutes with nobody playing or talking.');
+    expect(a.conn.closed && b.conn.closed).toBe(true);
+  });
 });
+

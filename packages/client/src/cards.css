@@ -141,9 +141,22 @@
 #game .ht-action {
   min-height: 48px;
 }
-/* Your name and the Scores button share a line, the same height. */
+/* The player on your left: a tag as wide as their name, like the one on your right (it used to
+   stretch across its whole side of the table). */
+#game .hearts-view .ht-pos-1 {
+  justify-self: start;
+}
+/* Your name and the Scores button share a line, the same height, top and bottom lined up with
+   the button's 2px outline (drawn outside it). Your tag doesn't lift on your turn here, so it
+   stays level with the button; the yellow and its shadow still say it's your turn. */
 #game .ht-mine {
   align-items: stretch;
+}
+#game .ht-mine > .ht-seat {
+  margin-block: -2px;
+}
+#game .ht-mine > .ht-seat.turn {
+  transform: none;
 }
 #game .ht-scores-btn {
   min-height: 40px;
@@ -238,34 +251,61 @@ body.pad-mode #game .card.pad-cursor {
 #game .ht-table td {
   font-weight: 400;
 }
-/* Phones: names wrap only at their spaces, so the columns size to whole words and a short name
-   like "Jesse" is never squeezed to a letter or two per line. If a very long name still can't fit,
-   fitScoreTable lets just that name break mid-word. */
-@media (max-width: 600px) {
-  #game .ht-table th {
-    overflow-wrap: normal;
-    font-size: 0.8125rem;
-    line-height: 1.2;
-  }
-  #game .ht-table th.ht-break {
-    overflow-wrap: anywhere;
-  }
+/* Score sheets: one row per player. The name takes whatever room is left (one line; fitScoreTable
+   shrinks long ones, then "…"); each hand and the total get just the room their numbers need. */
+#game .ht-sheet {
+  table-layout: auto;
 }
-@media (max-width: 379px) {
-  #game .ht-table th {
-    font-size: 0.75rem;
-  }
+#game .ht-sheet th,
+#game .ht-sheet td {
+  padding: 7px 6px;
+  white-space: nowrap;
+  text-align: center;
 }
-#game .ht-table td:first-child {
+#game .ht-sheet thead th {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 800;
+  vertical-align: bottom;
+}
+#game .ht-sheet tbody tr > * {
+  border-top: 1px solid var(--rule);
+}
+#game .ht-sheet .ht-who {
+  width: 100%;
+  max-width: 0;
+  padding-left: 0;
+  text-align: left;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+#game .ht-sheet td.ht-h {
   color: var(--ink-soft);
 }
-#game .ht-table .ht-last td {
-  color: var(--card-red);
+/* The hand that just ended stands out; the total is the number that counts. */
+#game .ht-sheet .ht-fresh {
+  color: var(--ink);
   font-weight: 800;
 }
-#game .ht-table .ht-total td {
-  border-top: 1.5px solid var(--rule);
+#game .ht-sheet .ht-tot {
+  padding-left: 12px;
+  color: var(--ink);
   font-weight: 800;
+}
+#game .ht-sheet thead .ht-tot {
+  color: var(--ink);
+}
+#game .ht-sheet td.ht-tot {
+  font-size: 1.1rem;
+}
+#game .ht-sheet .ht-older {
+  display: none;
+}
+@media (max-width: 600px) {
+  #game .ht-sheet .ht-old {
+    display: none;
+  }
 }
 #game .ht-panel .pc-small {
   margin: 10px 0 0;
@@ -306,20 +346,12 @@ body.pad-mode #game .card.pad-cursor {
   color: var(--ink-soft);
   font-weight: 400;
 }
-#game .sp-partner {
-  display: block;
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.75rem;
-  font-weight: 800;
-}
 /* Your team's tags are lilac (Spades' own paper), the other team's plain paper. */
 #game .ht-seat.sp-us:not(.turn) {
   background: var(--lilac) var(--lilac-img) 0 0 / var(--paper-size);
 }
 #game .ht-seat.sp-us .ht-score,
-#game .ht-seat.sp-us .ht-tag,
-#game .ht-seat.sp-us .sp-partner {
+#game .ht-seat.sp-us .ht-tag {
   color: var(--ink);
 }
 #game .sp-result .neg {
@@ -380,8 +412,8 @@ body.pad-mode #game .card.pad-cursor {
   font: 800 1.4rem var(--font);
   text-shadow: none;
 }
-/* The board zooms (pinch, mouse wheel, or the buttons under it). Fingers on it move the board,
-   never the page. */
+/* The board zooms: pinch it, or use the mouse wheel on a computer (the controller's shoulder
+   buttons too). Fingers on it move the board, never the page. */
 #game .dm-board {
   touch-action: none;
   user-select: none;
@@ -402,29 +434,62 @@ body.pad-mode #game .card.pad-cursor {
 #game .dm-board.moving .dm-layout {
   will-change: transform;
 }
-/* Under the board: Zoom out, the running total, Zoom in. The total stays in the middle; a button
-   that can't be used now keeps its place, unseen, so nothing shifts. */
-#game .dm-foot {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
+/* The line under the board only shows when there's something to say ("Nothing fits: you pass",
+   "Hand 1 is over"); otherwise the board has the room. Whose turn it is shows on the yellow name
+   tag, and where a picked tile can go shows on the board. */
+#game .dominoes-view .ht-status:empty {
+  display: none;
 }
-#game .dm-foot .dm-info {
+/* Your tiles, and under them what the open ends add up to. */
+#game .dominoes-view .ht {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+#game .dm-side {
+  grid-area: hand;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   min-width: 0;
 }
-#game .dm-zoom-out {
-  justify-self: end;
+#game .dm-side .dm-hand {
+  align-self: stretch;
+  height: calc(var(--dw) * 2 + 10px);
 }
-#game .dm-zoom-in {
-  justify-self: start;
+#game .dm-side .dm-info {
+  margin-top: 6px;
 }
-#game .dm-zoom {
-  min-height: 40px;
-  padding: 4px 14px;
-  font-size: 0.9rem;
+/* Names and scores keep to one line each, in every card game: fitSeatText shrinks a long one
+   to fit, then it ends in "…". */
+#game .hearts-view .ht-name {
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+#game .hearts-view .ht-nm {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+#game .hearts-view .ht-score {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A computer player: a small computer screen after the name, which always stays in view (the
+   name gives way first). */
+#game .ht-cpu {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-soft);
+}
+#game .ht-cpu svg {
+  width: 1em;
+  height: 0.9em;
+}
+#game .ht-seat.turn .ht-cpu,
+#game .ht-seat.sp-us .ht-cpu {
+  color: var(--ink);
 }
 /* Your tiles sit straight on the mat: ivory on blue needs no rack under it. */
 #game .dm-hand.my-turn .dm-mine.illegal .dm-face {
@@ -454,6 +519,9 @@ body.pad-mode #game .dm-mine.pad-cursor {
   /* Hearts and Spades stack your name over Scores here, so they keep their own widths. */
   #game .ht-mine {
     align-items: flex-start;
+  }
+  #game .ht-mine > .ht-seat {
+    margin-block: 0;
   }
   #game .dominoes-view {
     --dw: clamp(26px, 10.5dvh, 40px);
@@ -510,11 +578,6 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .ht-tag {
     font-size: 0.6875rem;
   }
-  /* Two lines a name, so four fit with Safari's address bar showing. The computer players'
-     names give them away; "Away" still shows. */
-  #game .dominoes-view .ht-bot {
-    display: none;
-  }
   #game .dominoes-view .ht-score {
     flex-basis: 100%;
     font-size: 0.75rem;
@@ -525,10 +588,16 @@ body.pad-mode #game .dm-mine.pad-cursor {
     padding: 4px 8px;
     font-size: 0.8125rem;
   }
-  /* Your tiles: rows of four, in the middle of the right edge. */
-  #game .dominoes-view .dm-hand {
-    grid-area: hand;
+  /* Your tiles: rows of four, in the middle of the right edge, with the total under them. */
+  #game .dominoes-view .dm-side {
     align-self: center;
+  }
+  #game .dominoes-view .dm-side .dm-hand {
+    align-self: center;
+    height: auto;
+  }
+  #game .dominoes-view .dm-side .dm-info {
+    margin-top: 8px;
   }
   #game .dominoes-view .dm-hand-tiles {
     display: grid;
@@ -541,10 +610,5 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .dm-mine {
     width: var(--dw);
     min-width: 0;
-  }
-  #game .dm-zoom {
-    min-height: 34px;
-    padding: 3px 12px;
-    font-size: 0.8125rem;
   }
 }

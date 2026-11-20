@@ -758,21 +758,6 @@
     font-size: 12px;
   }
 
-  /* Long names wrap rather than get cut off. */
-  .ht-name {
-    align-items: flex-start;
-    gap: 4px;
-  }
-
-  .ht-name .dot {
-    margin-top: 2px;
-  }
-
-  .ht-nm {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
   .ht-long,
   .ht-backs {
     display: none;

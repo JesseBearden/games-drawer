@@ -52,7 +52,7 @@ Then:
 sudo games-drawer-deploy <commit> status       # what's running in each slot
 sudo games-drawer-deploy <commit> rollback     # undo a canary by hand
 journalctl -u games-drawer@a -f                # server output (also @b, @staging)
-ls /var/log/games-drawer/a                     # JSONL game and chat logs
+ls /var/log/games-drawer/a                     # JSONL game logs and chat counts (and reported messages)
 ```
 
 ## Admin page
@@ -81,6 +81,8 @@ The game server hands each player relay credentials that expire after 24 hours
 link through the relay. The voice panel shows "(relayed)" next to each person when it works.
 
 **Limits:** the relay refuses to forward to private and internal addresses (including the AWS
-metadata service), allows 16 KB/s per relayed link and 300 KB/s in total, which is about 50
-voice streams at once. Networks that only allow port 443 aren't covered; that would need a
+metadata service), allows 16 KB/s per relayed link (`max-bps`) and 300 KB/s in total
+(`bps-capacity`), which is about 50 voice streams at once. Both are in
+[turnserver.conf](turnserver.conf); change them there and deploy (setup.sh re-renders the file
+and restarts coturn). The admin page's Voice section shows how often voice needs the relay. Networks that only allow port 443 aren't covered; that would need a
 second IP address for the relay.

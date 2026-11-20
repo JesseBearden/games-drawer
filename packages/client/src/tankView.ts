@@ -381,8 +381,8 @@ export class TankView implements View {
     for (const t of rows) {
       const i = t.info;
       const lives = deathsAllowed(g.cfg, i) - i.deaths;
-      const who = i.controller === 'bot' ? (i.away ? ' <small>(away)</small>' : ' <small>(computer)</small>') : '';
-      html += `<tr class="${i.id === g.myTankId ? 'me' : ''}"><td><span class="dot" style="background:${colorCss(i.color)}"></span>${escapeHtml(i.name)}${who}</td><td>${i.level}</td><td>${i.kills}</td><td>${Math.max(0, lives)}</td></tr>`;
+      const who = i.controller === 'bot' && i.away ? ' <small>(away)</small>' : '';
+      html += `<tr class="${i.id === g.myTankId ? 'me' : ''}"><td><span class="dot" style="background:${colorCss(i.color)}"></span><span class="pc-nm">${escapeHtml(i.name)}</span>${who}</td><td>${i.level}</td><td>${i.kills}</td><td>${Math.max(0, lives)}</td></tr>`;
     }
     html += '</tbody></table>';
     $('scores').innerHTML = html;

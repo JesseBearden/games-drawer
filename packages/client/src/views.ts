@@ -37,6 +37,13 @@ export interface ShellApi {
 }
 
 /** The lobby or a game, mounted inside the room shell. Chat and voice live in the shell. */
+/**
+ * Safari's own pinch (an iPad's trackpad or mouse, a Mac's trackpad; also two fingers on an
+ * iPhone or iPad): "gesturestart/change/end", with how far it has scaled. Left alone, Safari
+ * zooms the whole page with it.
+ */
+export type SafariGesture = Event & { scale: number; clientX?: number; clientY?: number };
+
 export interface View {
   /** Phone players should hold the phone sideways for this view. */
   readonly landscape: boolean;

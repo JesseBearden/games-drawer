@@ -40,7 +40,7 @@
          and joining one (/r/CODE, an invite link). Cut Paper look: paper.css + entry.css. -->
     <main id="landing" class="entry pc-page">
       <div class="entry-wrap">
-        <a class="pc-brand" href="/" data-nav="/"><img src="/art/drawer.svg" alt="" width="44" height="40" />Games Drawer</a>
+        <a class="pc-brand" href="/" data-nav="/"><img src="/art/brand.webp" alt="" width="44" height="44" />Games Drawer</a>
 
         <section id="page-home" class="entry-page" hidden>
           <div class="pc-hero"><img src="/art/together.webp" alt="" width="1536" height="522" /></div>
@@ -91,7 +91,7 @@
         </section>
 
         <p id="landing-error" class="entry-error" role="alert" hidden></p>
-        <p class="pc-small entry-fine">Messages are moderated and logged.</p>
+        <p class="pc-small entry-fine">Chat messages are erased with the table.</p>
       </div>
     </main>
 
@@ -209,6 +209,15 @@
         </div>
 
         <!-- How to let the browser use the mic. -->
+        <!-- Nobody's played or talked for a while: the table closes in a minute unless someone's here. -->
+        <div id="idle" class="sheet-wrap" hidden>
+          <div class="pc-sheet sheet" role="alertdialog" aria-modal="true" aria-labelledby="idle-title">
+            <h2 id="idle-title" class="pc-h2">Still playing?</h2>
+            <p>Nobody has played or talked for a while, so this table closes in a minute.</p>
+            <button id="idle-stay" class="pc-btn pc-btn-main pc-btn-big pc-btn-wide" type="button">Keep playing</button>
+          </div>
+        </div>
+
         <div id="mic-help" class="sheet-wrap" hidden>
           <div class="pc-sheet sheet" role="dialog" aria-modal="true" aria-labelledby="mic-help-title">
             <h2 id="mic-help-title" class="pc-h2">Your mic is blocked</h2>

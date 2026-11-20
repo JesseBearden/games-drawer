@@ -1,6 +1,6 @@
 import { CARD_SOUNDS } from './audio';
 import { suitOf, type Card, type GameServerMessage, type SpadesView } from '@tank/shared';
-import { cardHtml, seatNameHtml, showHand } from './heartsView';
+import { cardHtml, fitSeatText, scoreSheetHtml, seatNameHtml, showHand } from './heartsView';
 import { suitSvg, SUIT_NAME, type Suit } from './paperArt';
 import { escapeHtml } from './state';
 import { focusForPad, type PadPress } from './gamepad';
@@ -24,7 +24,10 @@ export class SpadesTable implements View {
   private speaking = new Set<string>();
   /** The card a controller has highlighted. */
   private cursor: Card | null = null;
-  private handObserver = new ResizeObserver(() => this.layoutHand());
+  private handObserver = new ResizeObserver(() => {
+    this.layoutHand();
+    fitSeatText(this.el);
+  });
 
   constructor(private shell: ShellApi) {
     this.el.hidden = false;
@@ -158,10 +161,9 @@ export class SpadesTable implements View {
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
-      const partner = v.seat !== null && seat === (v.seat + 2) % 4 ? '<span class="sp-partner">Partner</span>' : '';
       const bid = s.bid === null ? (v.phase === 'bidding' ? '<span class="sp-bid pending">Bidding…</span>' : '') : `<span class="sp-bid${s.bid === 0 ? ' nil' : ''}">${s.bid === 0 ? 'Nil' : `Bid ${s.bid}`}</span>`;
       const won = v.phase === 'playing' || v.phase === 'handEnd' ? ` · ${s.tricks} won` : '';
-      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}${partner}
+      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
         <div class="ht-score">${bid}${won}</div>`;
       el.classList.toggle('turn', v.turn === seat);
       el.classList.toggle('sp-us', s.team === this.myTeam());
@@ -169,6 +171,7 @@ export class SpadesTable implements View {
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
+    fitSeatText(this.el);
 
     // Team scores, with this hand's bid and tricks once bidding is done.
     const us = v.teams[this.myTeam()];
@@ -275,11 +278,10 @@ export class SpadesTable implements View {
       }
       html += '</ul>';
     }
-    html += `<table class="ht-table"><thead><tr><th></th><th>Us</th><th>Them</th></tr></thead><tbody>`;
-    v.history.forEach((row, i) => {
-      html += `<tr><td>Hand ${i + 1}</td><td>${row[mine]}</td><td>${row[1 - mine]}</td></tr>`;
-    });
-    html += `<tr class="ht-total"><td>Total</td><td>${v.teams[mine].score}</td><td>${v.teams[1 - mine].score}</td></tr></tbody></table>`;
+    html += scoreSheetHtml(
+      [mine, 1 - mine].map((t) => ({ label: teamName(t), history: v.history.map((h) => h[t]), total: v.teams[t].score })),
+      v.phase === 'handEnd' || v.phase === 'gameOver',
+    );
     html += `<p class="pc-small">First team to ${v.target} wins. Bags: us ${v.teams[mine].bags}, them ${v.teams[1 - mine].bags} (10 cost 100).</p>`;
     html += '<div class="actions">';
     if (v.phase === 'gameOver') {

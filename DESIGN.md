@@ -118,7 +118,7 @@ Use one word for each thing, everywhere.
 | Invite | share, send link |
 | Switch game | change game, back to lobby |
 | Leave table | exit, quit, disconnect |
-| Computer (a computer player) | bot, AI, CPU |
+| (a computer player: a robot name and a small computer screen on its tag, no word) | Computer, bot, AI, CPU |
 | Away (someone who dropped out) | disconnected, offline |
 | Your turn / Liz's turn | waiting for Liz… |
 | Work in Progress | under construction, beta, still being built |
@@ -130,6 +130,11 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
   "Submit" or "Continue".
 - **Use sentence case.** No all-caps labels.
 - **Use people's names:** "Jesse invited you to play."
+- **A name never wraps onto a second line** (user, 2026-11-18). Wherever a name shows (name
+  tags, score sheets, who's at the table, the mic list, Messages, the Tanks scores), it stays on
+  one line, and a name too long for its room ends in "…" (`.pc-nm`). On the card games' name
+  tags and score sheets it first shrinks to fit (`fitSeatText`, `fitScoreTable`), and names
+  side by side share one size so they match.
 - **No technical words** (server, connection, permission, sync, host, guest). When something goes
   wrong, say what to do: "Your mic is blocked." with a button: "Show me how".
 - **No emoji in the interface.** They look different on every device, and they aren't paper.
@@ -181,22 +186,36 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 
 - **Card and tile games (Hearts, Spades, Dominoes)** are played on the blue mat.
   - **Name tags:** each player has a paper name tag; whose turn it is gets sunflower paper,
-    lifted. Computer players and people who are away are marked in words.
+    lifted. Someone who dropped out says "Away". Computer players have made-up robot names
+    (`ROBOT_NAMES`; our own names only, never robots from films, shows or toys) and a small
+    computer screen after the name, which stays in view when a long name is cut. Score sheets
+    leave it off. No "Computer" word, and Spades has no "Partner" label either, since your
+    partner always sits across.
   - **Spades:** your team's tags are lilac, Spades' own color.
   - **Other players' hands:** a small pile of cobalt card backs and the count.
   - **Dominoes:** card stock with navy pips, your hand straight on the mat. The tile just
     played has a sunflower edge, and the places you can play are dashed cobalt (they don't pulse).
-  - **Your name and Scores** sit side by side, the same height. There's only ever one Scores
+  - **Your name and Scores** sit side by side, the same height, their edges lined up with the
+    button's outline. Your own tag doesn't lift on your turn (the yellow says it), so the two stay
+    level. Side tags are as wide as their names. There's only ever one Scores
     button: after a hand, while you look at the board, it becomes a cobalt "Back to scores".
   - **Dominoes on a phone held sideways:** there's no height for a row of names above the board
     and a row of tiles below it. Everyone's name goes down the left in turn order (yours first)
     with Scores under them, the board takes the middle, and your tiles sit in rows of four on
-    the right. The list drops the "Computer" line to fit; "Away" still shows.
-  - **The domino board zooms:** pinch, mouse wheel, or the Zoom out and Zoom in buttons on
-    either side of "Ends add up to" under the board. A button you can't use right now keeps its
-    place, unseen, so nothing shifts. Drag to look around; a drag is never a tap.
-  - **Score sheets** size their columns to whole names; a name only breaks mid-word when it
-    can't fit any other way.
+    the right.
+  - **The domino board zooms** with a pinch, the mouse wheel (or a trackpad pinch), or a
+    controller's shoulder buttons. There are no zoom buttons on screen. Drag to look around; a
+    drag is never a tap.
+  - **Playing a domino:** tap a tile, then tap its spot on the board. Tapping the picked tile
+    again puts it back. No hint text while you play: the yellow name tag shows whose turn it
+    is, the dashed spots show where a tile can go, and the board gets the room. The line under
+    the board appears only when there's news ("Nothing fits: you pass", "Hand 1 is over").
+    "Ends add up to" sits under your tiles.
+  - **Name tags** (all three card games) keep each name and score on one line. Long ones shrink
+    to fit (the other players' share one size), then end in "…".
+  - **Score sheets** have one row per player (you first): the name with all the room it needs,
+    then the points each hand scored, then a narrow, bold Total. The hand just ended is darker.
+    Phones show the last 3 hands, bigger screens 8 (`scoreSheet.ts`).
 - **Jigsaw** is played on the mat too. The frame where the finished picture goes is cream paper
   with a dashed ink edge, and the tools are a paper strip along the bottom (it wraps onto two rows
   on phones rather than hiding buttons off the edge). Chosen options are cobalt.
@@ -247,4 +266,7 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 - **`packages/client/public/art/`:** the card stock, the hero picture, game icons, the card royals,
   app icons and the link-preview card.
   - The hero picture is cut out of its white background (transparent WebP).
+  - `brand.webp`, the drawer beside "Games Drawer" on the way-in pages, is the user's cut-paper
+    art cut out of its cream background (its soft shadow kept as a see-through tint). The
+    browser-tab icon is still the older flat `drawer.svg`.
 - **`packages/client/paper.html`:** the sample sheet (dev only, not part of the build).

@@ -187,6 +187,8 @@ function statsHtml(s: AdminStats) {
 <h2>Games, most played first</h2><div class="card scroll"><table><thead><tr><th>Game</th><th>Person-hours</th><th>Games</th><th>Picked</th><th>People</th><th>Avg minutes</th><th>Time with 2+</th><th>Games with 2+</th><th>Avg most at once</th><th>Most at once</th><th>Chat per person-hour</th></tr></thead><tbody>${gameRows}</tbody></table></div>
 <p class="note">Person-hours: two people for an hour is two. “Time with 2+” is the share of play time with at least two people at once. “Picked” counts private-room picks.</p>
 <h2>Chat</h2><div class="tiles">${tile(s.chat.delivered, 'messages sent')}${tile(s.chat.perPersonHour, 'messages per person-hour')}${tile(s.sessions ? pct(s.chat.sessionsWithChat / s.sessions) : '0%', 'games with any chat')}${tile(s.chat.blocked, 'messages blocked by the filter')}${tile(s.chat.reported, 'messages reported')}</div>
+<h2>Voice</h2><div class="tiles">${tile(s.voice.people, 'people who talked')}${tile(s.voice.links ? pct(s.voice.relayed / s.voice.links) : '0%', 'voice links through the relay')}${tile(s.voice.peopleRelayed, 'people who needed the relay')}${tile(s.voice.links ? pct(s.voice.failed / s.voice.links) : '0%', 'voice links that never connected')}${tile(s.voice.peopleFailed, 'people who couldn’t connect to someone')}</div>
+<p class="note">Voice normally goes straight between players. Some networks (phone data, offices, schools) need our relay, which costs bandwidth; a link that never connected usually means a network that blocks voice.</p>
 <h2>By day</h2><div class="card scroll"><table><thead><tr><th>Day</th><th>People</th><th>Private rooms</th><th>Games</th><th>Person-hours</th><th>Chat messages</th></tr></thead><tbody>${dayRows}</tbody></table></div>`,
   );
 }

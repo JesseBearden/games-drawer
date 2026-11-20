@@ -30,7 +30,9 @@ export interface EntryChoice {
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** The sheets that can open over the table (one at a time). */
-const SHEETS = ['menu', 'invite', 'mic-help', 'help', 'home-help'] as const;
+const SHEETS = ['menu', 'invite', 'mic-help', 'help', 'home-help', 'idle'] as const;
+/** Tell the server we're still here at most this often (more often while it's warning us). */
+const ACTIVE_EVERY_MS = 60_000;
 type Sheet = (typeof SHEETS)[number];
 
 /**
@@ -54,6 +56,9 @@ export class RoomApp {
   /** Players you muted in this room (alias -> name): their chat is hidden and voice silenced. */
   private mutedPlayers = new Map<string, string>();
   private cleanups: (() => void)[] = [];
+  /** When we last told the server we're still here, and whether it's warning that the table will close. */
+  private lastActiveSent = 0;
+  private idleWarning = false;
   private api: ShellApi;
   /** How swearing in chat is handled here (the server has the final say). */
   chatFilter: ChatFilterMode;
@@ -168,7 +173,7 @@ export class RoomApp {
     $('menu-lobby').hidden = !(this.room.kind === 'private' && id !== null);
     if (!$('menu').hidden) this.openSheet(null);
     this.updateRoomInfo();
-    document.title = id ? `${gameInfo(id).title} · Games Drawer` : `Room ${this.room.code} · Games Drawer`;
+    document.title = id ? `${gameInfo(id).title} · Games Drawer` : `Table ${this.room.code} · Games Drawer`;
     requestAnimationFrame(() => this.view?.resize?.());
   }
 
@@ -191,6 +196,12 @@ export class RoomApp {
         return;
       case 'voice':
         this.voice.onPeers(msg.peers);
+        return;
+      case 'idle':
+        // Nobody's played or talked for a while: a minute's warning, and any tap keeps the table.
+        this.idleWarning = msg.closesInMs !== null;
+        if (this.idleWarning) this.openSheet('idle');
+        else if (!$('idle').hidden) this.openSheet(null);
         return;
       case 'rtc':
         void this.voice.onSignal(msg.from, msg.data);
@@ -268,6 +279,7 @@ export class RoomApp {
       changed: () => this.renderMic(),
       speaking: (aliases) => {
         this.speaking = aliases;
+        if (aliases.has(this.alias)) this.markActive();
         this.view?.onSpeaking?.(aliases);
         for (const li of document.querySelectorAll<HTMLElement>('#menu-mic [data-peer]')) li.classList.toggle('is-talking', aliases.has(li.dataset.peer!));
       },
@@ -314,7 +326,7 @@ export class RoomApp {
           const muted = v.isPeerMuted(p.id);
           const route = v.routeTo(p.id);
           const state = route === 'connecting' ? ' <small>(connecting…)</small>' : route === 'failed' ? ' <small>(couldn’t connect)</small>' : '';
-          html += `<li data-peer="${escapeHtml(p.id)}" class="${this.speaking.has(p.id) ? 'is-talking' : ''}"><span class="pc-talk"><i></i><i></i><i></i></span><span class="mic-name">${escapeHtml(p.name)}${state}</span><button class="pc-btn pc-btn-plain" type="button" data-v="mute" data-alias="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">${muted ? `Hear ${escapeHtml(p.name)}` : 'Mute for me'}</button></li>`;
+          html += `<li data-peer="${escapeHtml(p.id)}" class="${this.speaking.has(p.id) ? 'is-talking' : ''}"><span class="pc-talk"><i></i><i></i><i></i></span><span class="mic-name"><span class="pc-nm">${escapeHtml(p.name)}</span>${state}</span><button class="pc-btn pc-btn-plain" type="button" data-v="mute" data-alias="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">${muted ? `Hear ${escapeHtml(p.name)}` : 'Mute for me'}</button></li>`;
         }
         html += '</ul>';
       } else {
@@ -551,6 +563,23 @@ export class RoomApp {
     on('btn-share', () => this.share());
     on('btn-menu', () => this.openSheet($('menu').hidden ? 'menu' : null));
     on('btn-mic', this.onMicButton);
+    // At the table, a pinch never zooms the whole page (Safari does that with a trackpad or an
+    // iPad's mouse); the puzzle and the domino board use it to zoom themselves. The way-in pages
+    // stay zoomable.
+    const noPageZoom = (e: Event) => e.preventDefault();
+    for (const type of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(type, noPageZoom);
+    this.cleanups.push(() => {
+      for (const type of ['gesturestart', 'gesturechange', 'gestureend']) document.removeEventListener(type, noPageZoom);
+    });
+    // Tapping, typing or talking keeps the table open (see markActive).
+    on('idle-stay', () => this.markActive(true));
+    const touched = () => this.markActive();
+    document.addEventListener('pointerdown', touched, true);
+    document.addEventListener('keydown', touched, true);
+    this.cleanups.push(() => {
+      document.removeEventListener('pointerdown', touched, true);
+      document.removeEventListener('keydown', touched, true);
+    });
     // Tanks on a phone held sideways: the tab pulls the folded bar down and pushes it back up.
     // Using the bar folds it again (Mute mic a moment later, so you see it change), and so does
     // touching the battlefield.
@@ -770,6 +799,17 @@ export class RoomApp {
     return SHEETS.find((id) => !$(id).hidden) ?? null;
   }
 
+  /**
+   * Tell the server someone's here (tapped, typed, used a controller or talked), so it doesn't
+   * close the table as idle. At most once a minute, or right away while it's warning us.
+   */
+  private markActive(now = false) {
+    const t = Date.now();
+    if (!now && !this.idleWarning && t - this.lastActiveSent < ACTIVE_EVERY_MS) return;
+    this.lastActiveSent = t;
+    this.net.send({ t: 'active' });
+  }
+
   /** Open one sheet over the table (or none). Games pause while the menu is open. */
   private openSheet(which: Sheet | null) {
     for (const id of SHEETS) $(id).hidden = id !== which;
@@ -802,6 +842,7 @@ export class RoomApp {
 
   /** A controller button went down. Menu always opens the menu; the rest go to what's on top. */
   onPad(p: PadPress) {
+    this.markActive();
     const b = p.button;
     if (b === 'menu') {
       this.openSheet($('menu').hidden ? 'menu' : null);

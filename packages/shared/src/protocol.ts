@@ -124,6 +124,10 @@ export type ClientMessage =
   | { t: 'filter'; mode: ChatFilterMode }
   /** Make an invite link from you, optionally for one person by name (their name is filled in for them). */
   | { t: 'invite'; for: string | null }
+  /** Still here: you tapped, typed, used a controller or talked (keeps an idle table open). */
+  | { t: 'active' }
+  /** How one of your voice links ended up: straight to them, through our relay, or not at all (for the admin page). */
+  | { t: 'voice-route'; to: string; route: VoiceLinkRoute }
   /** Input for whatever game the room is playing. */
   | { t: 'g'; m: GameInput };
 
@@ -318,6 +322,8 @@ export type ServerMessage =
   | { t: 'rtc'; from: string; data: RtcSignal }
   /** Your invite link's token (and the name it's for, as the server cleaned it). */
   | { t: 'invite'; token: string; for: string | null }
+  /** Nobody at the table has played or talked for a while: it closes in this long (null: someone's back). */
+  | { t: 'idle'; closesInMs: number | null }
   | { t: 'error'; code: ErrorCode; message: string };
 
 export type ErrorCode =
@@ -366,6 +372,9 @@ export function tankInfo(t: Tank, owner: { name: string; alias: string } | null,
 }
 
 /** Minimal runtime validation for messages from untrusted clients. */
+/** How a voice link between two players connected. */
+export type VoiceLinkRoute = 'direct' | 'relayed' | 'failed';
+
 export function parseClientMessage(raw: string): ClientMessage | null {
   // WebRTC session descriptions run a few KB; everything else is far smaller.
   if (raw.length > 16_000) return null;
@@ -419,6 +428,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isChatFilterMode(o.mode) ? { t: 'filter', mode: o.mode } : null;
     case 'invite':
       return o.for === null || str(o.for, 64) ? { t: 'invite', for: o.for as string | null } : null;
+    case 'active':
+      return { t: 'active' };
+    case 'voice-route':
+      return str(o.to, 32) && (o.route === 'direct' || o.route === 'relayed' || o.route === 'failed') ? { t: 'voice-route', to: o.to, route: o.route } : null;
     case 'g': {
       const input = parseGameInput(o.m);
       return input ? { t: 'g', m: input } : null;

@@ -81,10 +81,10 @@ export class RoomManager {
     return { ok: true, room };
   }
 
-  /** Run per-second housekeeping: reservation expiry and empty-room closure. */
+  /** Run per-second housekeeping: reservation expiry, and closing empty or idle rooms. */
   housekeeping() {
     for (const [code, room] of this.rooms) {
-      let close: boolean;
+      let close: false | 'empty' | 'idle';
       try {
         close = room.housekeeping();
       } catch (err) {
@@ -92,7 +92,7 @@ export class RoomManager {
         continue;
       }
       if (close) {
-        room.close('empty');
+        room.close(close);
         this.rooms.delete(code);
       }
     }

@@ -269,7 +269,7 @@ describe('guards', () => {
 });
 
 describe('chat reports', () => {
-  it('ties a report to the sender for review, ignores unknown ids, and is rate limited', () => {
+  it('saves a reported message and its sender for review, ignores unknown ids, and is rate limited', () => {
     const { mgr, log, clock } = setup();
     const a = join(mgr, 'session-aaaa', 'Alice');
     const b = join(mgr, 'session-bbbb', 'Bob');
@@ -282,6 +282,10 @@ describe('chat reports', () => {
     const report = log.chats.find((c) => c.outcome === 'reported')!;
     expect(report.msgId).toBe(msg.id);
     expect(report.reported).toBe(a.room.players.get('session-aaaa')!.pid);
+    // The one time chat text is written down: the message someone reported.
+    expect(report.text).toBe('hello there');
+    expect(report.reportedName).toBe('Alice');
+    expect(log.chats.find((c) => c.outcome === 'delivered')!.text).toBeUndefined();
     b.room.handle('session-bbbb', { t: 'report', msgId: 'not-a-real-id' });
     expect(log.chats.filter((c) => c.outcome === 'reported')).toHaveLength(1);
     for (let i = 0; i < 20; i++) {

@@ -19,8 +19,12 @@ No load balancer, NAT gateway or Lambda functions: any one of them costs more th
 - **Kill switch:** when actual spend for the month reaches $75, AWS Budgets stops the server by
   itself (and emails). Billing data lags by a few hours, so it's a backstop, not a hard cap.
 - **No surprise CPU bills:** the server uses "standard" CPU credits, which can't bill extra.
-- **Bandwidth caps in the software:** at most 10 public and 10 private rooms of 4 at once,
-  and the voice relay is capped at 300 KB/s in total ([deploy/turnserver.conf](../deploy/turnserver.conf)).
+- **Bandwidth caps in the software:** at most 10 public and 50 private rooms of 4 at once
+  (`MAX_PUBLIC_ROOMS` and `MAX_PRIVATE_ROOMS` in [deploy/setup.sh](../deploy/setup.sh)), and
+  the voice relay is capped at 300 KB/s in total (`bps-capacity` in
+  [deploy/turnserver.conf](../deploy/turnserver.conf)). A table closes a minute after its last
+  person leaves, and after 10 minutes with nobody playing or talking (`IDLE_ROOM_MS`), with a
+  minute's warning.
 - Change the amounts in [config.json](config.json).
 
 These budgets watch the whole AWS account, so they work best in an account used only for this.

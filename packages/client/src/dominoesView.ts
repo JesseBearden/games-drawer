@@ -3,8 +3,8 @@ import { DOMINOES_RULES, type DominoesView, type GameServerMessage, type Move, t
 import { bounds, ghostSpot, layoutSpots, limitsFor, tileSvg, type TileSpot } from './dominoLayout';
 import { focusForPad, type PadPress } from './gamepad';
 import { escapeHtml } from './state';
-import { fitScoreTable, seatNameHtml } from './heartsView';
-import type { ShellApi, View } from './views';
+import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml, seatRows } from './heartsView';
+import type { SafariGesture, ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -21,12 +21,12 @@ const DRAG_SLOP = 8;
 /**
  * Dominoes (All Fives) on the shared card-table layout: opponents around the edge, the board
  * in the middle (it bends at the edges and shrinks to fit), your tiles along the bottom. Tap a
- * tile to see where it can go, then tap a glowing spot (or the tile again if there's only one).
+ * tile to see where it can go, then tap the spot on the board (tapping the tile again puts it back).
  */
 export class DominoesTable implements View {
   readonly landscape = false;
   readonly helpHtml =
-    `<p>All Fives: play a tile that matches an open end. After you play, if the open ends add up to a multiple of 5, you score that many. Nothing fits? You pass (or draw from the boneyard, when there is one).</p><p>Go out first to score everyone’s leftover pips, rounded to the nearest 5. First to ${DOMINOES_RULES.target} wins.</p><p>Board hard to read? Pinch it or tap <b>Zoom in</b>, then drag to look around.</p><p><b>Controller:</b> left/right picks a tile, A plays it (left/right then chooses where), B cancels. The shoulder buttons zoom.</p>`;
+    `<p>All Fives: play a tile that matches an open end. After you play, if the open ends add up to a multiple of 5, you score that many. Nothing fits? You pass (or draw from the boneyard, when there is one).</p><p>Go out first to score everyone’s leftover pips, rounded to the nearest 5. First to ${DOMINOES_RULES.target} wins.</p><p>Board hard to read? Pinch it to zoom (on a computer, use the mouse wheel), then drag to look around.</p><p><b>Controller:</b> left/right picks a tile, A plays it (left/right then chooses where), B cancels. The shoulder buttons zoom.</p>`;
   private el = $('dominoes-view');
   private view: DominoesView | null = null;
   private selected: TileId | null = null;
@@ -40,7 +40,10 @@ export class DominoesTable implements View {
   private readySent = false;
   private speaking = new Set<string>();
   private cursor: TileId | null = null;
-  private observer = new ResizeObserver(() => this.renderBoard());
+  private observer = new ResizeObserver(() => {
+    this.renderBoard();
+    this.fitSeats();
+  });
   /** Board zoom: a scale and offset (px) on top of the fitted layout. 1 shows the whole board. */
   private zoom = 1;
   private panX = 0;
@@ -67,15 +70,10 @@ export class DominoesTable implements View {
         <div class="ht-center">
           <div class="dm-board"><div class="dm-layout"></div><div class="dm-pop" hidden></div></div>
           <div class="ht-status" aria-live="polite">Shuffling…</div>
-          <div class="dm-foot">
-            <button class="pc-btn pc-btn-plain dm-zoom dm-zoom-out" type="button" data-zoom="out">Zoom out</button>
-            <div class="dm-info"></div>
-            <button class="pc-btn pc-btn-plain dm-zoom dm-zoom-in" type="button" data-zoom="in">Zoom in</button>
-          </div>
           <button class="pc-btn pc-btn-main ht-action dm-draw" type="button" hidden></button>
         </div>
         <div class="ht-mine"><div class="ht-seat ht-pos-0"></div><button class="ht-scores-btn pc-btn pc-btn-plain" type="button">Scores</button></div>
-        <div class="ht-hand dm-hand"></div>
+        <div class="dm-side"><div class="ht-hand dm-hand"></div><div class="dm-info"></div></div>
         <div class="ht-overlay" hidden></div>
       </div>`;
     this.el.addEventListener('click', this.onClick);
@@ -85,8 +83,11 @@ export class DominoesTable implements View {
     board.addEventListener('pointerup', this.onPointerUp);
     board.addEventListener('pointercancel', this.onPointerUp);
     board.addEventListener('wheel', this.onWheel, { passive: false });
-    // Safari on iPhone and iPad zooms the whole page on a pinch unless told not to.
-    board.addEventListener('gesturestart', this.stopPageZoom);
+    // Safari's own pinch (an iPad's trackpad or mouse; fingers too, which the pointer events
+    // above already handle): zoom the board with it, never the whole page.
+    board.addEventListener('gesturestart', this.onGestureStart);
+    board.addEventListener('gesturechange', this.onGestureChange);
+    board.addEventListener('gestureend', this.onGestureEnd);
     this.observer.observe(board);
     shell.sfx.preloadSounds(CARD_SOUNDS);
   }
@@ -152,6 +153,7 @@ export class DominoesTable implements View {
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
+    this.fitSeats();
 
     const myTurn = v.phase === 'playing' && v.turn === v.seat && v.seat !== null;
     let text = '';
@@ -159,8 +161,6 @@ export class DominoesTable implements View {
     else if (v.phase === 'playing') {
       if (myTurn && v.mustDraw) text = 'Nothing fits: draw a tile';
       else if (myTurn && !v.moves.length) text = 'Nothing fits: you pass';
-      else if (myTurn) text = this.selected ? (this.myMoves(this.selected).length > 1 ? 'Tap where it goes' : 'Tap it again to play') : 'Your turn: pick a tile';
-      else if (v.turn !== null) text = `Waiting for ${escapeHtml(this.name(v.turn))}…`;
     } else if (v.phase === 'handEnd') {
       const waiting = this.waitingFor();
       text = `Hand ${v.hand} is over.`;
@@ -241,6 +241,11 @@ export class DominoesTable implements View {
     this.applyZoom();
   }
 
+  /** Names and scores on one line each (see fitSeatText). */
+  private fitSeats() {
+    fitSeatText(this.el);
+  }
+
   // ------------------------------------------------------------------ zoom
 
   private maxZoom() {
@@ -260,7 +265,7 @@ export class DominoesTable implements View {
     this.zoomAt(this.boxW / 2, this.boxH / 2, dir === 'in' ? this.zoom * ZOOM_STEP : this.zoom / ZOOM_STEP);
   }
 
-  /** Puts the zoom on the board (kept inside it: no panning off into nothing) and shows the right buttons. */
+  /** Puts the zoom on the board, kept inside it: no panning off into nothing. */
   private applyZoom() {
     const board = this.board();
     if (!board) return;
@@ -275,17 +280,31 @@ export class DominoesTable implements View {
     const zoomed = this.zoom > 1;
     (board.querySelector('.dm-layout') as HTMLElement).style.transform = zoomed ? `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})` : '';
     board.classList.toggle('zoomed', zoomed);
-    // Hidden buttons keep their room, so the board doesn't jump when they come and go.
-    const show = (sel: string, on: boolean) => {
-      const b = this.el.querySelector(sel) as HTMLButtonElement;
-      b.style.visibility = on ? '' : 'hidden';
-      b.disabled = !on;
-    };
-    show('.dm-zoom-in', this.hasTiles && this.zoom < this.maxZoom() - 0.01);
-    show('.dm-zoom-out', zoomed);
   }
 
-  private stopPageZoom = (e: Event) => e.preventDefault();
+  /** A trackpad pinch: the zoom it started from (null while fingers are doing it instead). */
+  private padPinch: { zoom: number } | null = null;
+  private hoverAt: { x: number; y: number } | null = null;
+
+  private onGestureStart = (e: Event) => {
+    e.preventDefault();
+    this.padPinch = this.pointers.size === 0 && this.hasTiles ? { zoom: this.zoom } : null;
+  };
+
+  private onGestureChange = (e: Event) => {
+    e.preventDefault();
+    if (!this.padPinch || this.pointers.size > 0) return;
+    const g = e as SafariGesture;
+    const r = this.board().getBoundingClientRect();
+    const x = g.clientX ?? this.hoverAt?.x ?? r.left + r.width / 2;
+    const y = g.clientY ?? this.hoverAt?.y ?? r.top + r.height / 2;
+    this.zoomAt(x - r.left, y - r.top, this.padPinch.zoom * g.scale);
+  };
+
+  private onGestureEnd = (e: Event) => {
+    e.preventDefault();
+    this.padPinch = null;
+  };
 
   /** Where the pointers are, in board pixels: their middle, and how far apart the first two are. */
   private pointerSpread() {
@@ -309,6 +328,7 @@ export class DominoesTable implements View {
   };
 
   private onPointerMove = (e: PointerEvent) => {
+    this.hoverAt = { x: e.clientX, y: e.clientY };
     const g = this.gesture;
     if (!g || !this.pointers.has(e.pointerId)) return;
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -391,13 +411,7 @@ export class DominoesTable implements View {
           : `${who} went out and scores <b>${res.points}</b> for the tiles left.`
       }</p>`;
     }
-    html += '<table class="ht-table"><thead><tr><th></th>';
-    for (let s = 0; s < 4; s++) html += `<th>${escapeHtml(v.seats[s].name)}</th>`;
-    html += '</tr></thead><tbody>';
-    v.history.forEach((row, i) => {
-      html += `<tr><td>Hand ${i + 1}</td>${row.map((n) => `<td>${n}</td>`).join('')}</tr>`;
-    });
-    html += `<tr class="ht-total"><td>Total</td>${v.seats.map((s) => `<td>${s.score}</td>`).join('')}</tr></tbody></table>`;
+    html += scoreSheetHtml(seatRows(v.seats, v.history, v.seat), v.phase === 'handEnd' || v.phase === 'gameOver');
     html += `<p class="pc-small">First to ${v.target} wins.</p>`;
     if (v.phase === 'handEnd') {
       const wait = this.waitText();
@@ -475,8 +489,6 @@ export class DominoesTable implements View {
     const t = e.target as HTMLElement;
     // The end of a drag or pinch on the board isn't a tap on a tile.
     if (performance.now() < this.noClickUntil && t.closest('.dm-board')) return;
-    const zoom = t.closest<HTMLElement>('[data-zoom]')?.dataset.zoom;
-    if (zoom === 'in' || zoom === 'out') return this.zoomStep(zoom);
     const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
     if (act === 'again') return this.shell.sendGame({ t: 'again' });
     if (act === 'lobby') return this.shell.toLobby();
@@ -527,8 +539,13 @@ export class DominoesTable implements View {
       this.shell.toast(v.mustDraw ? 'That doesn’t match an open end. Draw a tile.' : 'That doesn’t match an open end.');
       return;
     }
-    // Second tap on a tile with just one place to go plays it.
-    if (this.selected === tile && moves.length === 1) return this.play(tile, moves[0].arm);
+    // You play by tapping the spot on the board; tapping the picked tile again puts it back.
+    if (this.selected === tile) {
+      this.selected = null;
+      this.ghostIndex = -1;
+      this.render();
+      return;
+    }
     this.selected = tile;
     this.ghostIndex = -1;
     this.render();
@@ -578,8 +595,8 @@ export class DominoesTable implements View {
     }
     focused?.blur();
     const moves = this.myMoves(this.selected);
-    if (this.selected && moves.length > 1) {
-      // Choosing where the selected tile goes.
+    if (this.selected && moves.length) {
+      // Choosing where the selected tile goes (A plays it there).
       if (b === 'left' || b === 'right' || b === 'up' || b === 'down') {
         const step = b === 'left' || b === 'up' ? -1 : 1;
         this.ghostIndex = this.ghostIndex < 0 ? 0 : (this.ghostIndex + step + moves.length) % moves.length;
@@ -604,7 +621,7 @@ export class DominoesTable implements View {
     if (b === 'a') {
       if (this.cursor && v.tiles.includes(this.cursor)) {
         this.tapTile(this.cursor);
-        if (this.selected && this.myMoves(this.selected).length > 1) {
+        if (this.selected && this.myMoves(this.selected).length) {
           this.ghostIndex = 0;
           this.renderBoard();
         }
@@ -651,7 +668,9 @@ export class DominoesTable implements View {
     board.removeEventListener('pointerup', this.onPointerUp);
     board.removeEventListener('pointercancel', this.onPointerUp);
     board.removeEventListener('wheel', this.onWheel);
-    board.removeEventListener('gesturestart', this.stopPageZoom);
+    board.removeEventListener('gesturestart', this.onGestureStart);
+    board.removeEventListener('gesturechange', this.onGestureChange);
+    board.removeEventListener('gestureend', this.onGestureEnd);
     this.el.hidden = true;
     this.el.innerHTML = '';
   }

@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto';
 /**
  * Append-only JSONL logs, one file per stream per UTC day:
  *   logs/events-YYYY-MM-DD.jsonl  gameplay + room events (see scripts/stats.ts)
- *   logs/chat-YYYY-MM-DD.jsonl    every chat submission, delivered or blocked
+ *   logs/chat-YYYY-MM-DD.jsonl    one line per chat message (delivered, blocked, reported) for
+ *                                 the counts; no words or names, except a reported message's
+ *                                 (what was said lives only with the table, and goes with it)
  * Lines carry a stable event id and server timestamp. Later these can ship to CloudWatch
  * unchanged (the agent tails files).
  */

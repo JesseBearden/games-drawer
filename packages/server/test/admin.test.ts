@@ -75,6 +75,22 @@ describe('the admin numbers', () => {
     expect(s).toMatchObject({ players: 2, privateRooms: 1, publicJoins: 1, sessions: 3, personHours: 6.5 });
     expect(s.chat).toMatchObject({ delivered: 12, blocked: 1, reported: 1, sessionsWithChat: 1 });
     expect(s.daily.find((d) => d.day === '2026-11-16')).toMatchObject({ players: 1, rooms: 1, sessions: 1, personHours: 4, chats: 12 });
+    expect(s.voice).toEqual({ links: 0, relayed: 0, failed: 0, people: 0, peopleRelayed: 0, peopleFailed: 0 });
+  });
+
+  it('counts how often voice needed the relay, or never connected', () => {
+    const days = dayRange('2026-11-17', 7);
+    const link = (pid: string, route: string) => ({ type: 'voice_link', at: at('2026-11-17'), pid, route });
+    // Four people in voice: p1 is on phone data and needs the relay for all three links;
+    // p4 can't reach p2 at all.
+    const events = [
+      link('p1', 'relayed'), link('p1', 'relayed'), link('p1', 'relayed'),
+      link('p2', 'relayed'), link('p2', 'direct'), link('p2', 'failed'),
+      link('p3', 'relayed'), link('p3', 'direct'), link('p3', 'direct'),
+      link('p4', 'relayed'), link('p4', 'failed'), link('p4', 'direct'),
+    ];
+    const s = summarize(events, [], days);
+    expect(s.voice).toEqual({ links: 12, relayed: 6, failed: 2, people: 4, peopleRelayed: 4, peopleFailed: 2 });
   });
 });
 

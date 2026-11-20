@@ -4,6 +4,8 @@ import { escapeHtml } from './state';
 import { cardFaceSvg, suitSvg, SUIT_NAME, type Rank, type Suit } from './paperArt';
 import type { PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
+import { scoreSheetHtml } from './scoreSheet';
+export { scoreSheetHtml };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -36,28 +38,64 @@ export function showHand(hand: HTMLElement, cards: Card[], classes: (c: Card) =>
 }
 
 /** A seat's name tag: talking bars, the name, and words for computer players and people who are away. */
-/**
- * Score tables size their columns to whole names. Only when a very long name can't fit that way
- * does that name break mid-word.
- */
+/** Rows for a score sheet with one row per seat: you first, then in turn order. */
+export function seatRows(seats: { name: string; score: number }[], history: number[][], mySeat: number | null) {
+  const first = mySeat ?? 0;
+  return [0, 1, 2, 3].map((k) => {
+    const s = (first + k) % 4;
+    return { label: escapeHtml(seats[s].name), history: history.map((h) => h[s]), total: seats[s].score };
+  });
+}
+
+/** Score sheets: the names (one line each) shrink to fit if they must, sharing one size, then "…". */
 export function fitScoreTable(root: HTMLElement) {
-  const table = root.querySelector<HTMLElement>('.ht-table');
-  const box = table?.parentElement;
-  if (!table || !box) return;
-  const heads = [...table.querySelectorAll<HTMLElement>('th')];
-  for (const h of heads) h.classList.remove('ht-break');
-  const cs = getComputedStyle(box);
-  const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  // Too wide: let the widest name break mid-word, then look again (rarely more than once).
-  for (let i = 0; i < heads.length && table.offsetWidth > room + 1; i++) {
-    const whole = heads.filter((h) => !h.classList.contains('ht-break'));
-    whole.reduce((a, b) => (b.offsetWidth > a.offsetWidth ? b : a)).classList.add('ht-break');
+  fitTogether([...root.querySelectorAll<HTMLElement>('.ht-sheet .ht-who .pc-nm')], 12);
+}
+
+/**
+ * The name tags around a card table: names and scores on one line. Long ones shrink to fit (then
+ * end in "…"). The other players' tags share one size, the smallest that fits, so side by side
+ * they match; your own tag sizes itself.
+ */
+export function fitSeatText(root: HTMLElement) {
+  for (const [sel, minPx] of [['.ht-nm', 12], ['.ht-score', 11]] as const) {
+    const mine = root.querySelector<HTMLElement>(`.ht-pos-0 ${sel}`);
+    if (mine) fitOneLine(mine, minPx);
+    fitTogether([1, 2, 3].flatMap((p) => [...root.querySelectorAll<HTMLElement>(`.ht-pos-${p} ${sel}`)]), minPx);
   }
 }
 
+/** Fits each line, then gives them all the smallest size any of them needed. */
+function fitTogether(els: HTMLElement[], minPx: number) {
+  for (const el of els) fitOneLine(el, minPx);
+  const least = Math.min(...els.map((el) => parseFloat(getComputedStyle(el).fontSize)));
+  if (Number.isFinite(least)) for (const el of els) el.style.fontSize = `${least}px`;
+}
+
+/**
+ * Keeps a line of text (a name on a name tag) on one line: if it's too wide for its box, the font
+ * shrinks to fit, but never below minPx; past that, CSS cuts it off with "…". One measurement is
+ * enough, since text width grows with font size.
+ */
+export function fitOneLine(el: HTMLElement, minPx: number) {
+  el.style.fontSize = '';
+  const room = el.clientWidth;
+  const need = el.scrollWidth;
+  if (!room || need <= room + 0.5) return;
+  const base = parseFloat(getComputedStyle(el).fontSize);
+  el.style.fontSize = `${Math.max(minPx, Math.floor(((base * room) / need) * 10) / 10)}px`;
+}
+
+/** A small computer screen beside a computer player's name (name tags only, not score sheets). */
+const COMPUTER_MARK =
+  '<span class="ht-cpu" role="img" aria-label="Computer player" title="Computer player"><svg viewBox="0 0 16 14" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="8.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 10v2.5M4.8 12.6h6.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>';
+
 export function seatNameHtml(name: string, opts: { bot?: boolean; away?: boolean }) {
-  const note = opts.away ? '<span class="ht-tag ht-away">Away</span>' : opts.bot ? '<span class="ht-tag ht-bot">Computer</span>' : '';
-  return `<div class="ht-name"><span class="pc-talk"><i></i><i></i><i></i></span><span class="ht-nm">${escapeHtml(name)}</span></div>${note}`;
+  // Someone who dropped out says "Away" (a computer plays for them); a computer player gets the
+  // small computer screen instead of a word.
+  const note = opts.away ? '<span class="ht-tag ht-away">Away</span>' : '';
+  const cpu = opts.bot && !opts.away ? COMPUTER_MARK : '';
+  return `<div class="ht-name"><span class="pc-talk"><i></i><i></i><i></i></span><span class="ht-nm">${escapeHtml(name)}</span>${cpu}</div>${note}`;
 }
 
 /**
@@ -80,7 +118,10 @@ export class HeartsTable implements View {
   /** The card a controller has highlighted. */
   private cursor: Card | null = null;
   /** Re-spreads the hand whenever its box changes size (rotating a phone, resizing a window). */
-  private handObserver = new ResizeObserver(() => this.layoutHand());
+  private handObserver = new ResizeObserver(() => {
+    this.layoutHand();
+    fitSeatText(this.el);
+  });
 
   constructor(private shell: ShellApi) {
     this.el.hidden = false;
@@ -227,6 +268,7 @@ export class HeartsTable implements View {
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
+    fitSeatText(this.el);
 
     // Trick: each card sits toward the player who played it.
     for (let p = 0; p < 4; p++) q<HTMLElement>(`.ht-slot-${p}`).innerHTML = '';
@@ -321,17 +363,7 @@ export class HeartsTable implements View {
     } else {
       html += '<h2>Scores</h2>';
     }
-    html += '<table class="ht-table"><thead><tr><th></th>';
-    for (let s = 0; s < 4; s++) html += `<th>${escapeHtml(v.seats[s].name)}</th>`;
-    html += '</tr></thead><tbody>';
-    v.history.forEach((row, i) => {
-      html += `<tr><td>Hand ${i + 1}</td>${row.map((n) => `<td>${n}</td>`).join('')}</tr>`;
-    });
-    if (v.result && v.phase !== 'playing' && v.phase !== 'passing') {
-      html += `<tr class="ht-last"><td>This hand</td>${v.result.points.map((n) => `<td>+${n}</td>`).join('')}</tr>`;
-    }
-    html += `<tr class="ht-total"><td>Total</td>${v.seats.map((s) => `<td>${s.score}</td>`).join('')}</tr>`;
-    html += '</tbody></table>';
+    html += scoreSheetHtml(seatRows(v.seats, v.history, v.seat), v.phase === 'handEnd' || v.phase === 'gameOver');
     html += `<p class="pc-small">First to ${v.target} ends the game. Lowest score wins.</p>`;
     html += '<div class="actions">';
     if (v.phase === 'gameOver') {

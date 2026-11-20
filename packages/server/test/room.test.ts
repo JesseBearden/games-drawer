@@ -104,8 +104,12 @@ describe('rooms and bots', () => {
     a.room.handle('session-aaaa', { t: 'pick', game: 'tanks' });
     a.tankId = a.room.tanks!.tankIdOf('session-aaaa')!;
     a.room.disconnect('session-aaaa', a.conn, 'disconnect');
-    clock.now += 10 * 60_000;
-    mgr.housekeeping();
+    // Ten minutes later (b kept playing, so the table isn't idle), a's tank is still theirs.
+    for (let i = 0; i < 10; i++) {
+      clock.now += 60_000;
+      b.room.handle('session-bbbb', { t: 'active' });
+      mgr.housekeeping();
+    }
     const again = join(mgr, 'session-aaaa', { kind: 'private', code: a.room.code });
     expect(again.tankId).toBe(a.tankId);
     expect(again.reclaimed).toBe(true);
@@ -201,7 +205,23 @@ describe('chat', () => {
     expect(a.room.chatHistory.at(-1)!.text).toBe('hello 11');
   });
 
-  it('shadows blocked messages: only the sender sees them, and they are logged', () => {
+  it('logs counts only, never what was said or who said it, and forgets it all when the table closes', () => {
+    const { mgr, log, clock } = setup();
+    const a = join(mgr, 'session-aaaa');
+    join(mgr, 'session-bbbb');
+    const name = a.room.players.get('session-aaaa')!.name;
+    a.room.handle('session-aaaa', { t: 'chat', text: 'meet me at noon' });
+    clock.now += 3000;
+    a.room.handle('session-aaaa', { t: 'chat', text: 'you are a f u c k i n g idiot' });
+    expect(log.chats.map((c) => c.outcome)).toEqual(['delivered', 'blocked']);
+    const written = JSON.stringify([log.chats, log.events]);
+    for (const kept of ['noon', 'idiot', name]) expect(written).not.toContain(kept);
+    expect(a.room.chatHistory.some((m) => m.text === 'meet me at noon')).toBe(true);
+    a.room.close('idle');
+    expect(a.room.chatHistory).toHaveLength(0);
+  });
+
+  it('shadows blocked messages: only the sender sees them, and they are counted', () => {
     const { mgr, log } = setup();
     const a = join(mgr, 'session-aaaa');
     const b = join(mgr, 'session-bbbb');

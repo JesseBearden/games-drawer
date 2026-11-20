@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { isAdminPasswordHash } from './adminAuth';
 import { FileLog } from './eventlog';
 import { startGameServer, type Limits } from './server';
-import { isSlot, type GameConfig } from '@tank/shared';
+import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from '@tank/shared';
 
 /**
  * Environment:
@@ -16,6 +16,7 @@ import { isSlot, type GameConfig } from '@tank/shared';
  *   TRUST_PROXY=1      read client IPs from X-Forwarded-For (only behind our own Caddy)
  *   STATS_TOKEN        required as ?token= for /stats in production
  *   EMPTY_ROOM_MS, RECLAIM_MS, MAX_PUBLIC_ROOMS, MAX_PRIVATE_ROOMS   timers/caps (shorten to test)
+ *   IDLE_ROOM_MS       close a table after this long with nobody playing or talking (default 10 min)
  *   LOG_DIR            where JSONL logs go (default ./logs)
  *   GAME_CONFIG        JSON gameplay overrides for playtesting, e.g. {"winLevel":3}
  *   VOICE_ICE_SERVERS  JSON list of STUN/TURN servers for voice chat (default: a public STUN server)
@@ -42,6 +43,21 @@ const env = process.env;
 // them from systemd's environment files instead.
 if (env.NODE_ENV !== 'production' && fs.existsSync(path.join(root, '.env.local'))) process.loadEnvFile(path.join(root, '.env.local'));
 const production = env.NODE_ENV === 'production';
+// Puzzle pictures that live only on this computer (the git-ignored local-puzzles folder). Never
+// in production, where the folder doesn't exist anyway: it's never committed or deployed.
+if (!production) {
+  const localList = path.join(root, 'local-puzzles', 'puzzles.json');
+  const loadLocal = () => {
+    try {
+      addLocalPuzzleImages(parseLocalPuzzles(JSON.parse(fs.readFileSync(localList, 'utf8'))));
+    } catch {
+      /* no local pictures */
+    }
+  };
+  loadLocal();
+  // Pictures added with npm run local-puzzle show up without restarting the server.
+  fs.watchFile(localList, { interval: 2000 }, loadLocal);
+}
 const logDir = env.LOG_DIR ?? path.join(root, 'logs');
 const log = new FileLog(logDir);
 const adminPasswordHash = env.ADMIN_PASSWORD_HASH?.trim() || undefined;
@@ -88,9 +104,10 @@ const server = await startGameServer({
   log,
   blocklistPath: env.BLOCKLIST_PATH ?? (bundled ? path.join(root, 'blocklist.txt') : path.join(root, 'packages/server/blocklist.txt')),
   emptyRoomMs: Number(env.EMPTY_ROOM_MS ?? 60_000),
+  idleRoomMs: env.IDLE_ROOM_MS ? Number(env.IDLE_ROOM_MS) : undefined,
   publicReclaimMs: Number(env.RECLAIM_MS ?? 60_000),
   maxPublicRooms: Number(env.MAX_PUBLIC_ROOMS ?? 10),
-  maxPrivateRooms: Number(env.MAX_PRIVATE_ROOMS ?? 10),
+  maxPrivateRooms: Number(env.MAX_PRIVATE_ROOMS ?? 50),
   sessionSecret: env.SESSION_SECRET,
   allowedOrigins: env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean) : null,
   trustProxy: env.TRUST_PROXY === '1',

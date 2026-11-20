@@ -38,6 +38,8 @@ interface PeerLink {
   /** ICE candidates that arrived before the remote description. */
   pending: RTCIceCandidateInit[];
   route: VoiceRoute;
+  /** The route last reported to the server, so each is sent once. */
+  reported: VoiceRoute | null;
   restarts: number;
 }
 
@@ -345,7 +347,7 @@ export class Voice {
     audio.autoplay = true;
     audio.setAttribute('playsinline', '');
     audio.muted = this.muted.has(alias);
-    const link: PeerLink = { pc, audio, analyser: null, pending: [], route: 'connecting', restarts: 0 };
+    const link: PeerLink = { pc, audio, analyser: null, pending: [], route: 'connecting', reported: null, restarts: 0 };
     // Whatever we're sending right now: the gated mic, or the plain one while the page is hidden.
     const micTrack = this.mic?.getAudioTracks()[0];
     const out = this.rawMic && micTrack ? micTrack : this.sendTrack;
@@ -389,6 +391,7 @@ export class Voice {
     if (this.links.get(alias) !== link) return;
     if (link.restarts >= MAX_RESTARTS) {
       link.route = 'failed';
+      this.reportRoute(alias, link);
       const name = this.peers.find((p) => p.id === alias)?.name ?? 'one player';
       this.hooks.toast(`Couldn't connect voice with ${name} (their network or yours blocked it).`);
       return;
@@ -399,6 +402,14 @@ export class Voice {
       link.pc.restartIce();
       void this.offer(alias, link);
     }
+  }
+
+  /** Tell the server how this link connected (the admin page counts how often voice needs the relay). */
+  private reportRoute(alias: string, link: PeerLink) {
+    if (this.links.get(alias) !== link || link.reported === link.route) return;
+    if (link.route !== 'direct' && link.route !== 'relayed' && link.route !== 'failed') return;
+    link.reported = link.route;
+    this.hooks.send({ t: 'voice-route', to: alias, route: link.route });
   }
 
   /** Direct, or through the relay? Shown in the voice panel. */
@@ -421,6 +432,7 @@ export class Voice {
     } catch {
       link.route = 'direct';
     }
+    this.reportRoute(alias, link);
     if (this.links.get(alias) === link) this.hooks.changed();
   }
 
