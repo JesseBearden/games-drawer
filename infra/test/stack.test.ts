@@ -16,6 +16,7 @@ function synth(over: Partial<GamesDrawerProps> = {}) {
     alertEmail: 'alerts@example.com',
     githubRepo: 'owner/games-drawer',
     githubConnectionArn: 'arn:aws:codeconnections:us-east-2:123456789012:connection/abc',
+    deployRoleArn: 'arn:aws:iam::123456789012:role/games-drawer-deploy',
     monthlyBudgetUsd: 30,
     killSwitchUsd: 75,
     ...over,
@@ -111,14 +112,12 @@ describe('Games Drawer AWS stack (the boxes)', () => {
       ConcurrentBuildLimit: 1,
       Environment: Match.objectLike({ ComputeType: 'BUILD_GENERAL1_SMALL' }),
     });
-    // Its role belongs to CodeBuild alone: no GitHub sign-in link (the organization doesn't allow one).
+    // No GitHub sign-in link (the organization doesn't allow one); the project runs as the role
+    // from the GitHub stack, which this stack gives the deploy permissions.
     t.resourceCountIs('AWS::IAM::OIDCProvider', 0);
-    t.hasResourceProperties('AWS::IAM::Role', {
-      Description: Match.stringLikeRegexp('CodeBuild'),
-      AssumeRolePolicyDocument: { Statement: [Match.objectLike({ Action: 'sts:AssumeRole', Principal: { Service: 'codebuild.amazonaws.com' } })] },
-    });
+    t.hasResourceProperties('AWS::CodeBuild::Project', { ServiceRole: 'arn:aws:iam::123456789012:role/games-drawer-deploy' });
+    t.hasResourceProperties('AWS::IAM::Policy', { Roles: ['games-drawer-deploy'], PolicyDocument: { Statement: Match.arrayWith([Match.objectLike({ Action: 'ec2:RunInstances' })]) } });
     const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
-    expect(policies).toContain('"codeconnections:UseConnection"');
     // The boxes may read the admin password hash and their shared secrets, and no other parameter.
     expect(policies).toContain('parameter/games-drawer/admin-password-hash');
     expect(policies).toContain('parameter/games-drawer/secrets');
@@ -184,6 +183,20 @@ describe('the link to GitHub', () => {
     const app = new cdk.App();
     const t = Template.fromStack(new GamesDrawerGitHubStack(app, 'GitHub', { env: { region: 'us-east-2' } }));
     t.hasResourceProperties('AWS::CodeConnections::Connection', { ConnectionName: 'games-drawer-github', ProviderType: 'GitHub' });
+  });
+
+  it('holds the deploy role, already allowed to use the connection when the project is created', () => {
+    const app = new cdk.App();
+    const t = Template.fromStack(new GamesDrawerGitHubStack(app, 'GitHub', { env: { region: 'us-east-2' } }));
+    t.hasResourceProperties('AWS::IAM::Role', {
+      AssumeRolePolicyDocument: { Statement: [Match.objectLike({ Action: 'sts:AssumeRole', Principal: { Service: 'codebuild.amazonaws.com' } })] },
+      Policies: [
+        {
+          PolicyName: 'UseGitHubConnection',
+          PolicyDocument: { Statement: [Match.objectLike({ Action: Match.arrayWith(['codeconnections:GetConnection', 'codeconnections:UseConnection']), Resource: { 'Fn::GetAtt': [Match.anyValue(), 'ConnectionArn'] } })] },
+        },
+      ],
+    });
   });
 });
 

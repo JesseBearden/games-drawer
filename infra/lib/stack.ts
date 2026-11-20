@@ -33,8 +33,9 @@ export interface GamesDrawerProps extends cdk.StackProps {
   alertEmail: string;
   /** owner/name of the GitHub repository whose pushes to main deploy. */
   githubRepo: string;
-  /** The link to GitHub the deploy project reads the repo through (the GamesDrawerGitHub stack, github.ts). */
+  /** The link to GitHub the deploy project reads the repo through, and the project's role (both the GamesDrawerGitHub stack, github.ts). */
   githubConnectionArn: string;
+  deployRoleArn: string;
   /** Email alerts at 50% and 80% of this, and when the month is forecast to go over. */
   monthlyBudgetUsd: number;
   /** At this much actual spend in a month, AWS stops every game server box by itself. */
@@ -166,10 +167,9 @@ export class GamesDrawerStack extends cdk.Stack {
     // repo through the GitHub connection, which you approve once; GitHub never signs in to AWS,
     // and nothing secret is stored anywhere. (The account's organization doesn't allow GitHub
     // sign-in links anyway.) One deploy at a time; a push during one waits its turn.
-    const deployRole = new iam.Role(this, 'DeployRole', {
-      description: 'Games Drawer deploys (the games-drawer-deploy CodeBuild project)',
-      assumedBy: new iam.ServicePrincipal('codebuild.amazonaws.com'),
-    });
+    // The role comes from the GitHub stack, already allowed to use the connection; this adds the
+    // permissions to deploy.
+    const deployRole = iam.Role.fromRoleArn(this, 'DeployRole', props.deployRoleArn, { mutable: true });
     const [owner, repo] = props.githubRepo.split('/');
     const deployProject = new codebuild.Project(this, 'Deploy', {
       projectName: 'games-drawer-deploy',
@@ -200,24 +200,11 @@ export class GamesDrawerStack extends cdk.Stack {
     });
     // Fetch the repo (and watch it for pushes) through the GitHub connection.
     (deployProject.node.defaultChild as codebuild.CfnProject).addPropertyOverride('Source.Auth', { Type: 'CODECONNECTIONS', Resource: props.githubConnectionArn });
-    deployRole.addToPolicy(
-      new iam.PolicyStatement({
-        actions: [
-          'codeconnections:GetConnection',
-          'codeconnections:GetConnectionToken',
-          'codeconnections:UseConnection',
-          'codestar-connections:GetConnection',
-          'codestar-connections:GetConnectionToken',
-          'codestar-connections:UseConnection',
-        ],
-        resources: [props.githubConnectionArn],
-      }),
-    );
     releases.grantPut(deployRole, 'releases/*');
     const ec2Arn = (what: string) => `arn:${this.partition}:ec2:${this.region}:${this.account}:${what}`;
     const ours = { StringEquals: { 'aws:ResourceTag/project': 'games-drawer' } };
     // Launch boxes from our template, tagged as ours.
-    deployRole.addToPolicy(
+    deployRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         actions: ['ec2:RunInstances'],
         resources: [
@@ -232,18 +219,18 @@ export class GamesDrawerStack extends cdk.Stack {
         ],
       }),
     );
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['ec2:CreateTags'], resources: [ec2Arn('instance/*'), ec2Arn('volume/*')], conditions: { StringEquals: { 'ec2:CreateAction': 'RunInstances' } } }));
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['iam:PassRole'], resources: [role.roleArn], conditions: { StringEquals: { 'iam:PassedToService': 'ec2.amazonaws.com' } } }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['ec2:CreateTags'], resources: [ec2Arn('instance/*'), ec2Arn('volume/*')], conditions: { StringEquals: { 'ec2:CreateAction': 'RunInstances' } } }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['iam:PassRole'], resources: [role.roleArn], conditions: { StringEquals: { 'iam:PassedToService': 'ec2.amazonaws.com' } } }));
     // Change and remove only our own boxes.
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['ec2:CreateTags', 'ec2:TerminateInstances'], resources: [ec2Arn('instance/*')], conditions: ours }));
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['ec2:DescribeInstances', 'ssm:DescribeInstanceInformation', 'ssm:GetCommandInvocation'], resources: ['*'] }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['ec2:CreateTags', 'ec2:TerminateInstances'], resources: [ec2Arn('instance/*')], conditions: ours }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['ec2:DescribeInstances', 'ssm:DescribeInstanceInformation', 'ssm:GetCommandInvocation'], resources: ['*'] }));
     // Run the deploy command on our boxes only.
-    deployRole.addToPolicy(
+    deployRole.addToPrincipalPolicy(
       new iam.PolicyStatement({ actions: ['ssm:SendCommand'], resources: [ec2Arn('instance/*')], conditions: { StringEquals: { 'ssm:resourceTag/project': 'games-drawer' } } }),
     );
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['ssm:SendCommand'], resources: [`arn:${this.partition}:ssm:${this.region}::document/AWS-RunShellScript`] }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['ssm:SendCommand'], resources: [`arn:${this.partition}:ssm:${this.region}::document/AWS-RunShellScript`] }));
     // Point the front door at the new box: the origin record, and nothing else in the zone.
-    deployRole.addToPolicy(
+    deployRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         actions: ['route53:ChangeResourceRecordSets'],
         resources: [`arn:${this.partition}:route53:::hostedzone/*`],
@@ -256,9 +243,9 @@ export class GamesDrawerStack extends cdk.Stack {
         },
       }),
     );
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['route53:ListResourceRecordSets'], resources: [`arn:${this.partition}:route53:::hostedzone/*`] }));
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['route53:GetChange'], resources: [`arn:${this.partition}:route53:::change/*`] }));
-    deployRole.addToPolicy(new iam.PolicyStatement({ actions: ['route53:ListHostedZonesByName'], resources: ['*'] }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['route53:ListResourceRecordSets'], resources: [`arn:${this.partition}:route53:::hostedzone/*`] }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['route53:GetChange'], resources: [`arn:${this.partition}:route53:::change/*`] }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['route53:ListHostedZonesByName'], resources: ['*'] }));
 
     // ------------------------------------------------------------ spending guardrails
     const email = [{ subscriptionType: 'EMAIL', address: props.alertEmail }];

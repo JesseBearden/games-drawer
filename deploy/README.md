@@ -118,6 +118,9 @@ it once (and again whenever you change the password), from the repo on your comp
 aws ssm put-parameter --profile games-drawer --name /games-drawer/admin-password-hash --type SecureString --overwrite --value "$(npm run -s admin-password -- --value)"
 ```
 
+(In Git Bash on Windows, put `MSYS_NO_PATHCONV=1` in front, or Git Bash turns the name into a
+Windows file path. PowerShell runs it as it is.)
+
 The next deploy picks it up (`games-drawer-deploy` writes it to `/etc/games-drawer/admin.env`).
 The boxes can read that parameter and their shared secrets, and no other. Parameter Store's
 standard tier is free, unlike Secrets Manager, and does the same job here. The admin page on any

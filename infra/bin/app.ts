@@ -38,6 +38,7 @@ if (alertEmail) {
     alertEmail,
     githubRepo: config.githubRepo,
     githubConnectionArn: github.connectionArn,
+    deployRoleArn: github.deployRoleArn,
     monthlyBudgetUsd: config.monthlyBudgetUsd,
     killSwitchUsd: config.killSwitchUsd,
     instanceType: config.instanceType,
