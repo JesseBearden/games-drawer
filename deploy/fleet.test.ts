@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { chooseSlot, Fleet, fleetMap, RETIRE_GRACE_MINUTES, type Box, type Cloud, type Role } from './fleet';
+import { chooseSlot, Fleet, fleetMap, RETIRE_GRACE_MINUTES, type Box, type Cloud, type FrontDoor, type Role } from './fleet';
 import type { FleetMap, Slot } from './fleetMap';
 
 /** A pretend AWS: boxes, the commands run on them, and where the front door points. */
 function fakeCloud(opts: { failOn?: RegExp } = {}) {
   let boxes: Box[] = [];
-  let origin: string | null = null;
+  const records: Record<string, string> = {};
+  const waited: string[] = [];
   let n = 0;
   const ran: { slot: Slot; command: string }[] = [];
   const logs: string[] = [];
@@ -28,23 +29,28 @@ function fakeCloud(opts: { failOn?: RegExp } = {}) {
     terminate(box) {
       boxes = boxes.filter((b) => b.id !== box.id);
     },
-    async setOrigin(ip) {
-      origin = ip;
+    async pointAt(names, ip) {
+      for (const name of names) records[name] = ip;
     },
-    origin: () => origin,
+    pointsTo: (name) => records[name] ?? null,
+    async waitForStaging(release) {
+      waited.push(release);
+    },
     log: (m) => logs.push(m),
   };
   const lastMap = (slot: Slot): FleetMap | null => {
     const r = ran.filter((x) => x.slot === slot && x.command.includes(' route ')).at(-1);
     return r ? JSON.parse(Buffer.from(r.command.split(' ').at(-1)!, 'base64').toString()) : null;
   };
-  return { cloud, ran, logs, lastMap, boxes: () => boxes, origin: () => origin };
+  return { cloud, ran, logs, lastMap, records, waited, boxes: () => boxes, origin: () => records['origin.games.example'] ?? null };
 }
+
+const fleetOf = (f: ReturnType<typeof fakeCloud>, frontDoor: FrontDoor = 'cloudfront') => new Fleet(f.cloud, { domain: 'games.example', frontDoor });
 
 describe('the fleet tool', () => {
   it('first deploy: one box takes everything once promoted, and the front door points at it', async () => {
     const f = fakeCloud();
-    const fleet = new Fleet(f.cloud);
+    const fleet = fleetOf(f);
     await fleet.launch('aaaaaaa1');
     expect(f.ran[0]).toEqual({ slot: 'a', command: 'games-drawer-deploy aaaaaaa1 start a none' });
     expect(f.lastMap('a')).toEqual({ boxes: { a: '10.0.0.1' }, newTables: [['a', 100]], staging: 'a' });
@@ -59,7 +65,7 @@ describe('the fleet tool', () => {
 
   it('a deploy: new box on staging, a canary share, then it takes over and the old box retires', async () => {
     const f = fakeCloud();
-    const fleet = new Fleet(f.cloud);
+    const fleet = fleetOf(f);
     await fleet.launch('aaaaaaa1');
     await fleet.promote('aaaaaaa1');
 
@@ -87,7 +93,7 @@ describe('the fleet tool', () => {
 
   it('rolls back: the new box goes, and the current box takes everything again', async () => {
     const f = fakeCloud();
-    const fleet = new Fleet(f.cloud);
+    const fleet = fleetOf(f);
     await fleet.launch('aaaaaaa1');
     await fleet.promote('aaaaaaa1');
     await fleet.launch('bbbbbbb2');
@@ -100,7 +106,7 @@ describe('the fleet tool', () => {
 
   it('a failing check fails the deploy (and says why)', async () => {
     const f = fakeCloud({ failOn: / check$/ });
-    const fleet = new Fleet(f.cloud);
+    const fleet = fleetOf(f);
     await fleet.launch('aaaaaaa1');
     expect(await fleet.check('aaaaaaa1')).toBe(false);
     expect(f.logs.at(-1)).toContain('failed');
@@ -108,7 +114,7 @@ describe('the fleet tool', () => {
 
   it('removes a new box left from an unfinished deploy, and reuses its slot', async () => {
     const f = fakeCloud();
-    const fleet = new Fleet(f.cloud);
+    const fleet = fleetOf(f);
     await fleet.launch('aaaaaaa1');
     await fleet.promote('aaaaaaa1');
     await fleet.launch('bbbbbbb2'); // …and the deploy stops here
@@ -118,7 +124,7 @@ describe('the fleet tool', () => {
 
   it('with old boxes still finishing their games, a new box takes a free slot', async () => {
     const f = fakeCloud();
-    const fleet = new Fleet(f.cloud);
+    const fleet = fleetOf(f);
     for (const rel of ['aaaaaaa1', 'bbbbbbb2', 'ccccccc3']) {
       await fleet.launch(rel);
       await fleet.promote(rel);
@@ -126,6 +132,42 @@ describe('the fleet tool', () => {
     expect(f.boxes().map((b) => `${b.slot}:${b.role}`)).toEqual(['a:retiring', 'b:retiring', 'c:current']);
     // Every box can reach every other box's tables.
     expect(Object.keys(f.lastMap('a')!.boxes).sort()).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('the fleet tool without CloudFront (FRONT_DOOR=direct)', () => {
+  it('points the domain itself at the box taking players, and staging at the newest box', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f, 'direct');
+    await fleet.launch('aaaaaaa1');
+    // The first box: everything points at it, and staging answered over HTTPS before the smoke tests.
+    expect(f.records).toEqual({ 'games.example': '3.0.0.1', 'www.games.example': '3.0.0.1', 'origin.games.example': '3.0.0.1', 'staging.games.example': '3.0.0.1' });
+    expect(f.waited).toEqual(['aaaaaaa1']);
+    // The names point at it before its routes are written (that reload is when Caddy asks for certificates).
+    await fleet.promote('aaaaaaa1');
+
+    await fleet.launch('bbbbbbb2');
+    expect(f.records['staging.games.example']).toBe('3.0.0.2');
+    expect(f.records['games.example']).toBe('3.0.0.1');
+    await fleet.promote('bbbbbbb2');
+    expect(f.records).toMatchObject({ 'games.example': '3.0.0.2', 'www.games.example': '3.0.0.2', 'staging.games.example': '3.0.0.2' });
+  });
+
+  it('rolling back points staging back at the current box', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f, 'direct');
+    await fleet.launch('aaaaaaa1');
+    await fleet.promote('aaaaaaa1');
+    await fleet.launch('bbbbbbb2');
+    await fleet.rollback('bbbbbbb2');
+    expect(f.records['staging.games.example']).toBe('3.0.0.1');
+    expect(f.records['games.example']).toBe('3.0.0.1');
+  });
+
+  it('behind CloudFront, only origin. moves, and staging comes through the front door', () => {
+    expect(fleetOf(fakeCloud()).frontNames()).toEqual(['origin.games.example']);
+    expect(fleetOf(fakeCloud()).stagingNames()).toEqual([]);
+    expect(fleetOf(fakeCloud(), 'direct').frontNames()).toEqual(['games.example', 'www.games.example', 'origin.games.example']);
   });
 });
 

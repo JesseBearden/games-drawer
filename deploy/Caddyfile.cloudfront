@@ -1,0 +1,38 @@
+# Caddy config for a game server box behind CloudFront (FRONT_DOOR=cloudfront in deploy.env);
+# setup.sh writes it to /etc/caddy/Caddyfile. The other one, Caddyfile.direct, is for while the
+# domain points straight at the boxes.
+#
+# HTTPS ends at CloudFront (infra/lib/edge.ts), which talks to this box in plain HTTP on port 80;
+# only CloudFront can reach that port. Other boxes pass requests on to port 8080 over the private
+# network. Either way, Caddy then sends each request to the right box: a table's own box (its
+# code says which, as ?slot=), the newest box for staging, and new tables wherever the fleet map
+# says. games-drawer-routes.caddy holds those routes; the rollout tool rewrites it from the fleet
+# map (deploy/fleetMap.ts).
+
+{
+	auto_https off
+	admin localhost:2019
+	servers {
+		# Our other boxes pass on the player's address; keep it.
+		trusted_proxies static private_ranges
+	}
+}
+
+(site) {
+	encode zstd gzip
+	# Server stats are for the rollout tool on the box only.
+	handle /stats* {
+		respond 404
+	}
+	import /etc/caddy/games-drawer-routes.caddy
+}
+
+# CloudFront.
+:80 {
+	import site
+}
+
+# Another box passing on a request for one of this box's tables.
+:8080 {
+	import site
+}

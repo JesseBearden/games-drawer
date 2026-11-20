@@ -53,7 +53,7 @@ await build({
 await build({ ...common, entryPoints: [path.join(root, 'deploy/rollout.ts')], outfile: path.join(out, 'deploy/rollout.mjs') });
 
 fs.copyFileSync(path.join(root, 'packages/server/blocklist.txt'), path.join(out, 'blocklist.txt'));
-for (const f of ['setup.sh', 'turnserver.conf', 'Caddyfile', 'games-drawer@.service', 'games-drawer-deploy']) {
+for (const f of ['setup.sh', 'turnserver.conf', 'Caddyfile.cloudfront', 'Caddyfile.direct', 'games-drawer@.service', 'games-drawer-deploy']) {
   fs.copyFileSync(path.join(root, 'deploy', f), path.join(out, 'deploy', f));
 }
 fs.writeFileSync(path.join(out, 'RELEASE'), release + '\n');

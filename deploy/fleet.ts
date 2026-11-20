@@ -11,11 +11,14 @@
  *   npx tsx deploy/fleet.ts rollback <release>           remove the new box; the current one keeps everything
  *   npx tsx deploy/fleet.ts status                       the live boxes, and where the front door points
  *
- * Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (the stack's LaunchTemplateName output; the
- * deploy project sets all three) in the environment, and the AWS CLI. Boxes are EC2 instances tagged project=games-drawer; their
+ * Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (the stack's LaunchTemplateName output) in
+ * the environment, and FRONT_DOOR (cloudfront, the default, or direct); the deploy project sets
+ * them all. Needs the AWS CLI too. Boxes are EC2 instances tagged project=games-drawer; their
  * gd:role tag says what each one is doing:
  *   candidate  the new release, on trial (staging, then maybe a canary share of new tables)
- *   current    takes new tables; CloudFront's origin (origin.<domain>) points at it
+ *   current    takes new tables; the front door points at it: CloudFront's origin
+ *              (origin.<domain>), or with FRONT_DOOR=direct the domain and www themselves (and
+ *              staging.<domain> then points at the newest box)
  *   retiring   finishing its games, then it shuts itself down (and AWS terminates it)
  * See deploy/README.md.
  */
@@ -38,6 +41,17 @@ export interface Box {
 
 /** Minutes a retired box keeps passing players on before it may shut down (the front door's DNS settles well within this). */
 export const RETIRE_GRACE_MINUTES = 15;
+
+/**
+ * What players come in through. cloudfront: CloudFront, which follows origin.<domain> to the
+ * current box. direct (while CloudFront isn't available to the account): the domain's own DNS
+ * records point at the boxes, and Caddy on each box does HTTPS (deploy/Caddyfile.direct).
+ */
+export type FrontDoor = 'cloudfront' | 'direct';
+
+export function isFrontDoor(v: unknown): v is FrontDoor {
+  return v === 'cloudfront' || v === 'direct';
+}
 
 /** A slot no live box uses; if all are taken, the oldest retiring box gives up its own. */
 export function chooseSlot(boxes: Box[]): { slot: Slot; evict: Box | null } {
@@ -81,14 +95,31 @@ export interface Cloud {
   run(box: Box, command: string): Promise<string>;
   setRole(box: Box, role: Role): void;
   terminate(box: Box): void;
-  /** Point the front door (origin.<domain>) at a box's public address. */
-  setOrigin(ip: string): Promise<void>;
-  origin(): string | null;
+  /** Point DNS names (A records in the domain's zone) at a box's public address. */
+  pointAt(names: string[], ip: string): Promise<void>;
+  /** Where a DNS name in the zone points, or null. */
+  pointsTo(name: string): string | null;
+  /** Wait until https://staging.<domain> answers with this release (the box is up, and so is its HTTPS). */
+  waitForStaging(release: string): Promise<void>;
   log(msg: string): void;
 }
 
 export class Fleet {
-  constructor(private cloud: Cloud) {}
+  constructor(
+    private cloud: Cloud,
+    private opts: { domain: string; frontDoor: FrontDoor },
+  ) {}
+
+  /** The names that follow the box taking players. */
+  frontNames(): string[] {
+    const d = this.opts.domain;
+    return this.opts.frontDoor === 'direct' ? [d, `www.${d}`, `origin.${d}`] : [`origin.${d}`];
+  }
+
+  /** The names that follow the newest box (behind CloudFront, staging comes through the front door instead). */
+  stagingNames(): string[] {
+    return this.opts.frontDoor === 'direct' ? [`staging.${this.opts.domain}`] : [];
+  }
 
   /** Tell every live box the map. */
   private async route(boxes: Box[], map: FleetMap) {
@@ -114,11 +145,14 @@ export class Fleet {
     const box = await this.cloud.launch(release, slot);
     this.cloud.log((await this.cloud.run(box, `games-drawer-deploy ${release} start ${slot} ${current?.release ?? 'none'}`)).trim());
     const all = [...boxes, box];
+    // Staging's own name (direct) points here, and with no box taking players, so does the front
+    // door (otherwise not even staging could be reached). Before the routes, so the reload they
+    // cause finds the names in place when Caddy asks for certificates (direct).
+    const names = [...this.stagingNames(), ...(current ? [] : this.frontNames())];
+    if (names.length) await this.cloud.pointAt(names, box.publicIp);
     // Staging shows the new box at once; new tables stay where they were (or come here, on the very first deploy).
     await this.route(all, fleetMap(all, current ? [[current.slot, 100]] : [[slot, 100]], slot));
-    // With no box taking players, the front door points here straight away (otherwise not even
-    // staging, which comes in through it, could be reached).
-    if (!current) await this.cloud.setOrigin(box.publicIp);
+    await this.cloud.waitForStaging(release);
     this.cloud.log(`CANARY_SLOT=${slot}`);
     return box;
   }
@@ -153,7 +187,7 @@ export class Fleet {
     const candidate = candidateBox(boxes, release);
     const current = currentBox(boxes);
     await this.route(boxes, fleetMap(boxes, [[candidate.slot, 100]], candidate.slot));
-    await this.cloud.setOrigin(candidate.publicIp);
+    await this.cloud.pointAt(this.frontNames(), candidate.publicIp);
     this.cloud.setRole(candidate, 'current');
     this.cloud.log(`Box ${candidate.slot} (${release.slice(0, 7)}) now takes every new table, and the front door points at it.`);
     if (current) {
@@ -167,7 +201,10 @@ export class Fleet {
     const candidate = boxes.find((b) => b.role === 'candidate' && b.release === release);
     const rest = boxes.filter((b) => b !== candidate);
     const current = currentBox(rest);
-    if (current) await this.route(rest, fleetMap(rest, [[current.slot, 100]], current.slot));
+    if (current) {
+      await this.route(rest, fleetMap(rest, [[current.slot, 100]], current.slot));
+      if (this.stagingNames().length) await this.cloud.pointAt(this.stagingNames(), current.publicIp);
+    }
     if (candidate) {
       this.cloud.terminate(candidate);
       this.cloud.log(`Rolled back: box ${candidate.slot} (${release.slice(0, 7)}) removed${current ? `; box ${current.slot} keeps everything` : ''}.`);
@@ -178,7 +215,7 @@ export class Fleet {
     const boxes = this.cloud.boxes().sort((a, b) => a.launchedAt.localeCompare(b.launchedAt));
     if (!boxes.length) this.cloud.log('No boxes running.');
     for (const b of boxes) this.cloud.log(`${b.slot}  ${b.role.padEnd(9)} ${b.release.slice(0, 7)}  ${b.id}  ${b.publicIp || '-'} / ${b.privateIp || '-'}  since ${b.launchedAt}`);
-    this.cloud.log(`Front door (origin) → ${this.cloud.origin() ?? 'not set'}`);
+    for (const name of [...this.frontNames(), ...this.stagingNames()]) this.cloud.log(`${name} → ${this.cloud.pointsTo(name) ?? 'not set'}`);
   }
 }
 
@@ -197,7 +234,6 @@ export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
   const domain = env.SITE_DOMAIN;
   const template = env.LAUNCH_TEMPLATE;
   if (!domain || !template || !env.AWS_REGION) throw new Error('Set AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (see infra/README.md).');
-  const originName = `origin.${domain}`;
   let zoneId: string | null = null;
   const zone = () => {
     if (zoneId) return zoneId;
@@ -279,22 +315,38 @@ export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
     terminate(box) {
       aws(['ec2', 'terminate-instances', '--instance-ids', box.id]);
     },
-    async setOrigin(ip) {
-      const batch = { Changes: [{ Action: 'UPSERT', ResourceRecordSet: { Name: originName, Type: 'A', TTL: 60, ResourceRecords: [{ Value: ip }] } }] };
+    async pointAt(names, ip) {
+      // A one-minute TTL, so a new box takes over within a minute or two.
+      const batch = { Changes: names.map((Name) => ({ Action: 'UPSERT', ResourceRecordSet: { Name, Type: 'A', TTL: 60, ResourceRecords: [{ Value: ip }] } })) };
       const res = aws(['route53', 'change-resource-record-sets', '--hosted-zone-id', zone(), '--change-batch', JSON.stringify(batch)]) as { ChangeInfo: { Id: string } };
       execFileSync('aws', ['route53', 'wait', 'resource-record-sets-changed', '--id', res.ChangeInfo.Id], { stdio: 'inherit' });
-      this.log(`${originName} → ${ip}`);
+      this.log(`${names.join(', ')} → ${ip}`);
     },
-    origin() {
+    pointsTo(name) {
       try {
-        const res = aws(['route53', 'list-resource-record-sets', '--hosted-zone-id', zone(), '--start-record-name', originName, '--start-record-type', 'A', '--max-items', '1']) as {
-          ResourceRecordSets: { Name: string; ResourceRecords?: { Value: string }[] }[];
+        const res = aws(['route53', 'list-resource-record-sets', '--hosted-zone-id', zone(), '--start-record-name', name, '--start-record-type', 'A', '--max-items', '1']) as {
+          ResourceRecordSets: { Name: string; ResourceRecords?: { Value: string }[]; AliasTarget?: { DNSName: string } }[];
         };
-        const r = res.ResourceRecordSets.find((s) => s.Name === `${originName}.`);
-        return r?.ResourceRecords?.[0]?.Value ?? null;
+        const r = res.ResourceRecordSets.find((s) => s.Name === `${name}.`);
+        return r?.ResourceRecords?.[0]?.Value ?? r?.AliasTarget?.DNSName ?? null;
       } catch {
         return null;
       }
+    },
+    async waitForStaging(release) {
+      const url = `https://staging.${domain}/healthz`;
+      this.log(`Waiting for ${url} to answer with ${release.slice(0, 7)}…`);
+      // Up to 15 minutes: a brand-new site's first HTTPS certificate can take a few.
+      for (let i = 0; i < 90; i++) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(5000), cache: 'no-store' });
+          if (res.ok && ((await res.json()) as { release?: string }).release === release) return;
+        } catch {
+          /* not yet */
+        }
+        await sleep(10_000);
+      }
+      throw new Error(`${url} never answered with ${release.slice(0, 7)}.`);
     },
     log: (msg) => console.log(msg),
   };
@@ -307,7 +359,9 @@ async function main() {
     if (!release || !/^[0-9a-f]{7,40}$/.test(release)) throw new Error('Give the release (a git commit).');
     return release;
   };
-  const fleet = new Fleet(awsCloud());
+  const frontDoor = process.env.FRONT_DOOR || 'cloudfront';
+  if (!isFrontDoor(frontDoor)) throw new Error('FRONT_DOOR must be cloudfront or direct.');
+  const fleet = new Fleet(awsCloud(), { domain: process.env.SITE_DOMAIN!, frontDoor });
   switch (cmd) {
     case 'launch':
       await fleet.launch(needRelease());

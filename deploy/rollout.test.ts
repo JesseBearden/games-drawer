@@ -73,7 +73,7 @@ describe('the rollout tool on a box', () => {
     expect(m.commands.some((c) => c.startsWith('bash ') && c.endsWith('deploy'))).toBe(true);
     const routes = m.files.get(ROUTES_FILE)!;
     expect(routes).toContain(`reverse_proxy 127.0.0.1:${GAME_PORT}`);
-    expect(routes).not.toContain(':80');
+    expect(routes).not.toContain(':8080');
   });
 
   it('fetches the release it replaces, so pages from the old box still find their build files', async () => {
@@ -98,7 +98,7 @@ describe('the rollout tool on a box', () => {
     const routes = m.files.get(ROUTES_FILE)!;
     // Tables on box a stay here; new tables go to box b.
     expect(routes).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801\n\}/);
-    expect(routes).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:80 \{/);
+    expect(routes).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:8080 \{/);
     expect(m.commands).toContain('systemctl reload caddy');
     // A map that leaves this box out is refused.
     expect(() => r.route({ boxes: { b: '10.0.0.22' }, newTables: [['b', 100]], staging: 'b' })).toThrow(/doesn't include this box/);
@@ -177,10 +177,10 @@ describe('routes from the fleet map', () => {
     const r = routesSnippet(canary, 'a', 'games.example');
     expect(r).toContain('redir https://games.example{uri} permanent');
     expect(r).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801\n\}/);
-    expect(r).toMatch(/handle @slot_b \{\n\treverse_proxy 10\.0\.0\.22:80 \{\n\t\theader_up X-Gd-Hop 1\n\t\}\n\}/);
-    expect(r).toContain('reverse_proxy 127.0.0.1:8801 10.0.0.22:80 {\n\t\tlb_policy weighted_round_robin 90 10');
+    expect(r).toMatch(/handle @slot_b \{\n\treverse_proxy 10\.0\.0\.22:8080 \{\n\t\theader_up X-Gd-Hop 1\n\t\}\n\}/);
+    expect(r).toContain('reverse_proxy 127.0.0.1:8801 10.0.0.22:8080 {\n\t\tlb_policy weighted_round_robin 90 10');
     // Staging is the newest box.
-    expect(r).toMatch(/@staging host staging\.games\.example\nhandle @staging \{\n\treverse_proxy 10\.0\.0\.22:80/);
+    expect(r).toMatch(/@staging host staging\.games\.example\nhandle @staging \{\n\treverse_proxy 10\.0\.0\.22:8080/);
   });
 
   it('passed-on requests are always served by the box they reach (no loops between boxes)', () => {
@@ -197,7 +197,7 @@ describe('routes from the fleet map', () => {
   it('on a retiring box: its own tables still here, everything new goes to the current box', () => {
     const r = routesSnippet(two, 'a', 'games.example');
     expect(r).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801/);
-    expect(r).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:80 \{\n\t\theader_up X-Gd-Hop 1/);
+    expect(r).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:8080 \{\n\t\theader_up X-Gd-Hop 1/);
     expect(r).not.toContain('weighted');
   });
 

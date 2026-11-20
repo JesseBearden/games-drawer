@@ -13,7 +13,10 @@ to that region):
   - **The front door:** the HTTPS certificate and CloudFront, which passes players through to
     whichever box `origin.<domain>` points at. CloudFront only takes certificates from
     us-east-1; the organization allows certificates there but no stacks, so this stack asks for
-    it there.
+    it there. **For now there's none:** AWS hasn't yet let the account use CloudFront, so
+    `"frontDoor": "direct"` in [config.json](config.json) has the domain point straight at the
+    boxes, with Caddy doing HTTPS. Switching later is in
+    [deploy/README.md](../deploy/README.md#the-front-door-cloudfront-or-the-boxes-themselves-for-now).
   - **The game server boxes and what outlives them:** a launch template that deploys start
     boxes from, a shared disk for Jigsaw saves and logs (EFS), a bucket for release bundles.
   - **The deploy project** (CodeBuild), which deploys each push to main from inside the
@@ -38,7 +41,8 @@ How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md)
 
 No load balancer or NAT gateway: either one costs more than the server. Game traffic to players
 goes out through CloudFront, so it counts against CloudFront's free terabyte rather than EC2's
-data-out charges.
+data-out charges. (Not while `frontDoor` is `direct`: then it goes straight from the box, free
+for the first 100 GB a month across AWS, then $0.09/GB.)
 
 ## Spending guardrails
 

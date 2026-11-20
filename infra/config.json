@@ -3,6 +3,7 @@
   "domain": "gamesdrawer.com",
   "githubRepo": "JesseBearden/games-drawer",
   "instanceType": "t4g.micro",
+  "frontDoor": "direct",
   "amiId": null,
   "monthlyBudgetUsd": 30,
   "killSwitchUsd": 65,

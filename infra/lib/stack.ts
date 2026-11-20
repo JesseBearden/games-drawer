@@ -41,6 +41,12 @@ export interface GamesDrawerProps extends cdk.StackProps {
   /** At this much actual spend in a month, AWS stops every game server box by itself. */
   killSwitchUsd: number;
   instanceType?: string;
+  /**
+   * What players come in through. cloudfront: CloudFront (edge.ts), with HTTPS there. direct:
+   * the domain's own DNS records point at the boxes (deploys move them) and Caddy on each box
+   * does HTTPS; for while CloudFront isn't available to the account (deploy/README.md).
+   */
+  frontDoor: 'cloudfront' | 'direct';
   /** Pin the machine image (see infra/README.md); otherwise each stack update takes Ubuntu's latest for the boxes launched after it. */
   amiId?: string;
   /** Extra cost-spike alerts. New AWS accounts usually have AWS's own default monitor already. */
@@ -79,24 +85,32 @@ export class GamesDrawerStack extends cdk.Stack {
     boxFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3478), 'Voice relay (TURN over TCP)');
     boxFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(3478), 'Voice relay (TURN over UDP)');
     boxFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udpRange(49152, 49352), 'Relayed voice audio');
-    boxFirewall.addIngressRule(boxFirewall, ec2.Port.tcp(80), 'Another box passing on a request for one of its tables');
+    boxFirewall.addIngressRule(boxFirewall, ec2.Port.tcp(8080), 'Another box passing on a request for one of its tables');
     // No SSH: shell access and deploys go through AWS Systems Manager.
 
-    // Web traffic only from CloudFront. AWS keeps a list of CloudFront's addresses; this looks up
-    // its id in this region when the stack deploys. (It counts as 55 rules, so it has a group to itself.)
-    const cloudFrontList = new cr.AwsCustomResource(this, 'CloudFrontAddresses', {
-      onUpdate: {
-        service: 'EC2',
-        action: 'describeManagedPrefixLists',
-        parameters: { Filters: [{ Name: 'prefix-list-name', Values: ['com.amazonaws.global.cloudfront.origin-facing'] }] },
-        physicalResourceId: cr.PhysicalResourceId.of('cloudfront-origin-facing'),
-        outputPaths: ['PrefixLists.0.PrefixListId'],
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([new iam.PolicyStatement({ actions: ['ec2:DescribeManagedPrefixLists'], resources: ['*'] })]),
-      installLatestAwsSdk: false,
-    });
-    const webFirewall = new ec2.SecurityGroup(this, 'FromCloudFront', { vpc, description: 'Games Drawer boxes: web traffic from CloudFront only', allowAllOutbound: false });
-    webFirewall.addIngressRule(ec2.Peer.prefixList(cloudFrontList.getResponseField('PrefixLists.0.PrefixListId')), ec2.Port.tcp(80), 'CloudFront (HTTPS ends there)');
+    // Web traffic. (Its own group, the same either way, so switching front doors only changes its rules.)
+    const webFirewall = new ec2.SecurityGroup(this, 'WebFirewall', { vpc, description: 'Games Drawer boxes: web traffic', allowAllOutbound: false });
+    if (props.frontDoor === 'cloudfront') {
+      // Only from CloudFront. AWS keeps a list of CloudFront's addresses; this looks up its id in
+      // this region when the stack deploys. (It counts as 55 rules, hence a group of its own.)
+      const cloudFrontList = new cr.AwsCustomResource(this, 'CloudFrontAddresses', {
+        onUpdate: {
+          service: 'EC2',
+          action: 'describeManagedPrefixLists',
+          parameters: { Filters: [{ Name: 'prefix-list-name', Values: ['com.amazonaws.global.cloudfront.origin-facing'] }] },
+          physicalResourceId: cr.PhysicalResourceId.of('cloudfront-origin-facing'),
+          outputPaths: ['PrefixLists.0.PrefixListId'],
+        },
+        policy: cr.AwsCustomResourcePolicy.fromStatements([new iam.PolicyStatement({ actions: ['ec2:DescribeManagedPrefixLists'], resources: ['*'] })]),
+        installLatestAwsSdk: false,
+      });
+      webFirewall.addIngressRule(ec2.Peer.prefixList(cloudFrontList.getResponseField('PrefixLists.0.PrefixListId')), ec2.Port.tcp(80), 'CloudFront (HTTPS ends there)');
+    } else {
+      // Straight from players: Caddy on the box does HTTPS (and gets its certificates over port 80).
+      webFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'HTTP (certificate checks, and the redirect to HTTPS)');
+      webFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS and game connections');
+      webFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(443), 'HTTP/3');
+    }
 
     // ------------------------------------------------------------ what outlives a box
     const releases = new s3.Bucket(this, 'Releases', {
@@ -135,7 +149,7 @@ export class GamesDrawerStack extends cdk.Stack {
     const profile = new iam.CfnInstanceProfile(this, 'ServerProfile', { roles: [role.roleName] });
 
     const userData = ec2.UserData.forLinux();
-    userData.addCommands(...bootScript({ domain: props.domain, bucket: releases.bucketName, region: this.region, fileSystem: sharedDisk.fileSystemId }));
+    userData.addCommands(...bootScript({ domain: props.domain, bucket: releases.bucketName, region: this.region, fileSystem: sharedDisk.fileSystemId, frontDoor: props.frontDoor }));
     const image = (props.amiId ? ec2.MachineImage.genericLinux({ [this.region]: props.amiId }) : ec2.MachineImage.fromSsmParameter(UBUNTU_AMI_PARAMETER)).getImage(this);
     const projectTag = [{ key: 'project', value: 'games-drawer' }];
     const template = new ec2.CfnLaunchTemplate(this, 'Box', {
@@ -192,6 +206,7 @@ export class GamesDrawerStack extends cdk.Stack {
         RELEASE_BUCKET: { value: releases.bucketName },
         CANARY_PERCENT: { value: '10' },
         CANARY_MINUTES: { value: '10' },
+        FRONT_DOOR: { value: props.frontDoor },
       },
       timeout: cdk.Duration.hours(1),
       queuedTimeout: cdk.Duration.hours(8),
@@ -229,14 +244,16 @@ export class GamesDrawerStack extends cdk.Stack {
       new iam.PolicyStatement({ actions: ['ssm:SendCommand'], resources: [ec2Arn('instance/*')], conditions: { StringEquals: { 'ssm:resourceTag/project': 'games-drawer' } } }),
     );
     deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['ssm:SendCommand'], resources: [`arn:${this.partition}:ssm:${this.region}::document/AWS-RunShellScript`] }));
-    // Point the front door at the new box: the origin record, and nothing else in the zone.
+    // Point the front door at the new box: the origin record (and, with no CloudFront, the site's
+    // own names and staging), and nothing else in the zone.
     deployRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         actions: ['route53:ChangeResourceRecordSets'],
         resources: [`arn:${this.partition}:route53:::hostedzone/*`],
         conditions: {
           'ForAllValues:StringEquals': {
-            'route53:ChangeResourceRecordSetsNormalizedRecordNames': [`origin.${props.domain}`],
+            'route53:ChangeResourceRecordSetsNormalizedRecordNames':
+              props.frontDoor === 'direct' ? [`origin.${props.domain}`, props.domain, `www.${props.domain}`, `staging.${props.domain}`] : [`origin.${props.domain}`],
             'route53:ChangeResourceRecordSetsRecordTypes': ['A'],
             'route53:ChangeResourceRecordSetsActions': ['UPSERT'],
           },
@@ -299,10 +316,10 @@ export class GamesDrawerStack extends cdk.Stack {
     }
 
     // ------------------------------------------------------------ the front door
-    const frontDoor = new FrontDoor(this, 'FrontDoor', { domain: props.domain, zone: props.zone });
+    const frontDoor = props.frontDoor === 'cloudfront' ? new FrontDoor(this, 'FrontDoor', { domain: props.domain, zone: props.zone }) : null;
 
     // ------------------------------------------------------------ what the deploy workflow needs
-    new cdk.CfnOutput(this, 'DistributionId', { value: frontDoor.distribution.distributionId });
+    if (frontDoor) new cdk.CfnOutput(this, 'DistributionId', { value: frontDoor.distribution.distributionId });
     new cdk.CfnOutput(this, 'LaunchTemplateName', { value: LAUNCH_TEMPLATE_NAME });
     new cdk.CfnOutput(this, 'ReleaseBucket', { value: releases.bucketName });
     new cdk.CfnOutput(this, 'DeployProject', { value: deployProject.projectName });
@@ -329,13 +346,13 @@ exports.handler = async () => {
  * Commands run once when a box first boots: record where things are and install the deploy
  * command. The fleet tool then starts its release on it (deploy/setup.sh installs the rest).
  */
-export function bootScript(o: { domain: string; bucket: string; region: string; fileSystem: string }): string[] {
+export function bootScript(o: { domain: string; bucket: string; region: string; fileSystem: string; frontDoor: 'cloudfront' | 'direct' }): string[] {
   const deployCmd = fs.readFileSync(path.join(repoRoot, 'deploy', 'games-drawer-deploy'), 'utf8').replace(/\r\n/g, '\n');
   if (deployCmd.includes('GAMES_DRAWER_EOF')) throw new Error('deploy script contains the heredoc marker');
   return [
     'set -euo pipefail',
     'install -d -m 755 /etc/games-drawer',
-    `printf 'DOMAIN=%s\\nBUCKET=%s\\nREGION=%s\\nFILE_SYSTEM=%s\\n' '${o.domain}' '${o.bucket}' '${o.region}' '${o.fileSystem}' > /etc/games-drawer/deploy.env`,
+    `printf 'DOMAIN=%s\\nBUCKET=%s\\nREGION=%s\\nFILE_SYSTEM=%s\\nFRONT_DOOR=%s\\n' '${o.domain}' '${o.bucket}' '${o.region}' '${o.fileSystem}' '${o.frontDoor}' > /etc/games-drawer/deploy.env`,
     "cat > /usr/local/bin/games-drawer-deploy <<'GAMES_DRAWER_EOF'",
     deployCmd.trimEnd(),
     'GAMES_DRAWER_EOF',

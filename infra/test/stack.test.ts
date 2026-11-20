@@ -17,6 +17,7 @@ function synth(over: Partial<GamesDrawerProps> = {}) {
     githubRepo: 'owner/games-drawer',
     githubConnectionArn: 'arn:aws:codeconnections:us-east-2:123456789012:connection/abc',
     deployRoleArn: 'arn:aws:iam::123456789012:role/games-drawer-deploy',
+    frontDoor: 'cloudfront',
     monthlyBudgetUsd: 30,
     killSwitchUsd: 75,
     ...over,
@@ -61,7 +62,7 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     const open = rules.filter((r) => r.CidrIp === '0.0.0.0/0').map((r) => `${r.IpProtocol}:${r.FromPort}-${r.ToPort}`).sort();
     expect(open).toEqual(['tcp:3478-3478', 'udp:3478-3478', 'udp:49152-49352']);
     expect(rules.some((r) => r.FromPort === 80 && r.SourcePrefixListId)).toBe(true);
-    expect(rules.some((r) => r.FromPort === 80 && r.SourceSecurityGroupId)).toBe(true);
+    expect(rules.some((r) => r.FromPort === 8080 && r.SourceSecurityGroupId)).toBe(true);
     expect(rules.some((r) => r.FromPort === 22 || r.FromPort === 443)).toBe(false);
   });
 
@@ -178,6 +179,31 @@ describe('the front door and the DNS zone', () => {
   });
 });
 
+describe('without CloudFront (frontDoor: direct)', () => {
+  const t = synth({ frontDoor: 'direct' });
+
+  it('has no CloudFront or certificate request: Caddy on the boxes does HTTPS', () => {
+    t.resourceCountIs('AWS::CloudFront::Distribution', 0);
+    t.resourceCountIs('AWS::CloudFormation::CustomResource', 0);
+    t.resourceCountIs('AWS::Route53::RecordSet', 0);
+  });
+
+  it('opens the boxes to players directly: HTTP, HTTPS and HTTP/3, with the voice relay as before', () => {
+    const groups = Object.values(t.findResources('AWS::EC2::SecurityGroup')) as { Properties: { SecurityGroupIngress?: Ingress[] } }[];
+    const rules = groups.flatMap((g) => g.Properties.SecurityGroupIngress ?? []);
+    const open = rules.filter((r) => r.CidrIp === '0.0.0.0/0').map((r) => `${r.IpProtocol}:${r.FromPort}-${r.ToPort}`).sort();
+    expect(open).toEqual(['tcp:3478-3478', 'tcp:443-443', 'tcp:80-80', 'udp:3478-3478', 'udp:443-443', 'udp:49152-49352']);
+    expect(rules.some((r) => r.FromPort === 22)).toBe(false);
+  });
+
+  it('lets deploys move the site, www and staging to a new box, and tells the boxes and the fleet tool', () => {
+    const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+    expect(policies).toContain('"route53:ChangeResourceRecordSetsNormalizedRecordNames":["origin.games.example.com","games.example.com","www.games.example.com","staging.games.example.com"]');
+    t.hasResourceProperties('AWS::CodeBuild::Project', { Environment: Match.objectLike({ EnvironmentVariables: Match.arrayWith([{ Name: 'FRONT_DOOR', Type: 'PLAINTEXT', Value: 'direct' }]) }) });
+    expect(JSON.stringify(t.findResources('AWS::EC2::LaunchTemplate'))).toContain("'direct' > /etc/games-drawer/deploy.env");
+  });
+});
+
 describe('the link to GitHub', () => {
   it('is a GitHub connection on its own, waiting to be approved', () => {
     const app = new cdk.App();
@@ -202,9 +228,9 @@ describe('the link to GitHub', () => {
 
 describe('first-boot script', () => {
   it('records the domain, bucket, region and shared disk, and installs the deploy command intact', () => {
-    const lines = bootScript({ domain: 'games.example.com', bucket: 'bucket-1', region: 'us-east-2', fileSystem: 'fs-123' });
+    const lines = bootScript({ domain: 'games.example.com', bucket: 'bucket-1', region: 'us-east-2', fileSystem: 'fs-123', frontDoor: 'direct' });
     const script = lines.join('\n');
-    expect(script).toContain("'games.example.com' 'bucket-1' 'us-east-2' 'fs-123' > /etc/games-drawer/deploy.env");
+    expect(script).toContain("'games.example.com' 'bucket-1' 'us-east-2' 'fs-123' 'direct' > /etc/games-drawer/deploy.env");
     expect(script).toContain('exec /usr/local/bin/node "$dir/deploy/rollout.mjs"');
     expect(script).not.toContain('\r');
     // The heredoc is quoted, so $variables reach the file unexpanded.

@@ -1,0 +1,41 @@
+# Caddy config for a game server box while the domain points straight at the boxes, with no
+# CloudFront in front (FRONT_DOOR=direct in deploy.env); setup.sh fills in @DOMAIN@ and writes it
+# to /etc/caddy/Caddyfile. Caddyfile.cloudfront is the one for when CloudFront is the front door.
+#
+# Caddy gets and renews the HTTPS certificates itself (Let's Encrypt), and keeps them on the shared
+# disk: every box uses the same ones, so a new box per deploy never asks for new certificates (Let's
+# Encrypt allows only a few duplicates a week). The fleet tool points the domain at the box taking
+# players, and staging at the newest box (deploy/fleet.ts). Other boxes pass requests on to port
+# 8080 over the private network. Caddy then sends each request to the right box: a table's own box
+# (its code says which, as ?slot=), the newest box for staging, and new tables wherever the fleet
+# map says. games-drawer-routes.caddy holds those routes; the rollout tool rewrites it from the
+# fleet map (deploy/fleetMap.ts).
+
+{
+	admin localhost:2019
+	storage file_system /mnt/games-drawer/caddy
+	servers {
+		# Our other boxes pass on the player's address; keep it.
+		trusted_proxies static private_ranges
+	}
+}
+
+(site) {
+	encode zstd gzip
+	# Server stats are for the rollout tool on the box only.
+	handle /stats* {
+		respond 404
+	}
+	import /etc/caddy/games-drawer-routes.caddy
+}
+
+@DOMAIN@, www.@DOMAIN@, staging.@DOMAIN@ {
+	# Only CloudFront may say where a player is; straight from the internet, nobody may.
+	request_header -CloudFront-Viewer-Address
+	import site
+}
+
+# Another box passing on a request for one of this box's tables.
+:8080 {
+	import site
+}

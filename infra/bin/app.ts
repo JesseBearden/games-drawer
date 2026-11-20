@@ -42,6 +42,7 @@ if (alertEmail) {
     monthlyBudgetUsd: config.monthlyBudgetUsd,
     killSwitchUsd: config.killSwitchUsd,
     instanceType: config.instanceType,
+    frontDoor: config.frontDoor === 'direct' ? 'direct' : 'cloudfront',
     amiId: config.amiId ?? undefined,
     anomalyAlerts: config.anomalyAlerts,
   });

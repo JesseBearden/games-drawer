@@ -26,6 +26,28 @@ players ──HTTPS──▶ CloudFront ──HTTP──▶ origin.<domain> = th
   fleet map says ([fleetMap.ts](fleetMap.ts)). So CloudFront can point at any one box, and
   moving it to a new box never cuts off a game on an old one.
 
+## The front door: CloudFront, or the boxes themselves for now
+
+`"frontDoor"` in [infra/config.json](../infra/config.json) says which:
+
+- **`cloudfront`** (the plan): CloudFront holds the HTTPS certificate and follows
+  `origin.<domain>` to the current box; boxes take web traffic from CloudFront only.
+- **`direct`** (for now, until AWS lets the account use CloudFront): the domain's own DNS
+  records point at the boxes. Deploys point the domain and `www` at the box taking players and
+  `staging` at the newest box. Caddy on each box does HTTPS itself with Let's Encrypt
+  ([Caddyfile.direct](Caddyfile.direct)). The certificates live on the shared disk, so every box
+  uses the same ones and a new box never asks for new ones (Let's Encrypt allows only a few
+  duplicates a week). A retiring box keeps answering anyone whose DNS hasn't caught up yet,
+  passing them on to the new box.
+
+Both work the same way otherwise; boxes always pass requests to each other on port 8080.
+
+**Switching to CloudFront** once AWS allows it: set `"frontDoor": "cloudfront"`, deploy the
+stack (it creates CloudFront and replaces the site's DNS records with ones for CloudFront), then
+start a deploy right away. Until the new box (set up for CloudFront) takes over, CloudFront
+reaches a box still set up for direct traffic and the site doesn't load, so do it at a quiet
+time. It's a few minutes.
+
 ## How a deploy works
 
 Each push to main starts the `games-drawer-deploy` CodeBuild project inside the AWS account

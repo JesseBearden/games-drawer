@@ -16,11 +16,24 @@
 #   BUCKET       S3 bucket with release bundles
 #   REGION       AWS region
 #   FILE_SYSTEM  the shared disk's id (fs-…)
+#   FRONT_DOOR   cloudfront (CloudFront in front; HTTPS ends there) or direct (the domain points
+#                at the boxes, and Caddy does HTTPS with certificates kept on the shared disk)
 set -euo pipefail
 tpl="${1:?usage: setup.sh <templates dir>}"
 source /etc/games-drawer/deploy.env
 export DEBIAN_FRONTEND=noninteractive
 export PATH="$PATH:/snap/bin"
+front_door="${FRONT_DOOR:-cloudfront}"
+case "$front_door" in cloudfront | direct) ;; *) echo "FRONT_DOOR must be cloudfront or direct." >&2; exit 1 ;; esac
+
+# ---------------------------------------------------------------- accounts
+# The same user and group ids on every box: they all write to the shared disk. Caddy's account
+# is made before its package, which then uses it (Caddy keeps its certificates on the shared disk).
+getent group games >/dev/null || groupadd --system --gid 1500 games
+id games >/dev/null 2>&1 || useradd --system --uid 1500 --gid 1500 --home-dir /opt/games-drawer --shell /usr/sbin/nologin games
+getent group caddy >/dev/null || groupadd --system --gid 1501 caddy
+id caddy >/dev/null 2>&1 || useradd --system --uid 1501 --gid 1501 --home-dir /var/lib/caddy --create-home --shell /usr/sbin/nologin caddy
+install -d -m 755 /opt/games-drawer /opt/games-drawer/releases /etc/games-drawer
 
 # ---------------------------------------------------------------- packages
 if ! command -v caddy >/dev/null || ! command -v turnserver >/dev/null || ! command -v mount.nfs4 >/dev/null; then
@@ -37,12 +50,6 @@ if ! command -v caddy >/dev/null || ! command -v turnserver >/dev/null || ! comm
 fi
 # Security updates install themselves (Ubuntu's default, made explicit).
 apt-get install -y -q unattended-upgrades >/dev/null
-
-# ---------------------------------------------------------------- account
-# The same user and group ids on every box: they all write to the shared disk.
-getent group games >/dev/null || groupadd --system --gid 1500 games
-id games >/dev/null 2>&1 || useradd --system --uid 1500 --gid 1500 --home-dir /opt/games-drawer --shell /usr/sbin/nologin games
-install -d -m 755 /opt/games-drawer /opt/games-drawer/releases /etc/games-drawer
 
 # ---------------------------------------------------------------- this box (from the EC2 metadata service)
 token="$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"
@@ -68,6 +75,8 @@ done
 mountpoint -q "$mnt" || { echo "Couldn't mount the shared disk ${FILE_SYSTEM}." >&2; exit 1; }
 # Jigsaw saves (every box reads and writes them) and logs (a folder per box; the admin page adds them up).
 install -d -m 750 -o games -g games "$mnt/puzzles" "$mnt/logs" "$mnt/logs/$instance_id"
+# HTTPS certificates, when Caddy does HTTPS (FRONT_DOOR=direct): every box uses the same ones.
+install -d -m 700 -o caddy -g caddy "$mnt/caddy"
 
 # ---------------------------------------------------------------- secrets (shared by every box, in Parameter Store)
 param=/games-drawer/secrets
@@ -120,7 +129,12 @@ fi
 if [ ! -f /etc/caddy/games-drawer-routes.caddy ]; then
   echo 'respond "Starting up. Try again in a minute." 503' > /etc/caddy/games-drawer-routes.caddy
 fi
-install -m 644 "$tpl/Caddyfile" /etc/caddy/Caddyfile.new
+# Caddy keeps certificates on the shared disk, so it waits for it after a reboot.
+install -d -m 755 /etc/systemd/system/caddy.service.d
+printf '[Unit]\nRequiresMountsFor=%s\n' "$mnt" > /etc/systemd/system/caddy.service.d/shared-disk.conf
+systemctl daemon-reload
+sed -e "s|@DOMAIN@|${DOMAIN}|g" "$tpl/Caddyfile.${front_door}" > /etc/caddy/Caddyfile.new
+chmod 644 /etc/caddy/Caddyfile.new
 caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile.new >/dev/null
 if ! cmp -s /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile; then
   mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile
@@ -130,4 +144,4 @@ else
   rm -f /etc/caddy/Caddyfile.new
 fi
 
-echo "Setup done for ${DOMAIN} on ${instance_id} (${public_ip})."
+echo "Setup done for ${DOMAIN} on ${instance_id} (${public_ip}), front door: ${front_door}."

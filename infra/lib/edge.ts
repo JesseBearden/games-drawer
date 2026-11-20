@@ -107,11 +107,12 @@ export class FrontDoor extends Construct {
       },
     });
 
+    // Replacing any plain records deploys made while the boxes were the front door (frontDoor: direct).
     const target = route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(this.distribution));
     names.forEach((name, i) => {
       const id = ['Site', 'Www', 'Staging'][i];
-      new route53.ARecord(this, `${id}V4`, { zone, recordName: name, target });
-      new route53.AaaaRecord(this, `${id}V6`, { zone, recordName: name, target });
+      new route53.ARecord(this, `${id}V4`, { zone, recordName: name, target, deleteExisting: true });
+      new route53.AaaaRecord(this, `${id}V6`, { zone, recordName: name, target, deleteExisting: true });
     });
   }
 }

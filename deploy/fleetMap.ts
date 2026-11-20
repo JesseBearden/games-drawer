@@ -5,15 +5,18 @@
  *
  * Every box can answer any request: a request for a table on another box (its code names that
  * box's slot, sent as ?slot=) is passed to that box over the private network, and new tables
- * go wherever the map says. So the front door (CloudFront) can point at any one box, and moving
- * it to a new box never cuts off a game on an old one.
+ * go wherever the map says. So the front door (CloudFront, or the domain's DNS while CloudFront
+ * isn't available) can point at any one box, and moving it to a new box never cuts off a game
+ * on an old one.
  */
 import { SLOTS, type Slot } from '@tank/shared';
 
 export { SLOTS, type Slot };
 
-/** The game server's port on every box (Caddy on port 80 is what other boxes and CloudFront reach). */
+/** The game server's port on every box (only Caddy, on the same box, talks to it). */
 export const GAME_PORT = 8801;
+/** Caddy's port for requests another box passes on (plain HTTP, over the private network). */
+export const HOP_PORT = 8080;
 /** Header a box adds when it passes a request to another box: "serve this yourself". */
 export const HOP_HEADER = 'X-Gd-Hop';
 
@@ -40,13 +43,13 @@ export function isFleetMap(v: unknown): v is FleetMap {
 /** Caddy lines that send a request to one box: this box's own server, or another box (marked as passed on). */
 function proxyTo(slot: Slot, map: FleetMap, self: Slot): string[] {
   if (slot === self) return [`reverse_proxy 127.0.0.1:${GAME_PORT}`];
-  return [`reverse_proxy ${map.boxes[slot]}:80 {`, `\theader_up ${HOP_HEADER} 1`, '}'];
+  return [`reverse_proxy ${map.boxes[slot]}:${HOP_PORT} {`, `\theader_up ${HOP_HEADER} 1`, '}'];
 }
 
 /** Caddy lines that spread new tables over the boxes taking them. */
 function proxyNewTables(map: FleetMap, self: Slot): string[] {
   if (map.newTables.length === 1) return proxyTo(map.newTables[0][0], map, self);
-  const target = (s: Slot) => (s === self ? `127.0.0.1:${GAME_PORT}` : `${map.boxes[s]}:80`);
+  const target = (s: Slot) => (s === self ? `127.0.0.1:${GAME_PORT}` : `${map.boxes[s]}:${HOP_PORT}`);
   return [
     `reverse_proxy ${map.newTables.map(([s]) => target(s)).join(' ')} {`,
     `\tlb_policy weighted_round_robin ${map.newTables.map(([, w]) => w).join(' ')}`,
