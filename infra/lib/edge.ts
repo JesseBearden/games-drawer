@@ -24,6 +24,12 @@ export class GamesDrawerDnsStack extends cdk.Stack {
     // Kept if the stack is ever deleted: a new zone would get new nameservers to re-enter at the registrar.
     this.zone = new route53.PublicHostedZone(this, 'Zone', { zoneName: props.domain, comment: 'Games Drawer' });
     this.zone.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+
+    // The domain sends no email: say so, so mail servers reject anything forged as coming from it
+    // (the same records Squarespace's DNS had).
+    new route53.TxtRecord(this, 'NoMail', { zone: this.zone, values: ['v=spf1 -all'] });
+    new route53.TxtRecord(this, 'NoMailPolicy', { zone: this.zone, recordName: '_dmarc', values: ['v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s'] });
+    new route53.TxtRecord(this, 'NoMailKeys', { zone: this.zone, recordName: '_domainkey', values: ['v=DKIM1; p='] });
     new cdk.CfnOutput(this, 'NameServers', {
       value: cdk.Fn.join(' ', this.zone.hostedZoneNameServers!),
       description: 'Enter these at the registrar (Squarespace) as the domain’s nameservers',

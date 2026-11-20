@@ -170,7 +170,10 @@ describe('the front door and the DNS zone', () => {
     const app = new cdk.App();
     const dns = Template.fromStack(new GamesDrawerDnsStack(app, 'Dns', { env: { region: 'us-east-2' }, domain: 'games.example.com' }));
     dns.hasResource('AWS::Route53::HostedZone', { DeletionPolicy: 'Retain', Properties: { Name: 'games.example.com.' } });
-    dns.resourceCountIs('AWS::Route53::RecordSet', 0);
+    // It says the domain sends no email, so forged mail "from" it is rejected.
+    dns.hasResourceProperties('AWS::Route53::RecordSet', { Type: 'TXT', Name: 'games.example.com.', ResourceRecords: ['"v=spf1 -all"'] });
+    dns.hasResourceProperties('AWS::Route53::RecordSet', { Type: 'TXT', Name: '_dmarc.games.example.com.', ResourceRecords: ['"v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"'] });
+    dns.resourceCountIs('AWS::Route53::RecordSet', 3);
   });
 });
 
