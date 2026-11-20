@@ -1,11 +1,14 @@
 # AWS setup (CDK)
 
-Two stacks, both code in [lib/](lib) and both in Ohio (the AWS account's organization keeps it
+Three stacks, all code in [lib/](lib) and all in Ohio (the AWS account's organization keeps it
 to that region):
 
 - **GamesDrawerDns** ([edge.ts](lib/edge.ts)): the domain's DNS zone (Route 53), on its own
   and created first, because the registrar has to point the domain at it before AWS will issue
   the HTTPS certificate.
+- **GamesDrawerGitHub** ([github.ts](lib/github.ts)): the link from AWS to the GitHub repo
+  (a CodeConnections connection, through AWS's own GitHub app), on its own because you approve
+  it once on GitHub before deploys can use it.
 - **GamesDrawer** ([stack.ts](lib/stack.ts)): everything else.
   - **The front door:** the HTTPS certificate and CloudFront, which passes players through to
     whichever box `origin.<domain>` points at. CloudFront only takes certificates from
@@ -13,7 +16,10 @@ to that region):
     it there.
   - **The game server boxes and what outlives them:** a launch template that deploys start
     boxes from, a shared disk for Jigsaw saves and logs (EFS), a bucket for release bundles.
-  - **The role GitHub Actions deploys with**, and the spending guardrails.
+  - **The deploy project** (CodeBuild), which deploys each push to main from inside the
+    account. GitHub never signs in to AWS; the organization doesn't allow GitHub sign-in links
+    anyway. GitHub Actions still tests every push and pull request.
+  - **The spending guardrails.**
 
 How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md).
 
@@ -27,7 +33,8 @@ How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md)
 | CloudFront | HTTPS, the front door that never changes | free up to 1 TB and 10 million requests a month |
 | A private bucket for release bundles | Deploys fetch releases from here | pennies |
 | Voice relayed through a box | | free for the first 100 GB a month, then $0.09/GB |
-| Budgets, the kill switch, the GitHub sign-in role | Guardrails and deploy access | free |
+| Deploys (CodeBuild) | Builds, tests and deploys each push to main | free for 100 minutes a month (a deploy takes about 15 to 20), then roughly a dime a deploy |
+| Budgets, the kill switch, the GitHub connection | Guardrails and deploy access | free |
 
 No load balancer or NAT gateway: either one costs more than the server. Game traffic to players
 goes out through CloudFront, so it counts against CloudFront's free terabyte rather than EC2's
@@ -54,7 +61,8 @@ The organization the account belongs to also has its own hard limit at $75; the 
 set lower so the boxes stop (and stop costing) before that locks the account.
 
 **If the kill switch fires:** the site goes down. Check the bill first. Then launch a fresh box,
-which takes the front door straight away (re-run the latest deploy in GitHub Actions, or
+which takes the front door straight away (start the `games-drawer-deploy` project again in the
+CodeBuild console, or
 `npx tsx deploy/fleet.ts launch <commit>` then `promote <commit>`; see
 [deploy/README.md](../deploy/README.md#the-fleet-tool-by-hand)), and terminate the stopped ones
 in the EC2 console. Nothing is lost: saves and logs are on the shared disk.
@@ -96,36 +104,34 @@ Done once, from this computer, after the AWS account is ready.
    nslookup -type=NS gamesdrawer.com 8.8.8.8
    ```
 
-5. Create the rest. The alert email is passed in, never committed, because this repo is public:
+5. Create the link to GitHub, and approve it:
+
+   ```bash
+   npm run infra -- deploy GamesDrawerGitHub --profile games-drawer
+   ```
+
+   It starts out pending. Open the link it prints (`ApproveItHere`), pick
+   **games-drawer-github**, then **Update pending connection**. GitHub asks you to install the
+   **AWS Connector for GitHub** app; let it see the `games-drawer` repository (only that one is
+   needed). The connection then shows **Available**.
+
+6. Create the rest. The alert email is passed in, never committed, because this repo is public:
 
    ```bash
    ALERT_EMAIL=you@example.com npm run infra -- deploy GamesDrawer --profile games-drawer
    ```
 
    It takes 10 to 20 minutes (CloudFront and the certificate are the slow parts) and prints
-   `LaunchTemplateName`, `ReleaseBucket` and `DeployRoleArn`. No box runs yet; the first deploy
+   `LaunchTemplateName`, `ReleaseBucket` and `DeployProject`. No box runs yet; the first deploy
    starts one.
 
-6. Set the admin page's password hash ([deploy/README.md](../deploy/README.md#admin-page)).
+7. Set the admin page's password hash ([deploy/README.md](../deploy/README.md#admin-page)).
 
-7. Tell GitHub Actions where to deploy (these aren't secrets; they only work for this repo's
-   deploy jobs):
-
-   ```bash
-   gh variable set AWS_REGION --body us-east-2
-   gh variable set SITE_DOMAIN --body gamesdrawer.com
-   gh variable set LAUNCH_TEMPLATE --body <LaunchTemplateName>
-   gh variable set RELEASE_BUCKET --body <ReleaseBucket>
-   gh variable set DEPLOY_ROLE_ARN --body <DeployRoleArn>
-   ```
-
-   Optional: `CANARY_PERCENT` (default 10) and `CANARY_MINUTES` (default 10). To approve each
-   production step by hand, add yourself as a required reviewer on the `production`
-   environment in the repository's settings.
-
-8. Push to `main` (or re-run the latest workflow). The first deploy launches the first box,
-   points the front door at it, and installs Node, Caddy and coturn on it, which takes a few
-   minutes.
+8. Push to `main` (or start the `games-drawer-deploy` project in the CodeBuild console). The
+   first deploy launches the first box, points the front door at it, and installs Node, Caddy
+   and coturn on it, which takes a few minutes. Each commit on GitHub shows the deploy's result
+   as a check; the full log is in the CodeBuild console. The canary's share and watch time are
+   `CANARY_PERCENT` and `CANARY_MINUTES` in the project (stack.ts).
 
 9. Optional: pin the machine image, so boxes keep the same Ubuntu image until you choose to
    move on. Put the launch template's image id into `config.json` as `"amiId"`, then deploy the
@@ -146,7 +152,7 @@ Done once, from this computer, after the AWS account is ready.
   Machine setup lives in [deploy/setup.sh](../deploy/setup.sh), which every new box runs.
 - **A bigger box:** change `"instanceType"` in `config.json` (for example `t4g.small`, or
   `c7g.medium` for steady CPU), deploy the stack, then deploy the site.
-- `npm test` checks both stacks (no AWS account needed); `ALERT_EMAIL=… npm run infra -- synth`
+- `npm test` checks the stacks (no AWS account needed); `ALERT_EMAIL=… npm run infra -- synth`
   prints the CloudFormation templates.
 - **Shutting it all down:** `npx tsx deploy/fleet.ts status` to find the boxes and terminate
   them, then `ALERT_EMAIL=… npm run infra -- destroy --all --profile games-drawer`. The DNS zone, the shared

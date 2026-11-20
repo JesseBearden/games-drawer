@@ -1,0 +1,28 @@
+# The deploy, run by AWS CodeBuild (the games-drawer-deploy project, infra/lib/stack.ts) on each
+# push to main. GitHub Actions tests every push and pull request too; this checks again before
+# deploying, since the two run side by side. Then deploy/deploy.sh moves the site to a new box.
+#
+# The project sets SITE_DOMAIN, LAUNCH_TEMPLATE, RELEASE_BUCKET, CANARY_PERCENT and
+# CANARY_MINUTES; CodeBuild sets AWS_REGION and CODEBUILD_RESOLVED_SOURCE_VERSION (the commit).
+version: 0.2
+
+env:
+  variables:
+    CI: 'true'
+  shell: bash
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - npm ci
+  pre_build:
+    commands:
+      - npm run typecheck
+      - npm test
+  build:
+    commands:
+      - npm run release -- --tar
+      - aws s3 cp release.tar.gz "s3://$RELEASE_BUCKET/releases/$CODEBUILD_RESOLVED_SOURCE_VERSION.tar.gz" --only-show-errors
+      - bash deploy/deploy.sh "$CODEBUILD_RESOLVED_SOURCE_VERSION"

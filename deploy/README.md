@@ -28,8 +28,11 @@ players ──HTTPS──▶ CloudFront ──HTTP──▶ origin.<domain> = th
 
 ## How a deploy works
 
-GitHub Actions uploads the release bundle (`npm run release -- --tar`) to S3, then runs the
-fleet tool ([fleet.ts](fleet.ts)) with the deploy role:
+Each push to main starts the `games-drawer-deploy` CodeBuild project inside the AWS account
+([buildspec.yml](buildspec.yml)); GitHub never signs in to AWS. It runs the typecheck and unit
+tests (GitHub Actions does too, side by side), builds the release bundle
+(`npm run release -- --tar`), uploads it to S3, then runs [deploy.sh](deploy.sh), which drives
+the fleet tool ([fleet.ts](fleet.ts)):
 
 1. **launch**: a new box with the release, in a free slot. Its first boot installs the deploy
    command; the fleet tool then has it fetch the release, set itself up ([setup.sh](setup.sh)),
@@ -62,7 +65,8 @@ box stops at once.
 ## The fleet tool by hand
 
 From the repo, with the `games-drawer` AWS profile (needs `AWS_REGION`, `SITE_DOMAIN` and
-`LAUNCH_TEMPLATE`, as in the GitHub variables):
+`LAUNCH_TEMPLATE`, as the deploy project sets them). `bash deploy/deploy.sh <commit>` runs a
+whole deploy this way, for a release already in the bucket:
 
 ```bash
 export AWS_PROFILE=games-drawer AWS_REGION=us-east-2 SITE_DOMAIN=gamesdrawer.com LAUNCH_TEMPLATE=games-drawer-box

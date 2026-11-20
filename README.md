@@ -54,8 +54,9 @@ and builds never look for them.
 
 ## Deploying
 
-GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) tests every pull request.
-Pushes to `main` launch a new server box with the new version. It shows on staging for smoke
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) tests every pull request
+and push. Each push to `main` also starts a deploy inside the AWS account (CodeBuild,
+[deploy/buildspec.yml](deploy/buildspec.yml)), which launches a new server box with the new version. It shows on staging for smoke
 tests, then gets 10% of new tables for 10 minutes. If it stays healthy, it takes all new tables
 and the front door (CloudFront); the old box finishes its games and shuts itself down, so a
 deploy never cuts anyone off. If it isn't, the new box is removed. The AWS side (CloudFront and

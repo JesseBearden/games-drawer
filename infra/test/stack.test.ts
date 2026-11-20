@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
 import { GamesDrawerDnsStack } from '../lib/edge';
+import { GamesDrawerGitHubStack } from '../lib/github';
 import { bootScript, GamesDrawerStack, LAUNCH_TEMPLATE_NAME, type GamesDrawerProps } from '../lib/stack';
 
 function synth(over: Partial<GamesDrawerProps> = {}) {
@@ -14,6 +15,7 @@ function synth(over: Partial<GamesDrawerProps> = {}) {
     zone: dns.zone,
     alertEmail: 'alerts@example.com',
     githubRepo: 'owner/games-drawer',
+    githubConnectionArn: 'arn:aws:codeconnections:us-east-2:123456789012:connection/abc',
     monthlyBudgetUsd: 30,
     killSwitchUsd: 75,
     ...over,
@@ -96,21 +98,27 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     expect(policies).toMatch(/"ec2:StopInstances","Condition":\{"StringEquals":\{"aws:ResourceTag\/project":"games-drawer"\}\}/);
   });
 
-  it('lets only this repo’s staging and production deploy jobs sign in, and only to deploy', () => {
+  it('deploys from inside the account: CodeBuild, on each push to main, reading the repo through the GitHub connection', () => {
+    t.hasResourceProperties('AWS::CodeBuild::Project', {
+      Name: 'games-drawer-deploy',
+      Source: Match.objectLike({
+        Type: 'GITHUB',
+        Location: 'https://github.com/owner/games-drawer.git',
+        BuildSpec: 'deploy/buildspec.yml',
+        Auth: { Type: 'CODECONNECTIONS', Resource: 'arn:aws:codeconnections:us-east-2:123456789012:connection/abc' },
+      }),
+      Triggers: { Webhook: true, FilterGroups: [[{ Type: 'EVENT', Pattern: 'PUSH' }, { Type: 'HEAD_REF', Pattern: 'refs/heads/main' }]] },
+      ConcurrentBuildLimit: 1,
+      Environment: Match.objectLike({ ComputeType: 'BUILD_GENERAL1_SMALL' }),
+    });
+    // Its role belongs to CodeBuild alone: no GitHub sign-in link (the organization doesn't allow one).
+    t.resourceCountIs('AWS::IAM::OIDCProvider', 0);
     t.hasResourceProperties('AWS::IAM::Role', {
-      AssumeRolePolicyDocument: {
-        Statement: [
-          Match.objectLike({
-            Action: 'sts:AssumeRoleWithWebIdentity',
-            Condition: {
-              StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
-              StringLike: { 'token.actions.githubusercontent.com:sub': ['repo:owner/games-drawer:environment:staging', 'repo:owner/games-drawer:environment:production'] },
-            },
-          }),
-        ],
-      },
+      Description: Match.stringLikeRegexp('CodeBuild'),
+      AssumeRolePolicyDocument: { Statement: [Match.objectLike({ Action: 'sts:AssumeRole', Principal: { Service: 'codebuild.amazonaws.com' } })] },
     });
     const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+    expect(policies).toContain('"codeconnections:UseConnection"');
     // The boxes may read the admin password hash and their shared secrets, and no other parameter.
     expect(policies).toContain('parameter/games-drawer/admin-password-hash');
     expect(policies).toContain('parameter/games-drawer/secrets');
@@ -118,13 +126,7 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     expect(policies).toContain('"route53:ChangeResourceRecordSetsNormalizedRecordNames":["origin.games.example.com"]');
     expect(policies).toMatch(/"ec2:TerminateInstances"\],"Condition":\{"StringEquals":\{"aws:ResourceTag\/project":"games-drawer"\}\}/);
     // Nothing broad: no wildcard actions anywhere.
-    expect(policies).not.toMatch(/"Action":"\*"|"[a-z0-9]+:\*"/);
-  });
-
-  it('can reuse an existing GitHub sign-in provider', () => {
-    const t2 = synth({ githubOidcProviderArn: 'arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com' });
-    t2.resourceCountIs('AWS::IAM::OIDCProvider', 0);
-    t.resourceCountIs('AWS::IAM::OIDCProvider', 1);
+    expect(policies).not.toMatch(/"Action":"\*"|"[a-z0-9-]+:\*"/);
   });
 
   it('pins the machine image once one is chosen', () => {
@@ -174,6 +176,14 @@ describe('the front door and the DNS zone', () => {
     dns.hasResourceProperties('AWS::Route53::RecordSet', { Type: 'TXT', Name: 'games.example.com.', ResourceRecords: ['"v=spf1 -all"'] });
     dns.hasResourceProperties('AWS::Route53::RecordSet', { Type: 'TXT', Name: '_dmarc.games.example.com.', ResourceRecords: ['"v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"'] });
     dns.resourceCountIs('AWS::Route53::RecordSet', 3);
+  });
+});
+
+describe('the link to GitHub', () => {
+  it('is a GitHub connection on its own, waiting to be approved', () => {
+    const app = new cdk.App();
+    const t = Template.fromStack(new GamesDrawerGitHubStack(app, 'GitHub', { env: { region: 'us-east-2' } }));
+    t.hasResourceProperties('AWS::CodeConnections::Connection', { ConnectionName: 'games-drawer-github', ProviderType: 'GitHub' });
   });
 });
 

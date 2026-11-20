@@ -1,6 +1,6 @@
 /**
- * The fleet tool: runs a deploy across game server boxes. GitHub Actions runs it (with the
- * deploy role), and so can you, from the repo, with the games-drawer AWS profile:
+ * The fleet tool: runs a deploy across game server boxes. deploy.sh runs it (in CodeBuild, with
+ * the deploy project's role), and so can you, from the repo, with the games-drawer AWS profile:
  *
  *   npx tsx deploy/fleet.ts launch <release>             a new box with this release (staging shows it)
  *   npx tsx deploy/fleet.ts canary <release> <percent>   send it that share of new tables
@@ -11,8 +11,8 @@
  *   npx tsx deploy/fleet.ts rollback <release>           remove the new box; the current one keeps everything
  *   npx tsx deploy/fleet.ts status                       the live boxes, and where the front door points
  *
- * Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (the stack's LaunchTemplateName output) in
- * the environment, and the AWS CLI. Boxes are EC2 instances tagged project=games-drawer; their
+ * Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (the stack's LaunchTemplateName output; the
+ * deploy project sets all three) in the environment, and the AWS CLI. Boxes are EC2 instances tagged project=games-drawer; their
  * gd:role tag says what each one is doing:
  *   candidate  the new release, on trial (staging, then maybe a canary share of new tables)
  *   current    takes new tables; CloudFront's origin (origin.<domain>) points at it

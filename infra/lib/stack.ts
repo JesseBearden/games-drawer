@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import * as cdk from 'aws-cdk-lib';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
 import * as ce from 'aws-cdk-lib/aws-ce';
+import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as efs from 'aws-cdk-lib/aws-efs';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -30,8 +31,10 @@ export interface GamesDrawerProps extends cdk.StackProps {
   zone: route53.IHostedZone;
   /** Where budget alerts go. Passed in at deploy time, never committed (the repo is public). */
   alertEmail: string;
-  /** owner/name of the GitHub repository allowed to deploy. */
+  /** owner/name of the GitHub repository whose pushes to main deploy. */
   githubRepo: string;
+  /** The link to GitHub the deploy project reads the repo through (the GamesDrawerGitHub stack, github.ts). */
+  githubConnectionArn: string;
   /** Email alerts at 50% and 80% of this, and when the month is forecast to go over. */
   monthlyBudgetUsd: number;
   /** At this much actual spend in a month, AWS stops every game server box by itself. */
@@ -39,8 +42,6 @@ export interface GamesDrawerProps extends cdk.StackProps {
   instanceType?: string;
   /** Pin the machine image (see infra/README.md); otherwise each stack update takes Ubuntu's latest for the boxes launched after it. */
   amiId?: string;
-  /** An account can hold only one GitHub sign-in provider; reuse it if one exists. */
-  githubOidcProviderArn?: string;
   /** Extra cost-spike alerts. New AWS accounts usually have AWS's own default monitor already. */
   anomalyAlerts?: boolean;
 }
@@ -49,8 +50,9 @@ export interface GamesDrawerProps extends cdk.StackProps {
  * Where the game servers run: disposable boxes, launched one per deploy from a launch template
  * (the old box finishes its games and shuts itself down; deploy/README.md), and what outlives
  * them: the shared disk for Jigsaw saves and logs (EFS), release bundles (S3), secrets
- * (Parameter Store, made by the first box). Plus the role GitHub Actions deploys with, and the
- * spending guardrails, and the front door (CloudFront and its certificate, edge.ts).
+ * (Parameter Store, made by the first box). Plus the deploy project (CodeBuild, which deploys
+ * each push to main from inside the account), the spending guardrails, and the front door
+ * (CloudFront and its certificate, edge.ts).
  *
  * Deliberately no load balancer or NAT gateway: either costs more than the server. The only
  * Lambda functions are the kill switch and two that run at deploy time (a lookup, and the
@@ -159,24 +161,58 @@ export class GamesDrawerStack extends cdk.Stack {
       },
     });
 
-    // ------------------------------------------------------------ deploys from GitHub Actions
-    // GitHub signs each workflow run in with a short-lived token; no AWS keys are stored anywhere.
-    const providerArn =
-      props.githubOidcProviderArn ??
-      new iam.CfnOIDCProvider(this, 'GitHubSignIn', {
-        url: 'https://token.actions.githubusercontent.com',
-        clientIdList: ['sts.amazonaws.com'],
-      }).attrArn;
+    // ------------------------------------------------------------ deploys, run by the account itself
+    // CodeBuild deploys each push to main (deploy/buildspec.yml, deploy/deploy.sh). It reads the
+    // repo through the GitHub connection, which you approve once; GitHub never signs in to AWS,
+    // and nothing secret is stored anywhere. (The account's organization doesn't allow GitHub
+    // sign-in links anyway.) One deploy at a time; a push during one waits its turn.
     const deployRole = new iam.Role(this, 'DeployRole', {
-      description: 'GitHub Actions deploys of Games Drawer (staging and production environments only)',
-      maxSessionDuration: cdk.Duration.hours(2),
-      assumedBy: new iam.WebIdentityPrincipal(providerArn, {
-        StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
-        StringLike: {
-          'token.actions.githubusercontent.com:sub': [`repo:${props.githubRepo}:environment:staging`, `repo:${props.githubRepo}:environment:production`],
-        },
-      }),
+      description: 'Games Drawer deploys (the games-drawer-deploy CodeBuild project)',
+      assumedBy: new iam.ServicePrincipal('codebuild.amazonaws.com'),
     });
+    const [owner, repo] = props.githubRepo.split('/');
+    const deployProject = new codebuild.Project(this, 'Deploy', {
+      projectName: 'games-drawer-deploy',
+      description: 'Deploys Games Drawer on each push to main, a box at a time (deploy/README.md)',
+      role: deployRole,
+      source: codebuild.Source.gitHub({
+        owner,
+        repo,
+        cloneDepth: 1,
+        reportBuildStatus: true,
+        webhook: true,
+        webhookFilters: [codebuild.FilterGroup.inEventOf(codebuild.EventAction.PUSH).andBranchIs('main')],
+      }),
+      buildSpec: codebuild.BuildSpec.fromSourceFilename('deploy/buildspec.yml'),
+      // The small Ubuntu machine: the one CodeBuild's free monthly minutes cover.
+      environment: { buildImage: codebuild.LinuxBuildImage.STANDARD_7_0, computeType: codebuild.ComputeType.SMALL },
+      environmentVariables: {
+        SITE_DOMAIN: { value: props.domain },
+        LAUNCH_TEMPLATE: { value: LAUNCH_TEMPLATE_NAME },
+        RELEASE_BUCKET: { value: releases.bucketName },
+        CANARY_PERCENT: { value: '10' },
+        CANARY_MINUTES: { value: '10' },
+      },
+      timeout: cdk.Duration.hours(1),
+      queuedTimeout: cdk.Duration.hours(8),
+      concurrentBuildLimit: 1,
+      logging: { cloudWatch: { logGroup: new logs.LogGroup(this, 'DeployLogs', { retention: logs.RetentionDays.THREE_MONTHS, removalPolicy: cdk.RemovalPolicy.DESTROY }) } },
+    });
+    // Fetch the repo (and watch it for pushes) through the GitHub connection.
+    (deployProject.node.defaultChild as codebuild.CfnProject).addPropertyOverride('Source.Auth', { Type: 'CODECONNECTIONS', Resource: props.githubConnectionArn });
+    deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'codeconnections:GetConnection',
+          'codeconnections:GetConnectionToken',
+          'codeconnections:UseConnection',
+          'codestar-connections:GetConnection',
+          'codestar-connections:GetConnectionToken',
+          'codestar-connections:UseConnection',
+        ],
+        resources: [props.githubConnectionArn],
+      }),
+    );
     releases.grantPut(deployRole, 'releases/*');
     const ec2Arn = (what: string) => `arn:${this.partition}:ec2:${this.region}:${this.account}:${what}`;
     const ours = { StringEquals: { 'aws:ResourceTag/project': 'games-drawer' } };
@@ -282,7 +318,7 @@ export class GamesDrawerStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DistributionId', { value: frontDoor.distribution.distributionId });
     new cdk.CfnOutput(this, 'LaunchTemplateName', { value: LAUNCH_TEMPLATE_NAME });
     new cdk.CfnOutput(this, 'ReleaseBucket', { value: releases.bucketName });
-    new cdk.CfnOutput(this, 'DeployRoleArn', { value: deployRole.roleArn });
+    new cdk.CfnOutput(this, 'DeployProject', { value: deployProject.projectName });
     new cdk.CfnOutput(this, 'SharedDiskId', { value: sharedDisk.fileSystemId });
   }
 }
