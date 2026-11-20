@@ -1,14 +1,17 @@
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
-import { GamesDrawerEdgeStack } from '../lib/edge';
+import { GamesDrawerDnsStack } from '../lib/edge';
 import { bootScript, GamesDrawerStack, LAUNCH_TEMPLATE_NAME, type GamesDrawerProps } from '../lib/stack';
 
 function synth(over: Partial<GamesDrawerProps> = {}) {
   const app = new cdk.App();
+  const env = { region: 'us-east-2' };
+  const dns = new GamesDrawerDnsStack(app, 'Dns', { env, domain: 'games.example.com' });
   const stack = new GamesDrawerStack(app, 'Test', {
-    env: { region: 'us-east-2' },
+    env,
     domain: 'games.example.com',
+    zone: dns.zone,
     alertEmail: 'alerts@example.com',
     githubRepo: 'owner/games-drawer',
     monthlyBudgetUsd: 30,
@@ -136,12 +139,16 @@ describe('Games Drawer AWS stack (the boxes)', () => {
   });
 });
 
-describe('Games Drawer edge stack (the front door)', () => {
-  const app = new cdk.App();
-  const t = Template.fromStack(new GamesDrawerEdgeStack(app, 'Edge', { env: { region: 'us-east-1' }, domain: 'games.example.com' }));
+describe('the front door and the DNS zone', () => {
+  const t = synth();
 
   it('answers for the domain, www and staging over HTTPS, and passes everything to the box uncached', () => {
-    t.hasResourceProperties('AWS::CertificateManager::Certificate', { DomainName: 'games.example.com', SubjectAlternativeNames: ['www.games.example.com', 'staging.games.example.com'] });
+    // The certificate is asked for in us-east-1 (CloudFront's region) from this stack: the organization allows no stacks there.
+    t.hasResourceProperties('AWS::CloudFormation::CustomResource', {
+      DomainName: 'games.example.com',
+      SubjectAlternativeNames: ['www.games.example.com', 'staging.games.example.com'],
+      Region: 'us-east-1',
+    });
     t.hasResourceProperties('AWS::CloudFront::Distribution', {
       DistributionConfig: Match.objectLike({
         Aliases: ['games.example.com', 'www.games.example.com', 'staging.games.example.com'],
@@ -155,12 +162,15 @@ describe('Games Drawer edge stack (the front door)', () => {
         CacheBehaviors: [Match.objectLike({ PathPattern: '/assets/*', CachePolicyId: '658327ea-f89d-4fab-a63d-7e88639e58f6' })],
       }),
     });
-  });
-
-  it('keeps the domain’s DNS zone even if the stack goes', () => {
-    t.hasResource('AWS::Route53::HostedZone', { DeletionPolicy: 'Retain', Properties: { Name: 'games.example.com.' } });
     // The site, www and staging all point at CloudFront (IPv4 and IPv6). origin. is left to deploys.
     t.resourceCountIs('AWS::Route53::RecordSet', 6);
+  });
+
+  it('keeps the domain’s DNS zone on its own, even if the stack goes', () => {
+    const app = new cdk.App();
+    const dns = Template.fromStack(new GamesDrawerDnsStack(app, 'Dns', { env: { region: 'us-east-2' }, domain: 'games.example.com' }));
+    dns.hasResource('AWS::Route53::HostedZone', { DeletionPolicy: 'Retain', Properties: { Name: 'games.example.com.' } });
+    dns.resourceCountIs('AWS::Route53::RecordSet', 0);
   });
 });
 

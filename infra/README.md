@@ -1,14 +1,19 @@
 # AWS setup (CDK)
 
-Two stacks, both code in [lib/](lib):
+Two stacks, both code in [lib/](lib) and both in Ohio (the AWS account's organization keeps it
+to that region):
 
-- **GamesDrawerEdge** ([edge.ts](lib/edge.ts), in us-east-1, where CloudFront's certificates
-  must live): the front door. The domain's DNS (Route 53), its HTTPS certificate, and
-  CloudFront, which passes players through to whichever box `origin.<domain>` points at.
-- **GamesDrawer** ([stack.ts](lib/stack.ts), in Ohio): the game server boxes and what outlives
-  them. A launch template that deploys start boxes from, a shared disk for Jigsaw saves and logs
-  (EFS), a bucket for release bundles, the role GitHub Actions deploys with, and the spending
-  guardrails.
+- **GamesDrawerDns** ([edge.ts](lib/edge.ts)): the domain's DNS zone (Route 53), on its own
+  and created first, because the registrar has to point the domain at it before AWS will issue
+  the HTTPS certificate.
+- **GamesDrawer** ([stack.ts](lib/stack.ts)): everything else.
+  - **The front door:** the HTTPS certificate and CloudFront, which passes players through to
+    whichever box `origin.<domain>` points at. CloudFront only takes certificates from
+    us-east-1; the organization allows certificates there but no stacks, so this stack asks for
+    it there.
+  - **The game server boxes and what outlives them:** a launch template that deploys start
+    boxes from, a shared disk for Jigsaw saves and logs (EFS), a bucket for release bundles.
+  - **The role GitHub Actions deploys with**, and the spending guardrails.
 
 How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md).
 
@@ -31,7 +36,7 @@ data-out charges.
 ## Spending guardrails
 
 - **Alerts:** an email at 50% and 80% of $30 in a month, and when AWS forecasts the month going over.
-- **Kill switch:** when actual spend for the month reaches $75, AWS Budgets emails you and
+- **Kill switch:** when actual spend for the month reaches $65, AWS Budgets emails you and
   triggers a small function that stops every game server box (it finds them by their
   `project=games-drawer` tag, since boxes change with every deploy). Billing data lags by a few
   hours, so it's a backstop, not a hard cap.
@@ -45,6 +50,8 @@ data-out charges.
 - Change the amounts in [config.json](config.json).
 
 These budgets watch the whole AWS account, so they work best in an account used only for this.
+The organization the account belongs to also has its own hard limit at $75; the kill switch is
+set lower so the boxes stop (and stop costing) before that locks the account.
 
 **If the kill switch fires:** the site goes down. Check the bill first. Then launch a fresh box,
 which takes the front door straight away (re-run the latest deploy in GitHub Actions, or
@@ -67,42 +74,37 @@ Done once, from this computer, after the AWS account is ready.
 2. The domain is `gamesdrawer.com` (`"domain"` in `config.json`). Staging is
    `staging.gamesdrawer.com`, and `www.` redirects to the plain domain.
 
-3. One-time CDK set-up for the account, in both regions (a small bucket and roles CDK uses to
-   deploy). Every `npm run infra` command needs the alert email in front, because the repo
-   can't hold it:
+3. One-time CDK set-up for the account (a small bucket and roles CDK uses to deploy):
 
    ```bash
-   ALERT_EMAIL=you@example.com npm run infra -- bootstrap aws://<account id>/us-east-2 aws://<account id>/us-east-1 --profile games-drawer
+   npm run infra -- bootstrap aws://<account id>/us-east-2 --profile games-drawer
    ```
 
-4. Create the front door, and move the domain's DNS to it. Start the deploy:
+4. Create the domain's DNS zone, and move the domain to it:
 
    ```bash
-   ALERT_EMAIL=you@example.com npm run infra -- deploy GamesDrawerEdge --profile games-drawer
+   npm run infra -- deploy GamesDrawerDns --profile games-drawer
    ```
 
-   It creates the domain's DNS zone in Route 53, then waits for the HTTPS certificate, which
-   AWS only issues once the domain's DNS really is Route 53. So while it waits, in another
-   terminal, get the zone's four nameservers:
+   It prints `NameServers`: four names. Enter them at Squarespace, where the domain is
+   registered: **Domains → gamesdrawer.com → DNS → Nameservers → Use custom nameservers**. The
+   domain stays registered at Squarespace; only its DNS moves. (Squarespace's own DNS records
+   stop applying. If the domain ever gets email, its MX records go in Route 53 instead.) The
+   change usually spreads within an hour; this shows the Route 53 names once it has:
 
    ```bash
-   aws route53 get-hosted-zone --profile games-drawer --id "$(aws route53 list-hosted-zones-by-name --profile games-drawer --dns-name gamesdrawer.com --query 'HostedZones[0].Id' --output text)" --query DelegationSet.NameServers
+   nslookup -type=NS gamesdrawer.com 8.8.8.8
    ```
 
-   and enter them at Squarespace, where the domain is registered: **Domains → gamesdrawer.com
-   → DNS → Nameservers → Use custom nameservers**. The domain stays registered at Squarespace;
-   only its DNS moves. (Squarespace's own DNS records stop applying. If the domain ever gets
-   email, its MX records go in Route 53 instead.) The deploy finishes once the change has
-   spread, usually within an hour. It prints `NameServers` too.
-
-5. Create the rest:
+5. Create the rest. The alert email is passed in, never committed, because this repo is public:
 
    ```bash
    ALERT_EMAIL=you@example.com npm run infra -- deploy GamesDrawer --profile games-drawer
    ```
 
-   It prints `LaunchTemplateName`, `ReleaseBucket` and `DeployRoleArn`. No box runs yet; the
-   first deploy starts one.
+   It takes 10 to 20 minutes (CloudFront and the certificate are the slow parts) and prints
+   `LaunchTemplateName`, `ReleaseBucket` and `DeployRoleArn`. No box runs yet; the first deploy
+   starts one.
 
 6. Set the admin page's password hash ([deploy/README.md](../deploy/README.md#admin-page)).
 
@@ -138,15 +140,15 @@ Done once, from this computer, after the AWS account is ready.
 
 ## Day to day
 
-- `ALERT_EMAIL=… npm run infra -- diff --all --profile games-drawer` shows what a change would
-  do; `deploy --all` applies it. A change to the launch template (instance size, image, first-boot
+- `ALERT_EMAIL=… npm run infra -- diff GamesDrawer --profile games-drawer` shows what a change
+  would do; `deploy GamesDrawer` applies it. A change to the launch template (instance size, image, first-boot
   script) takes effect with the next box, so with the next deploy; nothing running is replaced.
   Machine setup lives in [deploy/setup.sh](../deploy/setup.sh), which every new box runs.
 - **A bigger box:** change `"instanceType"` in `config.json` (for example `t4g.small`, or
   `c7g.medium` for steady CPU), deploy the stack, then deploy the site.
-- `npm test` checks both stacks (no AWS account needed); `npm run infra -- synth` prints the
-  CloudFormation templates.
+- `npm test` checks both stacks (no AWS account needed); `ALERT_EMAIL=… npm run infra -- synth`
+  prints the CloudFormation templates.
 - **Shutting it all down:** `npx tsx deploy/fleet.ts status` to find the boxes and terminate
-  them, then `npm run infra -- destroy --all --profile games-drawer`. The DNS zone, the shared
+  them, then `ALERT_EMAIL=… npm run infra -- destroy --all --profile games-drawer`. The DNS zone, the shared
   disk and the releases bucket are kept so a slip can't lose them; delete them in the console
   if you really mean it.

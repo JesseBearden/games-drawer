@@ -8,12 +8,14 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as efs from 'aws-cdk-lib/aws-efs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import type * as route53 from 'aws-cdk-lib/aws-route53';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { FrontDoor } from './edge';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -23,8 +25,9 @@ export const UBUNTU_AMI_PARAMETER = '/aws/service/canonical/ubuntu/server/24.04/
 export const LAUNCH_TEMPLATE_NAME = 'games-drawer-box';
 
 export interface GamesDrawerProps extends cdk.StackProps {
-  /** The site's domain (its DNS and CloudFront are in the edge stack, edge.ts). */
+  /** The site's domain, and its DNS zone (the GamesDrawerDns stack, edge.ts). */
   domain: string;
+  zone: route53.IHostedZone;
   /** Where budget alerts go. Passed in at deploy time, never committed (the repo is public). */
   alertEmail: string;
   /** owner/name of the GitHub repository allowed to deploy. */
@@ -47,11 +50,11 @@ export interface GamesDrawerProps extends cdk.StackProps {
  * (the old box finishes its games and shuts itself down; deploy/README.md), and what outlives
  * them: the shared disk for Jigsaw saves and logs (EFS), release bundles (S3), secrets
  * (Parameter Store, made by the first box). Plus the role GitHub Actions deploys with, and the
- * spending guardrails. The front door (CloudFront and DNS) is the edge stack.
+ * spending guardrails, and the front door (CloudFront and its certificate, edge.ts).
  *
  * Deliberately no load balancer or NAT gateway: either costs more than the server. The only
- * Lambda functions are the kill switch and a one-off lookup at deploy time; both are free at
- * this use.
+ * Lambda functions are the kill switch and two that run at deploy time (a lookup, and the
+ * certificate); all are free at this use.
  */
 export class GamesDrawerStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: GamesDrawerProps) {
@@ -272,7 +275,11 @@ export class GamesDrawerStack extends cdk.Stack {
       });
     }
 
+    // ------------------------------------------------------------ the front door
+    const frontDoor = new FrontDoor(this, 'FrontDoor', { domain: props.domain, zone: props.zone });
+
     // ------------------------------------------------------------ what the deploy workflow needs
+    new cdk.CfnOutput(this, 'DistributionId', { value: frontDoor.distribution.distributionId });
     new cdk.CfnOutput(this, 'LaunchTemplateName', { value: LAUNCH_TEMPLATE_NAME });
     new cdk.CfnOutput(this, 'ReleaseBucket', { value: releases.bucketName });
     new cdk.CfnOutput(this, 'DeployRoleArn', { value: deployRole.roleArn });
