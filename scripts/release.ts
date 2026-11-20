@@ -61,7 +61,8 @@ fs.writeFileSync(path.join(out, 'RELEASE'), release + '\n');
 if (tar) {
   const file = path.join(root, 'release.tar.gz');
   fs.rmSync(file, { force: true });
-  execFileSync('tar', ['-czf', file, '-C', out, '.'], { stdio: 'inherit' });
+  // Relative paths: on Windows, GNU tar takes the "C:" of a full path for a remote machine.
+  execFileSync('tar', ['-czf', path.relative(root, file), '-C', path.relative(root, out), '.'], { cwd: root, stdio: 'inherit' });
   console.log(`Wrote release.tar.gz (${(fs.statSync(file).size / 1e6).toFixed(1)} MB)`);
 }
 console.log(`Release ${release.slice(0, 7)} is in release/`);
