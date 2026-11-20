@@ -221,8 +221,11 @@ export class Fleet {
 
 // ---------------------------------------------------------------- AWS, through the AWS CLI
 
+// UTF-8 output: on Windows the AWS CLI otherwise can't print what a box says (it uses → and …).
+const awsEnv = { ...process.env, PYTHONUTF8: '1' };
+
 function aws(args: string[]): unknown {
-  const out = execFileSync('aws', [...args, '--output', 'json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+  const out = execFileSync('aws', [...args, '--output', 'json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: awsEnv });
   return out.trim() ? JSON.parse(out) : null;
 }
 
@@ -281,7 +284,7 @@ export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
       ]) as { Instances: { InstanceId: string }[] };
       const id = res.Instances[0].InstanceId;
       this.log(`Started ${id}; waiting for it to boot…`);
-      execFileSync('aws', ['ec2', 'wait', 'instance-running', '--instance-ids', id], { stdio: 'inherit' });
+      execFileSync('aws', ['ec2', 'wait', 'instance-running', '--instance-ids', id], { stdio: 'inherit', env: awsEnv });
       for (let i = 0; i < 72; i++) {
         const info = aws(['ssm', 'describe-instance-information', '--filters', `Key=InstanceIds,Values=${id}`]) as { InstanceInformationList: { PingStatus: string }[] };
         if (info.InstanceInformationList[0]?.PingStatus === 'Online') return describe([`Name=instance-id,Values=${id}`])[0];
@@ -319,7 +322,7 @@ export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
       // A one-minute TTL, so a new box takes over within a minute or two.
       const batch = { Changes: names.map((Name) => ({ Action: 'UPSERT', ResourceRecordSet: { Name, Type: 'A', TTL: 60, ResourceRecords: [{ Value: ip }] } })) };
       const res = aws(['route53', 'change-resource-record-sets', '--hosted-zone-id', zone(), '--change-batch', JSON.stringify(batch)]) as { ChangeInfo: { Id: string } };
-      execFileSync('aws', ['route53', 'wait', 'resource-record-sets-changed', '--id', res.ChangeInfo.Id], { stdio: 'inherit' });
+      execFileSync('aws', ['route53', 'wait', 'resource-record-sets-changed', '--id', res.ChangeInfo.Id], { stdio: 'inherit', env: awsEnv });
       this.log(`${names.join(', ')} → ${ip}`);
     },
     pointsTo(name) {
