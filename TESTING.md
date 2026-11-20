@@ -544,5 +544,8 @@ The deploy pipeline is built and tested here, but its first real run needs the A
 - [ ] Voice relay: open a table link with `?relay=1` on the end on two phones using cell
       data. Each person in the voice panel should show "(relayed)".
 - [ ] A friend in another house joins your table and you talk while playing.
+- [ ] **Link preview** (after the next push): send a new invite in Messages. The picture is felt
+      now (felt hands with a yellow and a red piece, "Play a game together."), not the paper
+      one. A link you sent before keeps its old picture, so send a fresh one.
 - [ ] Admin page: put the password's hash in Parameter Store (command in deploy/README.md),
       deploy, then sign in at gamesdrawer.com/admin from your phone.
