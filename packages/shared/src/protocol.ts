@@ -226,6 +226,8 @@ export interface ChatMessage {
   /** Server time, ms since epoch. */
   at: number;
   system?: boolean;
+  /** On "Liz is here." and "Liz left.": who came or went (their alias). Arrivals pop up. */
+  notice?: { kind: 'arrive' | 'leave'; alias: string };
   /** Caught by the chat filter: only the sender sees it (shown dimmed, marked as not sent). */
   hidden?: boolean;
 }

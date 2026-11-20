@@ -138,7 +138,7 @@ test('an invite made for someone by name fills it in for them @smoke', async ({ 
   await expect(friend.locator('#join-name-shown')).toHaveText('Liz');
   await friend.getByRole('button', { name: 'Join with mic off' }).click();
   await expect(friend.locator('#game')).toHaveAttribute('data-view', 'jigsaw');
-  await expect(host.locator('#chat-log')).toContainText('Liz joined');
+  await expect(host.locator('#chat-log')).toContainText('Liz is here');
   await friend.context().close();
 });
 

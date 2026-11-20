@@ -172,6 +172,12 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
   game starts when everyone here is ready: someone away doesn't hold it up, and the computer
   plays the empty seats. A game's own page (`/dominoes`) opens the table with that game picked.
   Switch game brings everyone back here with nothing picked.
+- **The way in keeps still from page to page** (user, 2026-11-20): home, Start a table and a
+  table's invite page show the hands-and-puzzle picture at exactly the same size, and their buttons
+  at the same width, so going from one to the next doesn't zoom. Each fits one screen, down to an
+  iPad mini on its side in Safari: on shorter screens the picture and the spacing shrink, the same
+  on every page. Scrolling isn't switched off (big text or a phone held sideways still needs it),
+  and where a page scrolls, its felt moves with it.
 - **A paper bar across the top:** Mute mic, Messages, Invite, Menu. The game sits below it, never
   under it.
 - **The mic button says what it will do:** Mute mic (cobalt), or Unmute mic / Turn on mic
@@ -183,6 +189,14 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
   Jigsaw's New puzzle) go at its top, above Switch game and Leave table, not in the game's tools.
 - **Game tools stay on one row**, even on a 360 px phone (smaller text before a second row).
 - **Messages is a sheet of sky paper.** Others' notes are paper, yours are cobalt.
+- **Messages starts closed when everyone at the table has their mic on** (user, 2026-11-20):
+  talking, nobody needs it. Otherwise it starts open where there's room beside the game (a
+  laptop, an iPad on its side) and closed on phones. Once you open or close it yourself, it stays
+  as you left it.
+- **Little notes pop up over the game** and go by themselves: someone arriving ("Miranda is
+  here.", with the join sound), and other people's messages while Messages is closed ("Sammy: I
+  can't hear you"), which also count on the button's red dot. Arrivals and leavings are never
+  counted as unread, and leavings don't pop up.
 - **Before you join, the join page names everyone at the table:** "Join Jesse, Sam and Mory for a
   puzzle." That way you can back out before you're in a room with someone you'd rather avoid. The
   list refreshes while the page is open.
@@ -236,6 +250,12 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 - **Jigsaw** is played on the mat too. The frame where the finished picture goes is cream paper
   with a dashed ink edge, and the tools are a paper strip along the bottom (it wraps onto two rows
   on phones rather than hiding buttons off the edge). Chosen options are cobalt.
+  - **Everyone else's pointer** is a dot in their color with their name beside it. It fades a
+    few seconds after they stop moving. **While they talk, rings ripple out from it** and it
+    stays, at their last spot, so you can see who's talking and where they're working (user,
+    2026-11-20: that does the job of name tags here). With less motion asked for, it's a steady
+    ring instead. The pointers are page elements over the table, not drawn on it, so the pulse
+    doesn't redraw the puzzle every frame.
 - **Tanks** is a cut-paper scene:
   - a paper sky with paper clouds
   - torn-paper hills (lilac far away, mint nearer)

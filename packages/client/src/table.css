@@ -175,6 +175,14 @@
   box-shadow: var(--lift-2);
   font-family: var(--font);
 }
+/* A message popping up while Messages is closed: who in bold, what they said plainly. */
+#game .toasts .toast-chat {
+  font-weight: 400;
+  text-align: left;
+}
+#game .toasts .toast-chat b {
+  font-weight: 800;
+}
 
 #game .overlay {
   background: rgb(17 40 117 / 0.35);

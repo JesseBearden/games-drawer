@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-18_
+_Last updated: 2026-11-20_
 
 ## Getting set up
 
@@ -476,6 +476,38 @@ is saved with the sender's name so it can be looked at later.
 - [ ] Tap someone else's message → Report: its line in that file (`reported`) has the words
       and who sent them.
 - [ ] The admin page's chat numbers (messages sent, blocked, reported) still count up.
+
+## The way in keeps still (new)
+
+- [ ] On the iPad (either way up), the phone and the computer: tap **Start a table** on home. The
+      picture stays the same size and the buttons the same width; nothing zooms. The same going
+      to a table's invite link. **Start with mic on** shows without scrolling (on a phone held
+      sideways it may need a little scroll).
+- [ ] **Nothing to scroll on the iPad:** on its side in Safari, home, Start a table and an invite
+      page each fit on one screen (logo to "Chat messages are erased…"), so scrolling with a
+      finger or the mouse moves nothing and the logo never slides off the top. (The very first
+      time, with an empty name box, Start a table may be a little taller on an iPad mini.)
+- [ ] **Where a page does scroll** (a phone held sideways, or bigger text in the iPad's
+      settings), the felt moves with the words instead of staying still behind them.
+- [ ] Tapping into the table-code box on the iPad still brings up the iPad's keyboard bar, and
+      Safari slides the page up for it; that part is the iPad's.
+
+## Who's here, and Messages (new)
+
+- [ ] **Someone arrives:** when Miranda joins your table, "Miranda is here." pops up over the
+      game for a few seconds, with the little join sound. It doesn't put a red dot on Messages.
+      Leaving doesn't pop up.
+- [ ] **A message while Messages is closed** pops up too, with their name in bold ("Sammy: I
+      can't hear you"), and the red dot still shows on Messages. A long message is cut short in
+      the pop-up; Messages has all of it.
+- [ ] **Messages starts closed when every mic is on:** on the computer, start a table with your
+      mic on and Messages starts closed; with your mic off it starts open. Join a table where
+      someone has their mic off (with yours on): it starts open. On phones it always starts
+      closed. Once you open or close it, it stays that way.
+- [ ] **Puzzle: who's talking.** On two devices with mics on, the other person's pointer and
+      name ripple with rings while they talk, and stay on the table while they do, even if they
+      hold still. When they stop, it fades a few seconds later. If their pointer had already
+      faded, talking brings it back where they left it.
 
 ## Controller (new; an Xbox controller, by USB or Bluetooth)
 

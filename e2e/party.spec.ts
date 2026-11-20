@@ -9,7 +9,7 @@ test('friends meet at a table, chat, play Hearts and switch games @smoke', async
   // Opened from the Hearts page: everyone gathers at the table first, nothing dealt yet.
   const code = await createTable(host, 'Hana', 'hearts');
   await joinByInvite(friend, code, 'Finn');
-  await expect(host.locator('#chat-log')).toContainText('Finn joined');
+  await expect(host.locator('#chat-log')).toContainText('Finn is here');
   await expect(friend.locator('#game')).toHaveAttribute('data-view', 'lobby');
   await expect(friend.locator('.lobby-games [data-game="hearts"]')).toHaveAttribute('aria-pressed', 'true');
 

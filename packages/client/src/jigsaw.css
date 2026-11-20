@@ -241,3 +241,89 @@
     0 0 0 6px var(--cobalt),
     var(--lift-3);
 }
+
+/* Everyone else's pointer: a dot in their colour with their name beside it (jigsawView.ts
+   places them). While they talk, rings ripple out from the dot, so you can see who's talking
+   and where they're working. Still for a few seconds, it fades away. */
+.pz-cursors {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pz-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transition: opacity 0.15s;
+}
+.pz-cursor.fading {
+  opacity: 0;
+  transition-duration: 2s;
+  transition-timing-function: linear;
+}
+.pz-cursor i {
+  position: absolute;
+  left: -7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 0 2px #fff;
+  transition: scale 0.15s;
+}
+.pz-cursor span {
+  position: absolute;
+  left: 11px;
+  top: -10px;
+  white-space: nowrap;
+  font: 800 13px/1.5 var(--font);
+  color: #112875;
+  /* A paper-coloured edge all round, readable on the table and on pieces. */
+  text-shadow:
+    -1.5px -1.5px 0 rgb(255 252 245 / 0.95),
+    1.5px -1.5px 0 rgb(255 252 245 / 0.95),
+    -1.5px 1.5px 0 rgb(255 252 245 / 0.95),
+    1.5px 1.5px 0 rgb(255 252 245 / 0.95),
+    0 -2px 0 rgb(255 252 245 / 0.95),
+    0 2px 0 rgb(255 252 245 / 0.95),
+    -2px 0 0 rgb(255 252 245 / 0.95),
+    2px 0 0 rgb(255 252 245 / 0.95);
+}
+.pz-cursor.talking i {
+  scale: 1.2;
+}
+.pz-cursor.talking i::before,
+.pz-cursor.talking i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--c);
+  animation: pz-talk 1.2s ease-out infinite;
+}
+.pz-cursor.talking i::after {
+  animation-delay: 0.6s;
+}
+@keyframes pz-talk {
+  from {
+    scale: 1;
+    opacity: 0.9;
+  }
+  to {
+    scale: 3.2;
+    opacity: 0;
+  }
+}
+/* Less motion: a steady ring instead of ripples. */
+@media (prefers-reduced-motion: reduce) {
+  .pz-cursor.talking i::before {
+    animation: none;
+    scale: 2;
+    opacity: 0.7;
+  }
+  .pz-cursor.talking i::after {
+    display: none;
+  }
+}

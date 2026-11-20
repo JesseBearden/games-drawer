@@ -426,7 +426,7 @@ export class Room {
     this.countPeople();
     this.emptySince = null;
     this.log('join', { pid: p.pid, device });
-    this.announce(p, 'arrive', `${p.name} joined.`);
+    this.announce(p, 'arrive', `${p.name} is here.`);
     this.broadcastMembers();
     return { ok: true, reclaimed: false, name: p.name };
   }
@@ -448,7 +448,7 @@ export class Room {
     const key = kind === 'arrive' ? 'lastArrive' : 'lastLeave';
     if (now - p[key] < ANNOUNCE_COOLDOWN_MS) return;
     p[key] = now;
-    this.systemChat(text);
+    this.systemChat(text, { kind, alias: p.alias });
   }
 
   disconnect(session: string, conn: Conn | null, reason: string) {
@@ -982,8 +982,8 @@ export class Room {
     while (this.chatHistory.length > this.deps.chatHistorySize) this.chatHistory.shift();
   }
 
-  private systemChat(text: string) {
-    const msg: ChatMessage = { id: randomUUID(), from: '', color: -1, text, at: this.deps.now(), system: true };
+  private systemChat(text: string, notice?: ChatMessage['notice']) {
+    const msg: ChatMessage = { id: randomUUID(), from: '', color: -1, text, at: this.deps.now(), system: true, ...(notice && { notice }) };
     this.pushHistory(msg);
     this.broadcast({ t: 'chat', msg });
   }

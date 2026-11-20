@@ -1,4 +1,4 @@
-import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type MemberInfo, type ServerMessage, type TableSetup } from '@tank/shared';
+import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
 import { SpadesTable } from './spadesView';
 import { DominoesTable } from './dominoesView';
@@ -49,6 +49,12 @@ export class RoomApp {
   /** Between games: what's picked, who sits where, who's ready. */
   private tableState: TableSetup;
   private chatOpen: boolean;
+  /** You opened or closed Messages yourself: it's left as you put it. */
+  private chatChosen = false;
+  /** Whether Messages starts open waits for who's on the mic (just after the welcome). */
+  private chatStartPending = true;
+  /** You came to the table with your mic on. */
+  private micAtStart = false;
   private unread = 0;
   private liveChat = false;
   private pingTimer: number;
@@ -82,9 +88,6 @@ export class RoomApp {
     gameEl.classList.toggle('phone', device.small);
     // "Turn your phone sideways", or iPad, or tablet: whatever they're holding.
     $('rotate').querySelector('.overlay-card')!.textContent = `Turn your ${deviceWord(device)} sideways to play`;
-    // Messages starts open only where there's room beside the game (a laptop, an iPad on its side).
-    this.chatOpen = !device.small && window.innerWidth >= 1100;
-    gameEl.classList.toggle('chat-collapsed', !this.chatOpen);
     $('chat-log').innerHTML = '';
     this.alias = welcome.alias;
     this.room = welcome.room;
@@ -92,6 +95,9 @@ export class RoomApp {
     this.tableState = welcome.table;
     this.chatFilter = welcome.chatFilter;
     this.voice = this.makeVoice(welcome);
+    this.micAtStart = entry.mic && this.voice.available && this.voice.supported;
+    this.chatOpen = this.chatStartsOpen(null);
+    gameEl.classList.toggle('chat-collapsed', !this.chatOpen);
     this.api = this.makeApi();
     this.bindUi(welcome);
     for (const m of welcome.chat) this.addChat(m);
@@ -206,6 +212,11 @@ export class RoomApp {
         return;
       case 'voice':
         this.voice.onPeers(msg.peers);
+        // The first word of who's on the mic: now it's known whether Messages starts open.
+        if (this.chatStartPending) {
+          this.chatStartPending = false;
+          if (!this.chatChosen) this.setChatOpen(this.chatStartsOpen(msg.peers), false);
+        }
         return;
       case 'idle':
         // Nobody's played or talked for a while: a minute's warning, and any tap keeps the table.
@@ -443,7 +454,28 @@ export class RoomApp {
       this.unread++;
       $('chat-unread').hidden = false;
       $('bar-tab').querySelector<HTMLElement>('.bar-tab-dot')!.hidden = false;
+      // It pops up too, so it's read without opening Messages ("Sammy: I can't hear you").
+      if (m.speaker !== this.alias) this.note(m.text.length > 90 ? `${m.text.slice(0, 88).trimEnd()}…` : m.text, m.from);
     }
+    // Someone arriving pops up (in Messages it's only a grey line), with the table's join sound.
+    // Arrivals and leavings don't count as unread.
+    if (this.liveChat && m.notice?.kind === 'arrive' && m.notice.alias !== this.alias) {
+      this.note(m.text);
+      this.play('lobbyJoin');
+    }
+  }
+
+  /**
+   * Whether Messages starts open: only where there's room beside the game (a laptop, an iPad on
+   * its side), and not when everyone at the table has their mic on: talking, they don't need it.
+   * `peers` is who's on the mic, or null before the server has said (then it waits, closed).
+   */
+  private chatStartsOpen(peers: VoicePeer[] | null) {
+    if (this.device.small || window.innerWidth < 1100) return false;
+    if (!this.micAtStart) return true;
+    if (!peers) return false;
+    const onMic = new Set(peers.map((p) => p.id));
+    return this.membersList.some((m) => m.id !== this.alias && m.connected && !onMic.has(m.id));
   }
 
   private setBarOpen(open: boolean) {
@@ -453,7 +485,9 @@ export class RoomApp {
     tab.setAttribute('aria-label', open ? 'Hide the bar' : 'Show the bar');
   }
 
-  private setChatOpen(open: boolean) {
+  /** Open or close Messages; `chosen` when you did it (then it's never opened or closed for you). */
+  private setChatOpen(open: boolean, chosen = true) {
+    if (chosen) this.chatChosen = true;
     this.chatOpen = open;
     $('game').classList.toggle('chat-collapsed', !open);
     if (open) {
@@ -532,15 +566,29 @@ export class RoomApp {
   // ------------------------------------------------------------------ toolbar, menu, keys
 
   toast(text: string) {
+    this.note(text);
+  }
+
+  /**
+   * A note that pops up over the game and goes by itself: what happened ("Reconnected."), who
+   * just arrived ("Liz is here."), or, with `from`, a message while Messages is closed.
+   */
+  private note(text: string, from?: string) {
     const box = $('toasts');
+    const el = document.createElement('div');
+    if (from) {
+      el.className = 'toast-chat';
+      el.innerHTML = `<b>${escapeHtml(from)}:</b> ${escapeHtml(text)}`;
+    } else el.textContent = text;
     // The same note again (tapping a tile that doesn't fit twice) replaces it rather than stacking.
     const last = box.lastElementChild;
-    if (last?.textContent === text) last.remove();
-    const el = document.createElement('div');
-    el.textContent = text;
+    if (last?.textContent === el.textContent) last.remove();
+    // A longer one stays up longer, to be read: 3.5 seconds, up to 7 for a long message.
+    const ms = Math.min(7000, Math.max(3500, 1500 + el.textContent!.length * 60));
+    el.style.animationDuration = `${ms}ms`;
     box.append(el);
     while (box.children.length > 3) box.firstElementChild!.remove();
-    setTimeout(() => el.remove(), 3500);
+    setTimeout(() => el.remove(), ms);
   }
 
   private updateSoundButton() {

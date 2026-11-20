@@ -404,4 +404,18 @@ describe('dropping out for a moment', () => {
     a.room.handle('session-aaaa', { t: 'leave' });
     expect(watcher.conn.chats().some((m) => m.text.startsWith('Alice left'))).toBe(true);
   });
+
+  it('marks who came and went, so arrivals can pop up', () => {
+    const { mgr } = setup();
+    const watcher = join(mgr, 'session-bbbb');
+    const a = join(mgr, 'session-aaaa', 'Alice');
+    const alias = a.room.members().find((m) => m.name === 'Alice')!.id;
+    const arrived = watcher.conn.chats().find((m) => m.text === 'Alice is here.');
+    expect(arrived?.notice).toEqual({ kind: 'arrive', alias });
+    a.room.handle('session-aaaa', { t: 'leave' });
+    const left = watcher.conn.chats().find((m) => m.text.startsWith('Alice left'));
+    expect(left?.notice).toEqual({ kind: 'leave', alias });
+    // Ordinary system lines carry no notice.
+    expect(watcher.conn.chats().filter((m) => !m.text.startsWith('Alice')).every((m) => !m.notice)).toBe(true);
+  });
 });

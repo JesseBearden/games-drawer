@@ -50,6 +50,9 @@ const MAGNIFIER_KEY = 'gd.magnifier';
 const LIFT_MS = 140;
 const LIFT_GAP = 36;
 const LIFT_MAX = 170;
+/** Someone's pointer starts fading this long after it last moved (or they stopped talking), and is gone at CURSOR_GONE_MS. */
+const CURSOR_FADE_MS = 4000;
+const CURSOR_GONE_MS = 6000;
 
 type Pt = [number, number];
 type Seg = [Pt, Pt, Pt];
@@ -180,6 +183,16 @@ export class JigsawTable implements View {
   private raf = 0;
   private edgesOnly = false;
   private cursors = new Map<string, { x: number; y: number; at: number }>();
+  /**
+   * Everyone else's pointer, as little page elements over the table (the canvas doesn't draw
+   * them): the pulse while someone talks is then animated by the browser on its own, without
+   * redrawing the whole table every frame, which people talking much of the time would cost.
+   */
+  private cursorEls = new Map<string, HTMLElement>();
+  private cursorBox!: HTMLElement;
+  private cursorTimer = 0;
+  /** Who's talking right now: their pointer pulses, and doesn't fade while it does. */
+  private speaking = new Set<string>();
 
   // Pointer state.
   private pointers = new Map<number, { x: number; y: number }>();
@@ -227,6 +240,7 @@ export class JigsawTable implements View {
       <div class="pz-setup" hidden></div>
       <div class="pz-play" hidden>
         <canvas class="pz-canvas"></canvas>
+        <div class="pz-cursors" aria-hidden="true"></div>
         <div class="pz-status"><b class="pz-pct">0%</b> <span class="pz-count"></span></div>
         <div class="pz-tools">
           <button class="pz-btn" type="button" data-pz="picture" aria-pressed="false">Picture</button>
@@ -244,6 +258,7 @@ export class JigsawTable implements View {
       </div>`;
     this.canvas = this.el.querySelector('.pz-canvas') as HTMLCanvasElement;
     this.ctx = this.canvas.getContext('2d')!;
+    this.cursorBox = this.el.querySelector('.pz-cursors') as HTMLElement;
     this.loupe = this.el.querySelector('.pz-loupe') as HTMLCanvasElement;
     this.loupeCtx = this.loupe.getContext('2d')!;
     this.el.addEventListener('click', this.onClick);
@@ -353,6 +368,17 @@ export class JigsawTable implements View {
   }
 
   onMembers() {
+    this.invalidate();
+  }
+
+  onSpeaking(aliases: Set<string>) {
+    // Someone who stops talking keeps their pointer a few seconds, as after they stop moving.
+    const now = performance.now();
+    for (const alias of this.speaking) {
+      const c = this.cursors.get(alias);
+      if (c && !aliases.has(alias)) c.at = now;
+    }
+    this.speaking = aliases;
     this.invalidate();
   }
 
@@ -807,6 +833,7 @@ export class JigsawTable implements View {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawLoupe(dpr);
+    this.placeCursors();
     if (!s || this.phase === 'setup') {
       this.moveFelt(false);
       return;
@@ -822,38 +849,51 @@ export class JigsawTable implements View {
       x1: this.cam.x + this.canvas.clientWidth / this.cam.s,
       y1: this.cam.y + this.canvas.clientHeight / this.cam.s,
     };
-    if (!this.drawTable(ctx, this.cam.s, dpr, view)) return;
-    // Everyone else's pointer, with their name.
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.drawTable(ctx, this.cam.s, dpr, view);
+  }
+
+  /**
+   * Everyone else's pointer, with their name, where it is on screen now. One that hasn't moved for
+   * a few seconds fades away (jigsaw.css), unless they're talking: then it pulses and stays.
+   */
+  private placeCursors() {
+    clearTimeout(this.cursorTimer);
+    const show = !!this.state && this.phase !== 'setup';
     const now = performance.now();
-    let fading = false;
-    for (const [alias, c] of this.cursors) {
-      const age = now - c.at;
-      if (age > 6000 || alias === this.shell.alias) continue;
+    const seen = new Set<string>();
+    let wake = Infinity;
+    for (const [alias, c] of show ? this.cursors : []) {
+      if (alias === this.shell.alias) continue;
       const member = this.shell.members().find((m) => m.id === alias);
       if (!member) continue;
-      const x = (c.x - this.cam.x) * this.cam.s;
-      const y = (c.y - this.cam.y) * this.cam.s;
-      ctx.globalAlpha = age > 4000 ? 1 - (age - 4000) / 2000 : 1;
-      if (age > 4000) fading = true;
-      ctx.fillStyle = colorCss(member.color);
-      ctx.beginPath();
-      ctx.arc(x, y, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#fff';
-      ctx.stroke();
-      // Their name in ink with a paper-coloured edge, readable on the mat and on pieces.
-      ctx.font = '800 13px "Atkinson Hyperlegible Next", system-ui, sans-serif';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(255, 252, 245, 0.95)';
-      ctx.strokeText(member.name, x + 11, y + 4);
-      ctx.fillStyle = '#112875';
-      ctx.fillText(member.name, x + 11, y + 4);
-      ctx.globalAlpha = 1;
+      const talking = this.speaking.has(alias);
+      const age = talking ? 0 : now - c.at;
+      if (age >= CURSOR_GONE_MS) continue;
+      seen.add(alias);
+      let el = this.cursorEls.get(alias);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'pz-cursor';
+        el.innerHTML = '<i></i><span></span>';
+        this.cursorBox.append(el);
+        this.cursorEls.set(alias, el);
+      }
+      const label = el.lastElementChild as HTMLElement;
+      if (label.textContent !== member.name) label.textContent = member.name;
+      el.style.setProperty('--c', colorCss(member.color));
+      el.style.transform = `translate(${((c.x - this.cam.x) * this.cam.s).toFixed(1)}px, ${((c.y - this.cam.y) * this.cam.s).toFixed(1)}px)`;
+      el.classList.toggle('talking', talking);
+      const fading = age >= CURSOR_FADE_MS;
+      el.classList.toggle('fading', fading);
+      if (!talking) wake = Math.min(wake, c.at + (fading ? CURSOR_GONE_MS : CURSOR_FADE_MS));
     }
-    if (fading) this.invalidate();
+    for (const [alias, el] of this.cursorEls) {
+      if (seen.has(alias)) continue;
+      el.remove();
+      this.cursorEls.delete(alias);
+    }
+    // Look again when the next one should start fading or be gone (without redrawing the table).
+    if (wake < Infinity) this.cursorTimer = window.setTimeout(() => this.placeCursors(), Math.max(0, wake - now) + 20);
   }
 
   /**
@@ -1369,6 +1409,8 @@ export class JigsawTable implements View {
 
   dispose() {
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.cursorTimer);
+    this.cursorEls.clear();
     this.moveFelt(false);
     this.stopEdgeScroll();
     this.observer.disconnect();

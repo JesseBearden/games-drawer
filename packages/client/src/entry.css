@@ -15,6 +15,11 @@
 .entry[hidden] {
   display: none;
 }
+/* If the page does scroll (a phone held sideways, big text), its felt goes with it, instead of
+   the words sliding over a cloth that stays put. */
+.entry.pc-page {
+  background-attachment: local;
+}
 
 .entry-wrap {
   width: min(100%, 1120px);
@@ -85,9 +90,6 @@
 .entry-page > .entry-home.pc-btn-wide {
   width: min(100%, var(--col));
   margin-top: 0;
-}
-#page-join .pc-hero {
-  width: min(100%, 760px);
 }
 .entry-form {
   display: grid;
@@ -163,32 +165,36 @@
 }
 
 /* ------------------------------------------------------------------ fitting the screen
-   Home and the join page fit one screen, so their main button shows without scrolling on a
-   phone, an iPad (either way up) and a computer: the picture, the heading and the spacing size
-   themselves from the screen's height as well as its width. */
+   Each page fits one screen, so its main button shows without scrolling on a phone, an iPad
+   (either way up) and a computer: the picture, the heading and the spacing size themselves from
+   the screen's height as well as its width. The picture is the same size on all three, so going
+   from home to Start a table (or a table's invite) doesn't jump (user, 2026-11-20). */
 #page-home,
+#page-start,
 #page-join {
   gap: clamp(8px, 2dvh, 18px);
 }
-#page-home .pc-hero {
+.entry-page .pc-hero {
   width: min(100%, 980px, calc(27dvh * 1536 / 498));
-}
-#page-join .pc-hero {
-  width: min(100%, 760px, calc(22dvh * 1536 / 498));
 }
 #page-home .pc-h1 {
   font-size: clamp(2rem, min(7vw, 7.5dvh), 4.5rem);
 }
+#page-start .pc-h2,
 #page-join .pc-h2 {
   font-size: clamp(1.6rem, min(4.5vw, 5.5dvh), 2.5rem);
 }
 #page-home .entry-welcome .pc-lead {
   margin-top: clamp(4px, 1.4dvh, 14px);
 }
-.entry-home-actions {
+.entry-home-actions,
+.entry-form {
   gap: clamp(10px, 2.4dvh, 22px);
   margin-top: 0;
 }
+/* Short screens (an iPad on its side in Safari, about 690 px tall; a laptop): a little less of
+   everything, so Start a table, the tallest page, fits too. The picture shrinks the same on every
+   page, so it still doesn't jump between them. */
 @media (max-height: 760px) {
   .pc-brand {
     min-height: 48px;
@@ -198,7 +204,25 @@
     width: 36px;
     height: 36px;
   }
+  .entry-page .pc-hero {
+    width: min(100%, 980px, calc(24dvh * 1536 / 498));
+  }
+  .entry-page > .entry-home {
+    margin-top: 0;
+  }
   .entry-fine {
-    margin-top: 16px;
+    margin-top: clamp(8px, 1.6dvh, 16px);
+  }
+  .entry-wrap {
+    padding-bottom: 12px;
+  }
+}
+/* Shorter still (an iPad mini on its side in Safari, about 600 px): a smaller picture again. */
+@media (max-height: 640px) {
+  .entry-page .pc-hero {
+    width: min(100%, 980px, calc(20dvh * 1536 / 498));
+  }
+  .entry-wrap {
+    padding-bottom: 6px;
   }
 }
