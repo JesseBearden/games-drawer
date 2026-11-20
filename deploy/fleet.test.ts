@@ -52,7 +52,9 @@ describe('the fleet tool', () => {
     const f = fakeCloud();
     const fleet = fleetOf(f);
     await fleet.launch('aaaaaaa1');
-    expect(f.ran[0]).toEqual({ slot: 'a', command: 'games-drawer-deploy aaaaaaa1 start a none' });
+    // It waits for the box's first boot to finish, then starts the release.
+    expect(f.ran[0].command).toContain('cloud-init status --wait');
+    expect(f.ran[1]).toEqual({ slot: 'a', command: 'games-drawer-deploy aaaaaaa1 start a none' });
     expect(f.lastMap('a')).toEqual({ boxes: { a: '10.0.0.1' }, newTables: [['a', 100]], staging: 'a' });
     expect(f.logs).toContain('CANARY_SLOT=a');
     // Nobody is playing anywhere, so the front door points here at once (staging comes in through it).

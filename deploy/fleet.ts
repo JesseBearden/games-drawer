@@ -143,6 +143,9 @@ export class Fleet {
     const current = currentBox(boxes);
     this.cloud.log(`Launching box ${slot} with ${release.slice(0, 7)}…`);
     const box = await this.cloud.launch(release, slot);
+    // Systems Manager can reach a new box before its first-boot script (which installs the deploy
+    // command) has finished: wait for it.
+    await this.cloud.run(box, 'cloud-init status --wait >/dev/null 2>&1 || true; test -x /usr/local/bin/games-drawer-deploy');
     this.cloud.log((await this.cloud.run(box, `games-drawer-deploy ${release} start ${slot} ${current?.release ?? 'none'}`)).trim());
     const all = [...boxes, box];
     // Staging's own name (direct) points here, and with no box taking players, so does the front
