@@ -106,6 +106,14 @@ export function cardFaceSvg(rank: Rank, s: Suit) {
 }
 
 /**
+ * One of the user's felt card backs (art/backs, 1 to CARD_BACK_COUNT), already card-shaped with
+ * its own cream border and rounded corners. Goes inside a card-sized element.
+ */
+export function feltBackHtml(n: number) {
+  return `<img class="felt-back" src="/art/backs/back-${String(n).padStart(2, '0')}.webp" alt="" draggable="false" />`;
+}
+
+/**
  * The back of a card, like a real deck: a white border around a cobalt panel (its own piece of
  * paper) with a small diamond pattern and the drawer mark. Goes inside `<span class="pc-card back">`.
  */

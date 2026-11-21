@@ -1,7 +1,7 @@
 import { CARD_SOUNDS } from './audio';
 import { isJoker, isWild, ttSuit, type GameServerMessage, type TTCard, type ThreeThirteenView } from '@tank/shared';
 import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml } from './heartsView';
-import { cardBackHtml, cardFaceSvg, type Rank, type Suit } from './paperArt';
+import { cardFaceSvg, feltBackHtml, type Rank, type Suit } from './paperArt';
 import { escapeHtml } from './state';
 import type { ShellApi, View } from './views';
 
@@ -63,7 +63,7 @@ export class ThreeThirteenTable implements View {
         <div class="ht-center">
           <div class="tt-round"></div>
           <div class="tt-piles">
-            <button class="tt-pile tt-stock" type="button" aria-label="Take the top card from the pile"><span class="card tt-back">${cardBackHtml()}</span><span class="tt-count"></span></button>
+            <button class="tt-pile tt-stock" type="button" aria-label="Take the top card from the pile"><span class="card tt-back" data-back=""></span><span class="tt-count"></span></button>
             <button class="tt-pile tt-discard" type="button" aria-label="The discards"></button>
           </div>
           <div class="ht-status" aria-live="polite">Dealing…</div>
@@ -151,6 +151,12 @@ export class ThreeThirteenTable implements View {
     const stock = q<HTMLButtonElement>('.tt-stock');
     stock.classList.toggle('can-take', mine && v.step === 'draw');
     q<HTMLElement>('.tt-count').textContent = String(v.stock);
+    // This game's card back (the same for everyone at the table), drawn once per game.
+    const back = q<HTMLElement>('.tt-back');
+    if (back.dataset.back !== String(v.back)) {
+      back.dataset.back = String(v.back);
+      back.innerHTML = feltBackHtml(v.back);
+    }
     const discard = q<HTMLButtonElement>('.tt-discard');
     discard.innerHTML = v.discardTop ? ttCardHtml(v.discardTop, v.round, 'tt-top') : '<span class="tt-empty"></span>';
     discard.classList.toggle('can-take', mine && v.step === 'draw' && !!v.discardTop);

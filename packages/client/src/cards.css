@@ -799,8 +799,19 @@ body.pad-mode #game .dm-mine.pad-cursor {
   left: 0;
   display: block;
 }
+/* The pile: one of the user's felt card backs, which has its own border and corners. */
 #game .tt-back {
-  --w: var(--cw);
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+#game .felt-back {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 1px 1px rgb(var(--shade) / 0.35)) drop-shadow(0 3px 5px rgb(var(--shade) / 0.2));
+  user-select: none;
+  -webkit-user-select: none;
 }
 /* Something you can take (your turn to draw), or the place to throw the lifted card. */
 #game .tt-pile.can-take,

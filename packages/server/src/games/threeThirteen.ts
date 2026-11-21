@@ -1,5 +1,6 @@
 import {
   bestMelds,
+  CARD_BACK_COUNT,
   freshBotName,
   SEAT_FILL_ORDER,
   ThreeThirteenRound,
@@ -46,6 +47,8 @@ export class ThreeThirteenGame implements ServerGame {
   /** With nobody at the table (only computers and absent players), the next round starts at this time. */
   private nextRoundAt: number | null = null;
   private botAt = 0;
+  /** This game's card back, picked at random for the whole table. */
+  private back = 1;
   private dice = { int: (min: number, max: number) => min + this.host.randomInt(max - min + 1) };
 
   /** The seats in play this game, in seat order. */
@@ -73,6 +76,7 @@ export class ThreeThirteenGame implements ServerGame {
     const active = new Set(picked);
     for (const i of SEAT_FILL_ORDER) if (active.size < count) active.add(i);
     this.active = [...active].sort((a, b) => a - b);
+    this.back = 1 + host.randomInt(CARD_BACK_COUNT);
     this.startRound();
   }
 
@@ -188,6 +192,7 @@ export class ThreeThirteenGame implements ServerGame {
     this.history = [];
     this.winners = [];
     this.roundNumber = 0;
+    this.back = 1 + this.host.randomInt(CARD_BACK_COUNT);
     this.startRound();
     this.host.log('threethirteen_new_game', {});
   }
@@ -299,6 +304,7 @@ export class ThreeThirteenGame implements ServerGame {
       round: this.roundNumber,
       rounds: TT_ROUNDS,
       wild: wildRankOf(this.roundNumber),
+      back: this.back,
       dealer: r.dealer,
       seats: this.seats.map((s, i) => {
         const m = this.memberAt(i);

@@ -473,6 +473,8 @@ export interface ThreeThirteenView {
   rounds: number;
   /** The wild rank this round (3 … 13; jokers are always wild). */
   wild: number;
+  /** Which card back this game's deck has (1 to CARD_BACK_COUNT), the same for everyone. */
+  back: number;
   dealer: number;
   seats: TTSeatView[];
   /** Your cards, in your order. */

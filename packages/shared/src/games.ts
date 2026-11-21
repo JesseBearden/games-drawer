@@ -171,6 +171,13 @@ export const isSeated = (g: GameId | null): boolean => !!g && SEATED_GAMES.inclu
 export const SEAT_COUNT = 4;
 
 /**
+ * The user's felt card backs, art/backs/back-01.webp to back-30.webp (cut from
+ * scripts/art/card-backs-*.webp, all at one card shape). A game that shows a back picks one at
+ * random for the whole table (user, 2026-11-20; maybe a chooser later).
+ */
+export const CARD_BACK_COUNT = 30;
+
+/**
  * Games where the table chooses how many play, 2 up to SEAT_COUNT (user, 2026-11-20): computers
  * fill only that many seats, so two people can play without a computer going out on them.
  */

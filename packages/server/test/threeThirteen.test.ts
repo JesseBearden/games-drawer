@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Rng, ttBotDiscard, ttBotTakesDiscard, TT_ROUNDS, type ServerMessage, type ThreeThirteenView } from '@tank/shared';
+import { CARD_BACK_COUNT, Rng, ttBotDiscard, ttBotTakesDiscard, TT_ROUNDS, type ServerMessage, type ThreeThirteenView } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import { RoomManager } from '../src/manager';
@@ -59,7 +59,7 @@ const send = (room: ReturnType<typeof table>['a']['room'], session: string, m: o
 
 describe('Three Thirteen in a room', () => {
   it('deals 3 cards each in round 1, 3s wild, and nobody sees anyone else’s cards', () => {
-    const { a, game } = table();
+    const { a, b, game } = table();
     expect(game.id).toBe('threethirteen');
     const v = a.conn.views().at(-1)!;
     expect(v.round).toBe(1);
@@ -68,6 +68,10 @@ describe('Three Thirteen in a room', () => {
     expect(v.seats.map((s) => s.cards)).toEqual([3, 3, 3, 3]);
     expect(v.seats.filter((s) => s.bot)).toHaveLength(2);
     expect(v.plan!.melds.flat().length + v.plan!.loose.length).toBe(3);
+    // One card back for the whole table, from the user's set.
+    expect(v.back).toBeGreaterThanOrEqual(1);
+    expect(v.back).toBeLessThanOrEqual(CARD_BACK_COUNT);
+    expect(b.conn.views().at(-1)!.back).toBe(v.back);
     const raw = JSON.stringify(a.conn.sent);
     const mine = game.seatOf('session-aaaa')!;
     const hidden = [...game.round.hands.filter((_, i) => i !== mine).flat(), ...game.round.stock];

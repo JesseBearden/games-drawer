@@ -101,7 +101,12 @@ lighter papers: paper, white and mat.
     250 x 350). No game deals them yet; one that does shows the picture as the card's whole face.
   - Suits are classic red (`#d4351f`, deeper than tomato so small corner numbers stay readable) and
     black (`#1e1e26`).
-  - Backs have a white border around a cobalt panel, like a real deck.
+  - **Backs are the user's felt card backs** (2026-11-20): 30 of them, `public/art/backs/back-01`
+    to `back-30.webp`, cut from `scripts/art/card-backs-*.webp` (see-through backgrounds, so lifted
+    out as drawn) and all saved at one card shape, 300 x 420 (the second sheet's squatter ones are
+    stretched about 12% taller). A game picks one at random for the whole table, a new one each
+    new game (`CARD_BACK_COUNT`); maybe a chooser later. Three Thirteen's pile is the only back on
+    screen so far. The older drawn back (white border, cobalt panel, `cardBackHtml`) is unused.
   - Dominoes stay ivory.
 - **Illustrations** can use any colors they need, like skin tones.
 
