@@ -36,13 +36,11 @@ import { Sfx } from './audio';
 import { Gamepads, moveFocus, watchPadMode } from './gamepad';
 import { Net } from './net';
 import { escapeHtml } from './state';
-import { loadSprites, type Sprites } from './sprites';
 import { MIC_CONSTRAINTS, voiceSupported } from './voice';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const NAME_KEY = 'tank.name';
-const spritesReady: Promise<Sprites> = loadSprites();
 const sfx = new Sfx();
 
 function detectDevice(): Device {
@@ -470,6 +468,23 @@ function tapAudioContext(): AudioContext | null {
 }
 
 /** Join or open a table. `from` is what was tapped: if it doesn't work out, the reason shows there. */
+/**
+ * The site was updated and this page is the old one. A page opened from the home screen has no
+ * reload button, so reload it ourselves, once (if the new page still doesn't match, say so instead).
+ */
+function reloadForUpdate(): boolean {
+  const KEY = 'gd.reloadedForUpdate';
+  try {
+    const last = Number(sessionStorage.getItem(KEY) ?? 0);
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem(KEY, String(Date.now()));
+  } catch {
+    return false;
+  }
+  location.reload();
+  return true;
+}
+
 async function start(room: RoomRequest, opts: { mic: boolean; name: string; resumed?: boolean }, from?: HTMLElement) {
   // Called from a button tap, so sound is allowed to start (required on iPhone).
   sfx.unlock();
@@ -482,7 +497,6 @@ async function start(room: RoomRequest, opts: { mic: boolean; name: string; resu
   errorAnchor = from ?? null;
   showPending(room.kind === 'private' ? 'Joining the table…' : 'Setting up your table…');
   setBusy(true);
-  const sprites = await spritesReady;
   const device = detectDevice();
   net?.close();
   const thisNet = new Net(room, () => stored(NAME_KEY) || opts.name, device.touch ? 'phone' : 'desktop', {
@@ -490,13 +504,14 @@ async function start(room: RoomRequest, opts: { mic: boolean; name: string; resu
       if (msg.t === 'welcome' && !app) {
         setActive({ room: { kind: 'private', code: msg.room.code }, mic: opts.mic });
         enterGame();
-        app = new RoomApp(msg, thisNet, sprites, sfx, device, leave, pads, entry);
+        app = new RoomApp(msg, thisNet, sfx, device, leave, pads, entry);
         if (import.meta.env.DEV) (window as unknown as { __tank: RoomApp }).__tank = app;
         return;
       }
       app?.onMessage(msg);
     },
     onFatal: (err) => {
+      if (err.code === 'version' && reloadForUpdate()) return;
       const wasIn = !!app;
       if (app) leave();
       dropEntry(entry);

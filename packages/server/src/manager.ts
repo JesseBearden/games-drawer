@@ -92,9 +92,25 @@ export class RoomManager {
         continue;
       }
       if (close) {
-        room.close(close);
+        try {
+          room.close(close);
+        } catch (err) {
+          this.opts.log.event('room_error', { room: code, roomKind: room.kind, error: String(err) });
+        }
         this.rooms.delete(code);
       }
+    }
+  }
+
+  /** Close every room (the server is stopping): each saves what it should and tells its people why. */
+  closeAll(reason: string) {
+    for (const [code, room] of this.rooms) {
+      try {
+        room.close(reason);
+      } catch (err) {
+        this.opts.log.event('room_error', { room: code, roomKind: room.kind, error: String(err) });
+      }
+      this.rooms.delete(code);
     }
   }
 

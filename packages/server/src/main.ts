@@ -169,7 +169,8 @@ async function stop(code = 0) {
   if (stopping) return;
   stopping = true;
   await server.close();
-  log.close();
+  // Wait for the last log lines (the tables' closing ones among them) to reach the disk.
+  await Promise.race([log.close(), new Promise((r) => setTimeout(r, 5000))]);
   process.exit(code);
 }
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => void stop());

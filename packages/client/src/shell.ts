@@ -7,7 +7,6 @@ import { JigsawTable } from './jigsawView';
 import { HeartsTable } from './heartsView';
 import { LobbyView } from './lobby';
 import type { Net } from './net';
-import type { Sprites } from './sprites';
 import { colorCss, escapeHtml } from './state';
 import { TankView } from './tankView';
 import type { Device, ShellApi, View } from './views';
@@ -78,7 +77,6 @@ export class RoomApp {
   constructor(
     welcome: Welcome,
     private net: Net,
-    private sprites: Sprites,
     private sfx: Sfx,
     private device: Device,
     private onLeave: () => void,
@@ -170,7 +168,7 @@ export class RoomApp {
     this.view = null;
     this.gameId = id;
     const gameEl = $('game');
-    if (id === 'tanks') this.view = new TankView(this.api, this.sprites);
+    if (id === 'tanks') this.view = new TankView(this.api);
     else if (id === 'hearts') this.view = new HeartsTable(this.api);
     else if (id === 'spades') this.view = new SpadesTable(this.api);
     else if (id === 'dominoes') this.view = new DominoesTable(this.api);

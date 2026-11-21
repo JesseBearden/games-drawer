@@ -125,6 +125,27 @@ describe('live server: sessions and joining', () => {
     again.c.ws.close();
   });
 
+  it('a tab replaced by a newer one can no longer act: its "leave" does not take the new tab off the table', async () => {
+    const a = await joined(s.port, { kind: 'create-private' });
+    const code = a.w.room.code;
+    // What the old tab's page does the moment it's told: leave, before its socket has closed.
+    a.c.ws.on('message', (d) => {
+      const m = JSON.parse(d.toString()) as ServerMessage;
+      if (m.t === 'error' && m.code === 'replaced') a.c.send({ t: 'leave' });
+    });
+    const b = await joined(s.port, { kind: 'private', code }, a.w.session);
+    expect(b.w.session).toBe(a.w.session);
+    expect((await a.c.waitFor('error')).code).toBe('replaced');
+    await a.c.closed;
+    await new Promise((r) => setTimeout(r, 100));
+    // The new tab is still there and still answered.
+    expect(b.c.ws.readyState).toBe(WebSocket.OPEN);
+    b.c.messages.length = 0;
+    b.c.send({ t: 'ping', at: 1 });
+    expect((await b.c.waitFor('pong')).at).toBe(1);
+    b.c.ws.close();
+  });
+
   it('rejects an old protocol version', async () => {
     const c = connect(s.port);
     await c.opened;
@@ -174,6 +195,25 @@ describe('live server: sessions and joining', () => {
     expect(pong.at).toBe(1);
     expect(c.ws.readyState).toBe(WebSocket.OPEN);
     c.ws.close();
+  });
+});
+
+describe('live server: winding down after a deploy', () => {
+  it('warns the tables still here before the cutoff, then closes them with a clear reason', async () => {
+    const s = await startWith();
+    try {
+      const a = await joined(s.port, { kind: 'create-private' });
+      const done = s.drain(1500);
+      const chat = await a.c.waitFor('chat', 3000);
+      expect(chat.msg.text).toMatch(/^Games Drawer was updated\. This table closes in 1 minute: start a new table/);
+      await done;
+      const err = await a.c.waitFor('error', 3000);
+      expect(err.code).toBe('room-closed');
+      expect(err.message).toMatch(/closed for an update/);
+      expect(s.manager.rooms.size).toBe(0);
+    } finally {
+      await s.close();
+    }
   });
 });
 

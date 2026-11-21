@@ -61,6 +61,9 @@ export const DEFAULT_LIMITS: Limits = {
   heartbeatMs: 15_000,
 };
 
+/** How long before a draining server's cutoff the tables still on it are warned. */
+export const UPDATE_WARNING_MS = 10 * 60_000;
+
 /** How often old jigsaw saves are cleared out (they're kept PUZZLE_KEEP_DAYS). */
 const PUZZLE_SWEEP_MS = 6 * 60 * 60_000;
 
@@ -307,7 +310,13 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
         }
         ws.send(data);
       },
-      close: (code, reason) => ws.close(code, reason),
+      // Once the server closes a connection (a newer tab replaced it, the table closed), nothing
+      // more from it counts: after "replaced", the old tab's messages would act as the new tab
+      // (same session), and its "leave" would take the new tab off the table.
+      close: (code, reason) => {
+        closing = true;
+        ws.close(code, reason);
+      },
     };
     const fail = (code: ErrorCode, message: string) => {
       if (closing) return;
@@ -473,10 +482,22 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
         manager.draining = true;
         o.log.event('drain_start', { rooms: manager.rooms.size });
         const deadline = Date.now() + maxMs;
+        // Tables still here near the end hear about it first, rather than being cut off mid-game.
+        const warnAt = deadline - Math.min(UPDATE_WARNING_MS, maxMs);
+        let warned = false;
         const check = setInterval(() => {
-          if (manager.rooms.size === 0 || Date.now() >= deadline) {
+          const now = Date.now();
+          if (!warned && now >= warnAt && manager.rooms.size) {
+            warned = true;
+            const minutes = Math.max(1, Math.round((deadline - now) / 60_000));
+            for (const room of manager.rooms.values()) room.updateWarning(minutes);
+            o.log.event('drain_warning', { rooms: manager.rooms.size, minutes });
+          }
+          if (manager.rooms.size === 0 || now >= deadline) {
             clearInterval(check);
-            o.log.event('drain_done', { roomsLeft: manager.rooms.size });
+            const left = manager.rooms.size;
+            manager.closeAll('update');
+            o.log.event('drain_done', { roomsLeft: left });
             resolve();
           }
         }, 1000);
@@ -485,6 +506,8 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     close: () =>
       new Promise<void>((resolve) => {
         for (const t of timers) clearInterval(t);
+        // Tables close properly (puzzles saved, play time logged, people told) before the sockets go.
+        manager.closeAll('update');
         for (const c of wss.clients) c.terminate();
         wss.close();
         server.close(() => resolve());

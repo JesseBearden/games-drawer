@@ -13,6 +13,24 @@ _Last updated: 2026-11-21_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## Fixes from the code review (new)
+
+- [ ] **A locked phone keeps its turn**: at a Hearts, Spades, Dominoes or Three Thirteen table,
+      lock the phone on your turn for about 10 seconds and unlock it. Nothing was played for you.
+      Lock it for over 20 seconds: the computer plays for you until you're back.
+- [ ] **Coming back to a closed table**: alone at a puzzle, lock the phone for 2 minutes or more,
+      then unlock. It says the table has closed (with a way home), not "Reconnecting…" forever.
+- [ ] **A dead connection recovers by itself**: at a table on a phone, switch Wi-Fi off and on
+      (or walk out of Wi-Fi range onto cellular). Within about 15 seconds it reconnects.
+- [ ] **Two tabs**: at a table, duplicate the tab. The new tab stays at the table; the old one
+      says "Opened in another tab".
+- [ ] **Tanks**: in a room of people, someone taps Leave: their tank gets a computer's name and
+      drives itself (no frozen tank), and a newcomer can still get in.
+- [ ] **Joining is quicker**: joining a card or puzzle table no longer waits for the Tanks
+      pictures. Tanks still looks right (felt ground, tanks, helicopters).
+- [ ] **Next deploy**: stay at a table (with voice on) through the whole deploy. Nobody should get
+      knocked off or have to reconnect.
+
 ## Security pass (new)
 
 Small fixes from the security review. Nothing should look different; these check nothing broke.

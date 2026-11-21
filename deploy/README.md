@@ -70,7 +70,9 @@ the fleet tool ([fleet.ts](fleet.ts)):
    `SIGUSR2`: it finishes the games it has (people stay connected the whole time, through any
    box), passes everything else to the new box, then powers itself off once its games are done
    and at least 15 minutes have passed. It was launched to terminate on shutdown, so AWS removes
-   it. (A game can hold a box for at most `DRAIN_MAX_MS`, 3 hours.)
+   it. (A table can hold a box for at most `DRAIN_MAX_MS`, 3 hours. Tables still there 10 minutes
+   before then are told to start a new table, and at the cutoff they close with that reason,
+   their puzzles saved.)
 5. If anything fails, **rollback** removes the new box and puts everything back on the current one.
 
 The very first deploy (or one after every box is gone) has no current box: the new box takes
@@ -86,10 +88,12 @@ box stops at once.
 
 ## The fleet tool by hand
 
-From the repo, with the `games-drawer` AWS profile (needs `AWS_REGION`, `SITE_DOMAIN` and
-`LAUNCH_TEMPLATE`, as the deploy project sets them, and **`FRONT_DOOR=direct` while the site runs
-without CloudFront**: without it, a promote moves only `origin.`, the site and `www` stay on the
-old box, and that box then shuts itself down). `bash deploy/deploy.sh <commit>` runs a whole
+From the repo, with the `games-drawer` AWS profile (needs `AWS_REGION` and `LAUNCH_TEMPLATE`, as
+the deploy project sets them). The domain and the front door (`direct` while the site runs without
+CloudFront) come from `infra/config.json`; `SITE_DOMAIN` and `FRONT_DOOR` may repeat them, and the
+tool refuses to run if they disagree. (A wrong front door would be bad: a promote would move only
+`origin.`, leaving the site on the old box, which then shuts itself down.)
+`bash deploy/deploy.sh <commit>` runs a whole
 deploy this way, for a release already in the bucket. On Windows (Git Bash), also set
 `MSYS_NO_PATHCONV=1`, skip deploy.sh's `npx playwright install --with-deps` line (the local
 browser works), and build the release from a clean copy of the pushed commit

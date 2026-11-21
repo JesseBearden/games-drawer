@@ -104,6 +104,14 @@ export class TanksGame implements ServerGame {
     const id = this.seats.get(m.session);
     this.seats.delete(m.session);
     this.lastResync.delete(m.session);
+    const t = id !== undefined ? this.world.tanks.get(id) : undefined;
+    if (t) {
+      // Their tank becomes an ordinary bot (it would otherwise sit there, undriven, under their
+      // name). rebalanceBots then removes it if the room has more tanks than it needs.
+      this.world.setController(t.id, 'bot');
+      t.name = this.botName();
+      t.infoDirty = true;
+    }
     if (id !== undefined) this.markInfo(id);
     this.rebalanceBots();
   }

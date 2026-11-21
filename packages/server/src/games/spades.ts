@@ -14,7 +14,7 @@ import {
   type SpadesView,
   type TeamHandResult,
 } from '@tank/shared';
-import type { GameHost, Member, ServerGame } from './types';
+import { botPlays, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS, TRICK_PAUSE_MS } from './hearts';
 
 /** Bots (and bots covering for disconnected players) think this long. */
@@ -78,7 +78,7 @@ export class SpadesGame implements ServerGame {
   }
 
   private botControls(seat: number) {
-    return !this.memberAt(seat)?.conn;
+    return botPlays(this.memberAt(seat), this.host.now());
   }
 
   private nameOf(seat: number) {
@@ -112,7 +112,7 @@ export class SpadesGame implements ServerGame {
     if (this.seatOf(m.session) === null) return null;
     this.schedule();
     this.sync();
-    return 'Their cards are played for them until they’re back.';
+    return 'If they’re not back soon, the computer plays their cards until they are.';
   }
 
   removePlayer(m: Member) {

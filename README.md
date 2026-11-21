@@ -106,7 +106,7 @@ and push. Each push to `main` also starts a deploy inside the AWS account (CodeB
 [deploy/buildspec.yml](deploy/buildspec.yml)), which launches a new server box with the new version. It shows on staging for smoke
 tests, then gets 10% of new tables for 10 minutes. If it stays healthy, it takes all new tables
 and the front door (CloudFront); the old box finishes its games and shuts itself down, so a
-deploy never cuts anyone off. If it isn't, the new box is removed. The AWS side (CloudFront and
+deploy doesn't cut anyone off (a table still going after 3 hours gets a 10-minute warning). If it isn't, the new box is removed. The AWS side (CloudFront and
 DNS, the boxes' launch template, a shared disk, budgets and a spending kill switch) is code in
 [infra/](infra/README.md); how a deploy moves between boxes is in [deploy/README.md](deploy/README.md).
 

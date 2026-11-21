@@ -66,7 +66,7 @@ export function pruneLogs(dirs: string[], opts: { now?: number; keepDays?: numbe
 export interface LogSink {
   event(type: string, fields: Record<string, unknown>): void;
   chat(fields: Record<string, unknown>): void;
-  close(): void;
+  close(): void | Promise<void>;
 }
 
 export class FileLog implements LogSink {
@@ -107,9 +107,11 @@ export class FileLog implements LogSink {
     this.stream('chat').write(JSON.stringify({ id: randomUUID(), at: new Date().toISOString(), ...fields }) + '\n');
   }
 
-  close() {
-    for (const s of this.streams.values()) s.end();
+  /** Finish writing everything (resolves once it's on disk, so exiting right after loses nothing). */
+  close(): Promise<void> {
+    const ends = [...this.streams.values()].map((s) => new Promise<void>((resolve) => s.end(() => resolve())));
     this.streams.clear();
+    return Promise.all(ends).then(() => undefined);
   }
 }
 

@@ -3,7 +3,7 @@ import type { PlayOptions, SoundName } from './audio';
 import { Camera } from './camera';
 import { Input } from './input';
 import { Renderer } from './renderer';
-import type { Sprites } from './sprites';
+import { tankSprites, tankSpritesNow, type Sprites } from './sprites';
 import { colorCss, escapeHtml, GameState, type TankInit } from './state';
 import type { ShellApi, View } from './views';
 import type { PadButton, PadPress } from './gamepad';
@@ -47,10 +47,7 @@ export class TankView implements View {
   private lastTick = { angle: NaN, power: NaN };
   private cleanups: (() => void)[] = [];
 
-  constructor(
-    private shell: ShellApi,
-    private sprites: Sprites,
-  ) {
+  constructor(private shell: ShellApi) {
     $('tank-view').hidden = false;
     // The control strip shows on every device (a computer can use it with the mouse, or the keys).
     $('touch').hidden = false;
@@ -93,11 +90,10 @@ export class TankView implements View {
   }
 
   private start(init: TankInit) {
-    if (!this.renderer) {
+    if (!this.camera) {
       this.camera = new Camera(init.config);
       this.camera.zoomIndex = 0;
-      this.renderer = new Renderer($<HTMLCanvasElement>('canvas'), this.sprites, init.config);
-      this.renderer.resize();
+      this.loadArt(init);
     }
     this.state = new GameState(init, {
       feed: (html) => this.feed(html),
@@ -118,6 +114,37 @@ export class TankView implements View {
     const last = this.state.me?.samples.at(-1);
     if (last) this.input.angle = last.angle;
     if (init.reclaimed) this.shell.toast('Welcome back! You reclaimed your tank.');
+  }
+
+  /**
+   * The battlefield draws once its pictures are in (the game itself starts right away). If they
+   * can't be fetched, say so and try again shortly instead of leaving a blank field.
+   */
+  private loadArt(init: TankInit, tries = 0) {
+    const ready = tankSpritesNow();
+    if (ready) {
+      this.useArt(ready, init);
+      return;
+    }
+    tankSprites().then(
+      (sprites) => {
+        if (this.disposed || this.renderer) return;
+        this.useArt(sprites, init);
+        // The ground was textured before its felt pictures were in: texture it again with them.
+        const g = this.state;
+        if (g) g.terrainView.reset(g.terrain);
+      },
+      () => {
+        if (this.disposed) return;
+        if (tries === 0) this.shell.toast('Still loading the battlefield…');
+        window.setTimeout(() => this.loadArt(init, tries + 1), Math.min(10_000, 1000 * 2 ** tries));
+      },
+    );
+  }
+
+  private useArt(sprites: Sprites, init: TankInit) {
+    this.renderer = new Renderer($<HTMLCanvasElement>('canvas'), sprites, init.config);
+    this.renderer.resize();
   }
 
   onSpeaking(aliases: Set<string>) {

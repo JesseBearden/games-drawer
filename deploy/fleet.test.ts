@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseSlot, Fleet, fleetMap, RETIRE_GRACE_MINUTES, type Box, type Cloud, type FrontDoor, type Role } from './fleet';
+import { chooseSlot, Fleet, fleetMap, RETIRE_GRACE_MINUTES, siteSettings, type Box, type Cloud, type FrontDoor, type Role } from './fleet';
 import type { FleetMap, Slot } from './fleetMap';
 
 /** A pretend AWS: boxes, the commands run on them, and where the front door points. */
@@ -166,6 +166,31 @@ describe('the fleet tool without CloudFront (FRONT_DOOR=direct)', () => {
     expect(f.records['games.example']).toBe('3.0.0.1');
   });
 
+  it('a promote that moved the site but stopped before marking the new box current: rollback moves the site back first', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f, 'direct');
+    await fleet.launch('aaaaaaa1');
+    await fleet.promote('aaaaaaa1');
+    await fleet.launch('bbbbbbb2');
+    // Promote got as far as DNS, then the laptop slept.
+    await f.cloud.pointAt(fleet.frontNames(), '3.0.0.2');
+    await fleet.rollback('bbbbbbb2');
+    expect(f.boxes().map((b) => b.release)).toEqual(['aaaaaaa1']);
+    expect(f.records).toMatchObject({ 'games.example': '3.0.0.1', 'www.games.example': '3.0.0.1', 'origin.games.example': '3.0.0.1', 'staging.games.example': '3.0.0.1' });
+  });
+
+  it('…and so does the next launch, before it clears away the half-promoted box', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f, 'direct');
+    await fleet.launch('aaaaaaa1');
+    await fleet.promote('aaaaaaa1');
+    await fleet.launch('bbbbbbb2');
+    await f.cloud.pointAt(fleet.frontNames(), '3.0.0.2');
+    await fleet.launch('ccccccc3');
+    expect(f.records['games.example']).toBe('3.0.0.1');
+    expect(f.boxes().map((b) => b.release).sort()).toEqual(['aaaaaaa1', 'ccccccc3']);
+  });
+
   it('behind CloudFront, only origin. moves, and staging comes through the front door', () => {
     expect(fleetOf(fakeCloud()).frontNames()).toEqual(['origin.games.example']);
     expect(fleetOf(fakeCloud()).stagingNames()).toEqual([]);
@@ -190,5 +215,21 @@ describe('fleet pieces', () => {
       newTables: [['a', 100]],
       staging: 'c',
     });
+  });
+});
+
+describe('deploy settings', () => {
+  const config = { domain: 'gamesdrawer.com', frontDoor: 'direct' };
+  it('come from infra/config.json, so a forgotten FRONT_DOOR can no longer mean CloudFront', () => {
+    expect(siteSettings({}, config)).toEqual({ domain: 'gamesdrawer.com', frontDoor: 'direct' });
+    expect(siteSettings({ FRONT_DOOR: 'direct', SITE_DOMAIN: 'gamesdrawer.com' }, config)).toEqual({ domain: 'gamesdrawer.com', frontDoor: 'direct' });
+  });
+  it('refuse an environment that contradicts the config', () => {
+    expect(() => siteSettings({ FRONT_DOOR: 'cloudfront' }, config)).toThrow(/infra\/config.json says direct/);
+    expect(() => siteSettings({ SITE_DOMAIN: 'example.com' }, config)).toThrow(/SITE_DOMAIN/);
+  });
+  it('need a domain and a valid front door from somewhere', () => {
+    expect(() => siteSettings({}, {})).toThrow(/SITE_DOMAIN/);
+    expect(() => siteSettings({ SITE_DOMAIN: 'x.example', FRONT_DOOR: 'satellite' }, {})).toThrow(/cloudfront or direct/);
   });
 });

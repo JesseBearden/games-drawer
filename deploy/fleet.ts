@@ -23,6 +23,7 @@
  * See deploy/README.md.
  */
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SLOTS, type FleetMap, type Slot } from './fleetMap';
@@ -121,6 +122,23 @@ export class Fleet {
     return this.opts.frontDoor === 'direct' ? [`staging.${this.opts.domain}`] : [];
   }
 
+  /**
+   * Before removing new boxes: if the site's own names point at one of them (a promote that moved
+   * DNS but stopped before marking the box current), point them back at the current box first, so
+   * removing it can't take the site down. (With no current box, as on the very first deploy,
+   * there's nothing to fall back on, and nothing more to lose.)
+   */
+  private async keepFrontDoorOff(doomed: Box[], current: Box | null) {
+    const ips = new Set(doomed.map((b) => b.publicIp).filter(Boolean));
+    const stuck = this.frontNames().filter((n) => {
+      const ip = this.cloud.pointsTo(n);
+      return ip !== null && ips.has(ip);
+    });
+    if (!stuck.length || !current) return;
+    this.cloud.log(`${stuck.join(', ')} point at a new box (an unfinished promote?): moving them back to box ${current.slot} first.`);
+    await this.cloud.pointAt(this.frontNames(), current.publicIp);
+  }
+
   /** Tell every live box the map. */
   private async route(boxes: Box[], map: FleetMap) {
     for (const b of boxes) this.cloud.log((await this.cloud.run(b, `games-drawer-deploy ${b.release} route ${encode(map)}`)).trim());
@@ -129,6 +147,10 @@ export class Fleet {
   async launch(release: string): Promise<Box> {
     let boxes = this.cloud.boxes();
     // A new box left over from a deploy that didn't finish.
+    await this.keepFrontDoorOff(
+      boxes.filter((x) => x.role === 'candidate'),
+      currentBox(boxes),
+    );
     for (const b of boxes.filter((x) => x.role === 'candidate')) {
       this.cloud.log(`Removing box ${b.slot} (${b.release.slice(0, 7)}), left from an unfinished deploy.`);
       this.cloud.terminate(b);
@@ -208,6 +230,7 @@ export class Fleet {
       await this.route(rest, fleetMap(rest, [[current.slot, 100]], current.slot));
       if (this.stagingNames().length) await this.cloud.pointAt(this.stagingNames(), current.publicIp);
     }
+    if (candidate) await this.keepFrontDoorOff([candidate], current);
     if (candidate) {
       this.cloud.terminate(candidate);
       this.cloud.log(`Rolled back: box ${candidate.slot} (${release.slice(0, 7)}) removed${current ? `; box ${current.slot} keeps everything` : ''}.`);
@@ -359,15 +382,48 @@ export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
   return cloud;
 }
 
+/** infra/config.json: what the site's infrastructure was built with (the CDK app reads it too). */
+function readSiteConfig(): SiteConfig {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'infra', 'config.json'), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+export interface SiteConfig {
+  domain?: string;
+  frontDoor?: string;
+}
+
+/**
+ * The domain and front door to deploy with: infra/config.json's, which the environment may repeat
+ * but never contradict. A hand deploy that forgot FRONT_DOOR=direct used to mean "cloudfront", and
+ * promoting would then have moved only origin.<domain>, leaving the site on a box about to retire.
+ */
+export function siteSettings(env: NodeJS.ProcessEnv, config: SiteConfig): { domain: string; frontDoor: FrontDoor } {
+  const pick = (name: string, fromEnv: string | undefined, fromConfig: string | undefined) => {
+    if (fromEnv && fromConfig && fromEnv !== fromConfig) {
+      throw new Error(`${name}=${fromEnv}, but infra/config.json says ${fromConfig}. Fix whichever is wrong before deploying.`);
+    }
+    const v = fromEnv || fromConfig;
+    if (!v) throw new Error(`Set ${name} (or fill it in infra/config.json).`);
+    return v;
+  };
+  const domain = pick('SITE_DOMAIN', env.SITE_DOMAIN, config.domain);
+  const frontDoor = pick('FRONT_DOOR', env.FRONT_DOOR, config.frontDoor);
+  if (!isFrontDoor(frontDoor)) throw new Error('FRONT_DOOR must be cloudfront or direct.');
+  return { domain, frontDoor };
+}
+
 async function main() {
   const [cmd, release, arg] = process.argv.slice(2);
   const needRelease = () => {
     if (!release || !/^[0-9a-f]{7,40}$/.test(release)) throw new Error('Give the release (a git commit).');
     return release;
   };
-  const frontDoor = process.env.FRONT_DOOR || 'cloudfront';
-  if (!isFrontDoor(frontDoor)) throw new Error('FRONT_DOOR must be cloudfront or direct.');
-  const fleet = new Fleet(awsCloud(), { domain: process.env.SITE_DOMAIN!, frontDoor });
+  const { domain, frontDoor } = siteSettings(process.env, readSiteConfig());
+  const fleet = new Fleet(awsCloud(), { domain, frontDoor });
   switch (cmd) {
     case 'launch':
       await fleet.launch(needRelease());

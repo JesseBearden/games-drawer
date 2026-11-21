@@ -154,3 +154,27 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const m = l - c / 2;
   return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
+
+let loading: Promise<Sprites> | null = null;
+let loaded: Sprites | null = null;
+
+/** The Tanks pictures if they've already been fetched. */
+export function tankSpritesNow(): Sprites | null {
+  return loaded;
+}
+
+/**
+ * The Tanks pictures, fetched the first time a Tanks game needs them (not on every page load: a
+ * card or puzzle table never uses them). One fetch is shared; a failed one is forgotten so the
+ * next call tries again.
+ */
+export function tankSprites(): Promise<Sprites> {
+  loading ??= loadSprites().then(
+    (s) => (loaded = s),
+    (err) => {
+      loading = null;
+      throw err;
+    },
+  );
+  return loading;
+}

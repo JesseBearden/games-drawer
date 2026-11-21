@@ -40,10 +40,18 @@ export function isFleetMap(v: unknown): v is FleetMap {
   return m.staging === null || m.staging in m.boxes;
 }
 
+/**
+ * Every route change reloads Caddy, and by default a reload closes every proxied WebSocket: each
+ * deploy step would knock everyone off their table and voice (they'd reconnect, but it's jarring).
+ * This keeps open connections on the routes they started on, for longer than a retiring box takes
+ * to drain (DRAIN_MAX_MS, 3 hours), so a reload never drops anyone.
+ */
+export const KEEP_STREAMS = 'stream_close_delay 4h';
+
 /** Caddy lines that send a request to one box: this box's own server, or another box (marked as passed on). */
 function proxyTo(slot: Slot, map: FleetMap, self: Slot): string[] {
-  if (slot === self) return [`reverse_proxy 127.0.0.1:${GAME_PORT}`];
-  return [`reverse_proxy ${map.boxes[slot]}:${HOP_PORT} {`, `\theader_up ${HOP_HEADER} 1`, '}'];
+  if (slot === self) return [`reverse_proxy 127.0.0.1:${GAME_PORT} {`, `\t${KEEP_STREAMS}`, '}'];
+  return [`reverse_proxy ${map.boxes[slot]}:${HOP_PORT} {`, `\theader_up ${HOP_HEADER} 1`, `\t${KEEP_STREAMS}`, '}'];
 }
 
 /** Caddy lines that spread new tables over the boxes taking them. */
@@ -55,6 +63,7 @@ function proxyNewTables(map: FleetMap, self: Slot): string[] {
     `\tlb_policy weighted_round_robin ${map.newTables.map(([, w]) => w).join(' ')}`,
     // Only another box reads it (as "serve this yourself"); this box's own server ignores it.
     `\theader_up ${HOP_HEADER} 1`,
+    `\t${KEEP_STREAMS}`,
     '}',
   ];
 }

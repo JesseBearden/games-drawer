@@ -32,35 +32,50 @@ export class Input {
   private held = new Map<Action, number>();
   private moveDir: -1 | 0 | 1 = 0;
   enabled = true;
+  /**
+   * Every listener goes away together on dispose. The touch buttons outlive this object (a new
+   * Tanks view makes a new Input after a reconnect or rematch), so a listener left behind would
+   * fire the old view too, with its old aim.
+   */
+  private listening = new AbortController();
 
   constructor(
     private sink: InputSink,
     private touchRoot: HTMLElement,
   ) {
-    window.addEventListener('keydown', this.onKeyDown);
-    window.addEventListener('keyup', this.onKeyUp);
-    window.addEventListener('blur', () => this.releaseAll());
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') this.releaseAll();
-    });
+    const signal = this.listening.signal;
+    window.addEventListener('keydown', this.onKeyDown, { signal });
+    window.addEventListener('keyup', this.onKeyUp, { signal });
+    window.addEventListener('blur', () => this.releaseAll(), { signal });
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        if (document.visibilityState === 'hidden') this.releaseAll();
+      },
+      { signal },
+    );
     for (const btn of touchRoot.querySelectorAll<HTMLElement>('[data-act]')) {
       const act = btn.dataset.act as Action;
-      btn.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        btn.setPointerCapture(e.pointerId);
-        btn.classList.add('held');
-        this.press(act);
-      });
+      btn.addEventListener(
+        'pointerdown',
+        (e) => {
+          e.preventDefault();
+          btn.setPointerCapture(e.pointerId);
+          btn.classList.add('held');
+          this.press(act);
+        },
+        { signal },
+      );
       const up = (e: PointerEvent) => {
         e.preventDefault();
         btn.classList.remove('held');
         this.release(act);
       };
-      btn.addEventListener('pointerup', up);
-      btn.addEventListener('pointercancel', up);
+      btn.addEventListener('pointerup', up, { signal });
+      btn.addEventListener('pointercancel', up, { signal });
       // iOS sometimes drops pointerup; losing capture always means the finger is gone.
-      btn.addEventListener('lostpointercapture', up);
-      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+      btn.addEventListener('lostpointercapture', up, { signal });
+      btn.addEventListener('contextmenu', (e) => e.preventDefault(), { signal });
     }
   }
 
@@ -165,7 +180,8 @@ export class Input {
   }
 
   dispose() {
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
+    this.releaseAll();
+    this.listening.abort();
+    for (const btn of this.touchRoot.querySelectorAll<HTMLElement>('[data-act]')) btn.classList.remove('held');
   }
 }

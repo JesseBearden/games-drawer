@@ -6,6 +6,7 @@ import { MemoryLog } from '../src/eventlog';
 import { HAND_END_MS, HeartsGame, TRICK_PAUSE_MS } from '../src/games/hearts';
 import { SpadesGame } from '../src/games/spades';
 import { DominoesGame } from '../src/games/dominoes';
+import { BOT_TAKEOVER_MS } from '../src/games/types';
 import { RoomManager } from '../src/manager';
 import { devicePseudonym, IDLE_ROOM_MS, IDLE_WARNING_MS, turnCredentials, type Conn, type RoomDeps, type Room } from '../src/room';
 import { stunFromTurn } from '../src/server';
@@ -524,10 +525,32 @@ describe('hearts in a room', () => {
     expect(b.conn.lastView().seats.map((s) => s.cards)).toEqual([13, 13, 13, 13]);
   });
 
+  it('a dropped phone gets 20 seconds to come back before a computer plays for them', () => {
+    const { a, b, game, mgr, clock } = heartsRoom();
+    const sb = game.seatOf('session-bbbb')!;
+    const sa = game.seatOf('session-aaaa')!;
+    a.room.handle('session-aaaa', { t: 'g', m: { t: 'pass', cards: botPass(game.round.hands[sa]) } });
+    // B's screen locks during the pass: nothing is passed for them while they might come back.
+    b.room.disconnect('session-bbbb', b.conn, 'disconnect');
+    run(mgr, clock, BOT_TAKEOVER_MS - 2000);
+    expect(game.round.passes[sb]).toBeNull();
+    // Back in time: still their own choice.
+    const again = new FakeConn();
+    expect(b.room.join(again, 'session-bbbb', 'bbbb', 'phone').ok).toBe(true);
+    run(mgr, clock, 30_000);
+    expect(game.round.passes[sb]).toBeNull();
+    // Gone for good this time: after the wait, the computer passes for them.
+    b.room.disconnect('session-bbbb', again, 'disconnect');
+    run(mgr, clock, BOT_TAKEOVER_MS + 5000);
+    expect(game.round.passes[sb]).not.toBeNull();
+    expect(a.conn.sent.length).toBeGreaterThan(0);
+  });
+
   it('rejects out-of-turn, illegal and invented plays', () => {
     const { a, b, game, mgr, clock } = heartsRoom();
-    // B steps away; a bot covers their seat.
+    // B steps away; a bot covers their seat (once they've been gone a while).
     b.room.disconnect('session-bbbb', b.conn, 'disconnect');
+    clock.now += BOT_TAKEOVER_MS;
     const sa = game.seatOf('session-aaaa')!;
     const hand = [...game.round.hands[sa]];
     // Passing cards you don't hold, or the same card three times.
@@ -787,9 +810,12 @@ describe('dominoes in a room', () => {
     a.room.handle('session-aaaa', { t: 'g', m: { t: 'ready' } });
     run(mgr, clock, 5000);
     expect(game.phase).toBe('handEnd');
-    // The one we're waiting on loses their connection: a bot plays for them, so go on.
+    // The one we're waiting on loses their connection: give them a little while to come back
+    // (a locked phone), then a bot plays for them, so go on.
     b.room.disconnect('session-bbbb', b.conn, 'disconnect');
-    mgr.stepAll();
+    run(mgr, clock, BOT_TAKEOVER_MS - 1000);
+    expect(game.phase).toBe('handEnd');
+    run(mgr, clock, 2000);
     expect(game.phase).toBe('playing');
     expect(game.handNumber).toBe(2);
 

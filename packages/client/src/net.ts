@@ -59,6 +59,14 @@ function slotFor(roomCode: string | null): Slot | null {
 
 export type FatalError = Extract<ServerMessage, { t: 'error' }>;
 
+/**
+ * At a table something arrives at least every couple of seconds (the shell pings every 2 s). This
+ * long with nothing, while the page is showing, means the connection died quietly (Wi-Fi to
+ * cellular, a router dropping it) even though the browser still calls it open: start again.
+ * Generous, so a slow moment on the server doesn't turn into everyone reconnecting at once.
+ */
+const SILENT_MS = 15_000;
+
 export interface NetHandlers {
   onMessage(msg: ServerMessage): void;
   onFatal(err: FatalError): void;
@@ -71,7 +79,9 @@ export class Net {
   private closedByUs = false;
   private retry = 0;
   private retryTimer: number | undefined;
-  private connected = false;
+  private watchdog: number;
+  /** When the open socket last heard anything from the server. */
+  private lastHeard = 0;
   private room: RoomRequest;
   /** The room's code once known (public rooms have one too), for reconnecting to the same copy. */
   private roomCode: string | null = null;
@@ -86,6 +96,7 @@ export class Net {
     if (room.kind === 'private') this.roomCode = room.code;
     document.addEventListener('visibilitychange', this.onVisible);
     window.addEventListener('online', this.onVisible);
+    this.watchdog = window.setInterval(this.checkAlive, 2000);
   }
 
   connect() {
@@ -94,11 +105,17 @@ export class Net {
     const slot = slotFor(this.roomCode);
     const ws = new WebSocket(`${proto}://${location.host}/ws${slot ? `?slot=${slot}` : ''}`);
     this.ws = ws;
+    // Every socket must be welcomed on its own. An error before that (the table closed while the
+    // phone slept, it filled up, too many tries) is final: trying again can't fix it, and each try
+    // would count as a wrong table code against everyone on the same home internet.
+    let welcomed = false;
     ws.onopen = () => {
+      this.lastHeard = Date.now();
       const deviceId = getDeviceId();
       this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device, ...(deviceId && { deviceId }) });
     };
     ws.onmessage = (ev) => {
+      this.lastHeard = Date.now();
       let msg: ServerMessage;
       try {
         msg = JSON.parse(ev.data as string);
@@ -106,7 +123,7 @@ export class Net {
         return;
       }
       if (msg.t === 'welcome') {
-        this.connected = true;
+        welcomed = true;
         this.retry = 0;
         setSession(msg.session);
         // Reconnects go straight back to the same room.
@@ -114,26 +131,43 @@ export class Net {
         this.roomCode = msg.room.code;
       }
       if (msg.t === 'error') {
-        if (msg.code === 'replaced' || msg.code === 'version' || msg.code === 'room-closed' || !this.connected) {
+        if (!welcomed || msg.code === 'replaced' || msg.code === 'version' || msg.code === 'room-closed') {
           this.closedByUs = true;
+          // The server closes this socket itself. Let go of it now, so leaving doesn't say "leave"
+          // on it (after "replaced", the server would take that as the new tab leaving).
+          this.ws = null;
+          ws.close();
           this.h.onFatal(msg);
           return;
         }
       }
       this.h.onMessage(msg);
     };
-    ws.onclose = () => {
-      if (this.ws !== ws) return;
-      this.ws = null;
-      if (this.closedByUs) return;
-      this.h.onReconnecting();
-      const delay = Math.min(5000, 300 * 2 ** this.retry++);
-      this.retryTimer = window.setTimeout(() => this.connect(), delay);
-    };
+    ws.onclose = () => this.lost(ws);
   }
 
+  /** This socket is gone (closed, or silent too long): reconnect after a short, growing wait. */
+  private lost(ws: WebSocket) {
+    if (this.ws !== ws) return;
+    this.ws = null;
+    if (ws.readyState !== WebSocket.CLOSED) ws.close();
+    if (this.closedByUs) return;
+    this.h.onReconnecting();
+    const delay = Math.min(5000, 300 * 2 ** this.retry++);
+    this.retryTimer = window.setTimeout(() => this.connect(), delay);
+  }
+
+  private checkAlive = () => {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN || document.visibilityState !== 'visible') return;
+    if (Date.now() - this.lastHeard > SILENT_MS) this.lost(ws);
+  };
+
   private onVisible = () => {
-    if (document.visibilityState === 'visible' && !this.ws && !this.closedByUs) {
+    if (document.visibilityState !== 'visible' || this.closedByUs) return;
+    // Pings pause while the page is hidden; give the connection a fresh window to answer.
+    this.lastHeard = Date.now();
+    if (!this.ws) {
       this.retry = 0;
       this.connect();
     }
@@ -146,6 +180,7 @@ export class Net {
   close() {
     this.closedByUs = true;
     clearTimeout(this.retryTimer);
+    clearInterval(this.watchdog);
     document.removeEventListener('visibilitychange', this.onVisible);
     window.removeEventListener('online', this.onVisible);
     if (this.ws) {

@@ -149,6 +149,21 @@ describe('rooms and bots', () => {
     expect(join(mgr, 'session-bbbb', { kind: 'private', code: a.room.code }).room).toBe(a.room);
   });
 
+  it('someone who leaves on purpose: their tank becomes an ordinary bot, and a newcomer can have it', () => {
+    const { mgr } = setup();
+    const people = ['session-0000', 'session-0001', 'session-0002', 'session-0003'].map((s) => join(mgr, s));
+    const room = people[0].room;
+    const tank = room.tanks!.world.tanks.get(people[3].tankId)!;
+    room.handle('session-0003', { t: 'leave' });
+    expect(tank.controller).toBe('bot');
+    expect(tank.name).not.toBe('session-0003');
+    expect(room.tanks!.world.tanks.size).toBe(4);
+    const late = join(mgr, 'session-0009');
+    expect(late.room).toBe(room);
+    expect(late.tankId).not.toBe(-1);
+    expect([...room.tanks!.world.tanks.values()].filter((t) => t.controller === 'human')).toHaveLength(4);
+  });
+
   it('caps a room at the configured size (4 tanks)', () => {
     const { mgr } = setup();
     const first = join(mgr, 'session-0000');

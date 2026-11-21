@@ -102,6 +102,11 @@ export const QUIET_DROP_MS = 10_000;
 export const CAUGHT_LIMIT = 3;
 export const CAUGHT_WINDOW_MS = 60_000;
 export const CHAT_PAUSE_MS = 30_000;
+/** What people at a table hear when a site update is about to close it, and when it does. */
+export const updateWarningText = (minutes: number) =>
+  `Games Drawer was updated. This table closes in ${minutes} minute${minutes === 1 ? '' : 's'}: start a new table to keep playing.`;
+export const UPDATE_CLOSED = 'This table closed for an update to Games Drawer. Start a new table to keep playing.';
+
 /** Invite links a room keeps (the oldest goes first). */
 export const MAX_INVITES = 40;
 
@@ -583,7 +588,12 @@ export class Room {
     this.photos.clear();
     this.recentMessages.clear();
     const minutes = Math.round((this.deps.idleRoomMs ?? IDLE_ROOM_MS) / 60_000);
-    const message = reason === 'idle' ? `This table closed after ${minutes} minute${minutes === 1 ? '' : 's'} with nobody playing or talking.` : 'This room has closed.';
+    const message =
+      reason === 'idle'
+        ? `This table closed after ${minutes} minute${minutes === 1 ? '' : 's'} with nobody playing or talking.`
+        : reason === 'update'
+          ? UPDATE_CLOSED
+          : 'This room has closed.';
     for (const p of this.players.values()) {
       if (p.conn) {
         p.conn.send(JSON.stringify({ t: 'error', code: 'room-closed', message } satisfies ServerMessage));
@@ -1032,6 +1042,12 @@ export class Room {
   private pushHistory(msg: ChatMessage) {
     this.chatHistory.push(msg);
     while (this.chatHistory.length > this.deps.chatHistorySize) this.chatHistory.shift();
+  }
+
+  /** The site was updated and this copy of the server is winding down: say how long the table has. */
+  updateWarning(minutes: number) {
+    if (this.closed) return;
+    this.systemChat(updateWarningText(minutes));
   }
 
   private systemChat(text: string, notice?: ChatMessage['notice']) {

@@ -11,7 +11,7 @@ import {
   type HandResult,
   type HeartsView,
 } from '@tank/shared';
-import type { GameHost, Member, ServerGame } from './types';
+import { botPlays, type GameHost, type Member, type ServerGame } from './types';
 
 /** A finished trick stays on the table this long so everyone sees who took it. */
 export const TRICK_PAUSE_MS = 1400;
@@ -79,7 +79,7 @@ export class HeartsGame implements ServerGame {
 
   /** True when nobody is at the seat to play it right now (bot, or player disconnected). */
   private botControls(seat: number) {
-    return !this.memberAt(seat)?.conn;
+    return botPlays(this.memberAt(seat), this.host.now());
   }
 
   /**
@@ -118,7 +118,7 @@ export class HeartsGame implements ServerGame {
     if (this.seatOf(m.session) === null) return null;
     this.schedule();
     this.sync();
-    return 'Their cards are played for them until they’re back.';
+    return 'If they’re not back soon, the computer plays their cards until they are.';
   }
 
   removePlayer(m: Member) {

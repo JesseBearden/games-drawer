@@ -208,10 +208,16 @@ export class Rollout {
     const state = this.sys.readState();
     if (state.slot && state.slot !== slot) throw new Error(`This box is already slot ${state.slot}.`);
     this.ensureSetup();
-    // Pages loaded from the box this one replaces ask for that release's build files.
+    // Pages loaded from the box this one replaces ask for that release's build files. Nice to
+    // have, not essential: releases expire from storage after 60 days, and a quiet two months
+    // mustn't block the next deploy (those pages just reload into the new build).
     if (previous && previous !== this.release) {
-      this.sys.sh('/usr/local/bin/games-drawer-deploy', [previous, 'fetch']);
-      shareAssets(this.releaseDir, path.join(RELEASES, previous));
+      try {
+        this.sys.sh('/usr/local/bin/games-drawer-deploy', [previous, 'fetch']);
+        shareAssets(this.releaseDir, path.join(RELEASES, previous));
+      } catch (err) {
+        this.sys.log(`Couldn't fetch the running release ${previous.slice(0, 7)} to share its build files (${err instanceof Error ? err.message : err}); carrying on without them.`);
+      }
     }
     this.sys.writeFile(`${ETC}/slot-${slot}.env`, slotEnv(slot, this.release, this.releaseDir));
     this.sys.sh('systemctl', ['restart', this.unit(slot)]);

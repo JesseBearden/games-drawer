@@ -6,7 +6,7 @@ import { GAME_PORT, HOP_HEADER, isFleetMap, routesSnippet, soloMap, type FleetMa
 import { decodeMap, EMPTY_STATE, ROUTES_FILE, Rollout, serverProblems, shareAssets, slotEnv, type Health, type State, type System } from './rollout';
 
 /** A pretend game server box: remembers files and commands, and whether its server runs. */
-function fakeBox(opts: { failToStart?: boolean } = {}) {
+function fakeBox(opts: { failToStart?: boolean; failFetch?: boolean } = {}) {
   let state: State = structuredClone(EMPTY_STATE);
   const files = new Map<string, string>();
   const commands: string[] = [];
@@ -22,6 +22,7 @@ function fakeBox(opts: { failToStart?: boolean } = {}) {
     },
     sh: (cmd, args) => {
       commands.push([cmd, ...args].join(' '));
+      if (opts.failFetch && args[1] === 'fetch') throw new Error('download failed: 404');
       const unit = args.at(-1) ?? '';
       if (cmd === 'systemctl' && args[0] === 'restart' && !opts.failToStart) {
         running = /RELEASE=(\w+)/.exec(files.get(`/etc/games-drawer/slot-${unit.replace('games-drawer@', '')}.env`) ?? '')![1];
@@ -82,6 +83,13 @@ describe('the rollout tool on a box', () => {
     expect(m.commands).toContain('/usr/local/bin/games-drawer-deploy aaaaaaa1 fetch');
   });
 
+  it('still starts when the release it replaces has expired from storage (after 60 quiet days)', async () => {
+    const m = fakeBox({ failFetch: true });
+    await new Rollout(m.sys, 'bbbbbbb2', releaseDir('bbbbbbb2')).start('b', 'aaaaaaa1');
+    expect(m.state().slot).toBe('b');
+    expect(m.state().release).toBe('bbbbbbb2');
+  });
+
   it('a server that never comes up is stopped, and the box is left unclaimed', async () => {
     const m = fakeBox({ failToStart: true });
     await expect(new Rollout(m.sys, 'bbbbbbb2', releaseDir('bbbbbbb2')).start('b')).rejects.toThrow(/didn't come up/);
@@ -97,7 +105,7 @@ describe('the rollout tool on a box', () => {
     r.route(two);
     const routes = m.files.get(ROUTES_FILE)!;
     // Tables on box a stay here; new tables go to box b.
-    expect(routes).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801\n\}/);
+    expect(routes).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801 \{\n\t\tstream_close_delay 4h\n\t\}\n\}/);
     expect(routes).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:8080 \{/);
     expect(m.commands).toContain('systemctl reload caddy');
     // A map that leaves this box out is refused.
@@ -176,9 +184,13 @@ describe('routes from the fleet map', () => {
   it('on the current box: its own tables here, the canary’s there, new tables split by weight', () => {
     const r = routesSnippet(canary, 'a', 'games.example');
     expect(r).toContain('redir https://games.example{uri} permanent');
-    expect(r).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801\n\}/);
-    expect(r).toMatch(/handle @slot_b \{\n\treverse_proxy 10\.0\.0\.22:8080 \{\n\t\theader_up X-Gd-Hop 1\n\t\}\n\}/);
+    expect(r).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801 \{\n\t\tstream_close_delay 4h\n\t\}\n\}/);
+    expect(r).toMatch(/handle @slot_b \{\n\treverse_proxy 10\.0\.0\.22:8080 \{\n\t\theader_up X-Gd-Hop 1\n\t\tstream_close_delay 4h\n\t\}\n\}/);
     expect(r).toContain('reverse_proxy 127.0.0.1:8801 10.0.0.22:8080 {\n\t\tlb_policy weighted_round_robin 90 10');
+    // A reload (every route change) never drops anyone: every proxy keeps its open connections.
+    const proxies = r.match(/reverse_proxy [^\n]*\{[^}]*\}/g)!;
+    expect(proxies).toHaveLength(r.split('reverse_proxy').length - 1);
+    for (const p of proxies) expect(p).toContain('stream_close_delay 4h');
     // Staging is the newest box.
     expect(r).toMatch(/@staging host staging\.games\.example\nhandle @staging \{\n\treverse_proxy 10\.0\.0\.22:8080/);
   });
@@ -186,7 +198,7 @@ describe('routes from the fleet map', () => {
   it('passed-on requests are always served by the box they reach (no loops between boxes)', () => {
     for (const self of ['a', 'b'] as const) {
       const r = routesSnippet(canary, self, 'games.example');
-      expect(r).toMatch(new RegExp(`@hop header ${HOP_HEADER} 1\\nhandle @hop \\{\\n\\treverse_proxy 127\\.0\\.0\\.1:8801\\n\\}`));
+      expect(r).toMatch(new RegExp(`@hop header ${HOP_HEADER} 1\\nhandle @hop \\{\\n\\treverse_proxy 127\\.0\\.0\\.1:8801 \\{`));
       // The hop rule comes before every rule that could pass the request on again.
       expect(r.indexOf('handle @hop')).toBeLessThan(r.indexOf('handle @staging'));
       expect(r.indexOf('handle @hop')).toBeLessThan(r.indexOf('handle @slot_'));

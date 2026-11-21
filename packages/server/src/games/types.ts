@@ -19,6 +19,21 @@ export interface Member {
   readonly device: Device;
   /** Null while they're disconnected (their seat is held for them). */
   readonly conn: Conn | null;
+  /** When their connection dropped (null while connected; left out where nobody tracks it). */
+  readonly awaySince?: number | null;
+}
+
+/**
+ * How long someone's connection must be gone before a computer plays their turn. Phones drop the
+ * connection when the screen locks or another app opens; that shouldn't cost them a card.
+ */
+export const BOT_TAKEOVER_MS = 20_000;
+
+/** Does a computer play this seat now: nobody's there, or they've been gone BOT_TAKEOVER_MS. */
+export function botPlays(m: Member | undefined, now: number): boolean {
+  if (!m) return true;
+  if (m.conn) return false;
+  return m.awaySince == null || now - m.awaySince >= BOT_TAKEOVER_MS;
 }
 
 /** Services the room gives the game it's running. */
