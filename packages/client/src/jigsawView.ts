@@ -16,6 +16,7 @@ import {
   type GameServerMessage,
   type PuzzlePhase,
   type PuzzleState,
+  type PuzzleImage,
   type PuzzleSummary,
   type TabShape,
 } from '@tank/shared';
@@ -166,6 +167,15 @@ export class JigsawTable implements View {
   private saves: PuzzleSummary[] = [];
   private pickImage = PUZZLE_IMAGES[0].id;
   private pickCount: number = 100;
+  /** The pictures to choose from, in a new order each time the setup screen opens. */
+  private pictures: PuzzleImage[] = [];
+  /**
+   * The setup screen is built once each time it opens; after that, picking only moves the
+   * "picked" marks. Rebuilding it redrew every picture, which flashed on iPhones (Safari blanks
+   * and reloads each image; Chrome doesn't).
+   */
+  private setupBuilt = false;
+  private savesHtml = '';
 
   // The table.
   private canvas!: HTMLCanvasElement;
@@ -282,6 +292,8 @@ export class JigsawTable implements View {
           const list = parseLocalPuzzles(raw);
           if (!list.length) return;
           addLocalPuzzleImages(list);
+          this.pictures = [];
+          this.setupBuilt = false;
           if (this.phase === 'setup' && !this.el.hidden) this.renderSetup();
         })
         .catch(() => {});
@@ -361,7 +373,7 @@ export class JigsawTable implements View {
         forget(m.gone);
         const gone = new Set(m.gone);
         this.saves = m.saves.length ? m.saves : this.saves.filter((s) => !gone.has(s.id));
-        if (this.phase === 'setup') this.renderSetup();
+        if (this.phase === 'setup') this.renderSaves();
         return;
       }
     }
@@ -395,20 +407,54 @@ export class JigsawTable implements View {
     play.hidden = this.phase === 'setup';
     this.el.dataset.phase = this.phase;
     if (this.phase === 'setup') {
-      this.renderSetup();
+      // Opening the setup screen deals the pictures out in a new order (see setupBuilt).
+      if (!this.setupBuilt) this.renderSetup(true);
       const ids = loadSaved().map((s) => s.id);
       if (ids.length) this.shell.sendGame({ t: 'pz-saves', ids });
       return;
     }
+    this.setupBuilt = false;
     void this.prepareArt();
     this.updateStatus();
     this.renderDone();
   }
 
-  private renderSetup() {
-    const img = allPuzzleImages().find((i) => i.id === this.pickImage) ?? PUZZLE_IMAGES[0];
-    let html = '<div class="pz-setup-card"><h2>Jigsaw puzzle</h2>';
-    // People coming back want their puzzle first.
+  /** Build the setup screen; `shuffle` deals the pictures out in a new order. */
+  private renderSetup(shuffle = false) {
+    if (shuffle || !this.pictures.length) this.shuffleImages();
+    let html = '<div class="pz-setup-card"><h2>Jigsaw puzzle</h2><div class="pz-saves-box"></div>';
+    html += '<h4>How many pieces?</h4><div class="pz-counts">';
+    for (const n of PIECE_COUNTS) html += `<button type="button" class="pz-btn" data-count="${n}">${n}</button>`;
+    html += '</div><h4>Choose a puzzle</h4><div class="pz-images">';
+    for (const i of this.pictures) {
+      html += `<button type="button" class="pz-image" data-image="${i.id}"><img src="${i.thumb}" alt="" loading="lazy" /><span>${escapeHtml(i.title)}</span></button>`;
+    }
+    html += '</div><div class="pz-start-bar"><p class="pc-small pz-grid"></p>';
+    html += '<button type="button" class="pc-btn pc-btn-main pc-btn-big pz-start" data-pz="start">Start puzzle</button>';
+    html += '<p class="pc-small pz-credit"></p></div></div>';
+    (this.el.querySelector('.pz-setup') as HTMLElement).innerHTML = html;
+    this.setupBuilt = true;
+    this.savesHtml = '';
+    this.renderSaves();
+    this.renderPicks();
+  }
+
+  /** The pictures in a new order with the first one picked, so different ones are up top each time. */
+  private shuffleImages() {
+    const list = allPuzzleImages();
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    this.pictures = list;
+    this.pickImage = list[0].id;
+  }
+
+  /** "Continue a puzzle", above the rest: people coming back want their puzzle first. */
+  private renderSaves() {
+    const box = this.el.querySelector<HTMLElement>('.pz-saves-box');
+    if (!box) return;
+    let html = '';
     if (this.saves.length) {
       html += '<h3>Continue a puzzle</h3><ul class="pz-saves">';
       for (const s of [...this.saves].sort((a, b) => b.updatedAt - a.updatedAt)) {
@@ -419,22 +465,28 @@ export class JigsawTable implements View {
       }
       html += '</ul><h3>Or start a new one</h3>';
     }
-    html += '<h4>How many pieces?</h4><div class="pz-counts">';
-    for (const n of PIECE_COUNTS) {
+    // Redrawn only when the list really changed (the same flash as above).
+    if (html === this.savesHtml) return;
+    this.savesHtml = html;
+    box.innerHTML = html;
+  }
+
+  /** Mark the picked picture and size, and say what you'd get, without rebuilding anything. */
+  private renderPicks() {
+    const card = this.el.querySelector<HTMLElement>('.pz-setup-card');
+    if (!card) return;
+    const img = this.pictures.find((i) => i.id === this.pickImage) ?? this.pictures[0] ?? PUZZLE_IMAGES[0];
+    for (const b of card.querySelectorAll<HTMLElement>('[data-image]')) b.classList.toggle('picked', b.dataset.image === img.id);
+    for (const b of card.querySelectorAll<HTMLElement>('[data-count]')) {
+      const n = Number(b.dataset.count);
       const g = gridFor(img.width, img.height, n);
-      html += `<button type="button" class="pz-btn${n === this.pickCount ? ' picked' : ''}" data-count="${n}" title="${g.cols * g.rows} pieces">${n}</button>`;
-    }
-    html += '</div><h4>Choose a puzzle</h4><div class="pz-images">';
-    for (const i of allPuzzleImages()) {
-      html += `<button type="button" class="pz-image${i.id === img.id ? ' picked' : ''}" data-image="${i.id}"><img src="${i.thumb}" alt="" loading="lazy" /><span>${escapeHtml(i.title)}</span></button>`;
+      b.classList.toggle('picked', n === this.pickCount);
+      b.title = `${g.cols * g.rows} pieces`;
     }
     // The grid has to fit the picture, so the real count is close to the one picked.
     const grid = gridFor(img.width, img.height, this.pickCount);
-    html += '</div><div class="pz-start-bar">';
-    html += `<p class="pc-small pz-grid"><b>${escapeHtml(img.title)}</b>: ${grid.cols * grid.rows} pieces, ${grid.cols} across and ${grid.rows} down.</p>`;
-    html += '<button type="button" class="pc-btn pc-btn-main pc-btn-big pz-start" data-pz="start">Start puzzle</button>';
-    html += `<p class="pc-small">Anyone at the table can pick. ${escapeHtml(img.credit)}.</p></div></div>`;
-    (this.el.querySelector('.pz-setup') as HTMLElement).innerHTML = html;
+    card.querySelector('.pz-grid')!.innerHTML = `<b>${escapeHtml(img.title)}</b>: ${grid.cols * grid.rows} pieces, ${grid.cols} across and ${grid.rows} down.`;
+    card.querySelector('.pz-credit')!.textContent = `Anyone at the table can pick. ${img.credit}.`;
   }
 
   /**
@@ -449,7 +501,7 @@ export class JigsawTable implements View {
     }
     forget([id]);
     this.saves = this.saves.filter((x) => x.id !== id);
-    this.renderSetup();
+    this.renderSaves();
   }
 
   private updateStatus() {
@@ -1340,13 +1392,13 @@ export class JigsawTable implements View {
     const pickImage = t.closest<HTMLElement>('[data-image]')?.dataset.image;
     if (pickImage) {
       this.pickImage = pickImage;
-      this.renderSetup();
+      this.renderPicks();
       return;
     }
     const count = t.closest<HTMLElement>('[data-count]')?.dataset.count;
     if (count) {
       this.pickCount = Number(count);
-      this.renderSetup();
+      this.renderPicks();
       return;
     }
     const resume = t.closest<HTMLElement>('[data-resume]')?.dataset.resume;

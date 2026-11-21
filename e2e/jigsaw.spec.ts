@@ -76,8 +76,9 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
   await expect(page.locator('#game')).toHaveAttribute('data-view', 'jigsaw');
   const view = page.locator('#jigsaw-view');
 
-  // The picker: the dog photo and the piece counts.
+  // The picker: the dog photo (the order is shuffled, so pick it by name) and the piece counts.
   await expect(view.locator('.pz-image')).not.toHaveCount(0);
+  await view.locator('[data-image="dog"]').click();
   await view.locator('[data-count="50"]').click();
   await expect(view.locator('[data-count="50"]')).toHaveClass(/picked/);
   await page.screenshot({ path: info.outputPath('setup.png') });
@@ -167,8 +168,19 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
   await createRoom(page, 'Tot', 'jigsaw');
   const view = page.locator('#jigsaw-view');
   await expect(view.locator('.pz-image')).toHaveCount(PUZZLE_IMAGES.length);
+  // Sizes up to 500 (1000 was dropped); the first picture in the shuffled order is picked.
+  await expect(view.locator('[data-count]')).toHaveCount(6);
+  await expect(view.locator('[data-count="1000"]')).toHaveCount(0);
+  await expect(view.locator('.pz-image').first()).toHaveClass(/picked/);
+  const orderOf = () => view.locator('.pz-image').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.image));
+  const before = await orderOf();
+  // Picking only moves the tick: the pictures aren't rebuilt (that made them all blink on iPhones).
+  const firstPic = await view.locator('.pz-image img').first().elementHandle();
   await view.locator('[data-image="toy-shop"]').click();
   await view.locator('[data-count="6"]').click();
+  expect(await firstPic!.evaluate((el) => el.isConnected)).toBe(true);
+  await expect(view.locator('.pz-image.picked')).toHaveCount(1);
+  await expect(view.locator('[data-image="toy-shop"]')).toHaveClass(/picked/);
   await expect(view.locator('.pz-grid')).toHaveText('Toy shop: 6 pieces, 3 across and 2 down.');
   await page.screenshot({ path: info.outputPath('picker.png'), fullPage: true });
   await view.locator('.pz-start').click();
@@ -189,6 +201,8 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
   await expect(view.locator('.pz-setup')).toBeVisible();
   expect(asked).toContain('won’t be kept');
   await expect(view.locator('.pz-image')).toHaveCount(PUZZLE_IMAGES.length);
+  // Back at the picker, the pictures come in a new order.
+  expect(await orderOf()).not.toEqual(before);
   await expect(view.locator('.pz-saves')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -196,6 +210,7 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
 test('holding a piece at the edge of the screen scrolls the table', async ({ page }, info) => {
   await createRoom(page, 'Edge', 'jigsaw');
   const view = page.locator('#jigsaw-view');
+  await view.locator('[data-image="dog"]').click();
   await view.locator('[data-count="100"]').click();
   await view.locator('.pz-start').click();
   await expect.poll(async () => (await pieceSpots(page)).length).toBeGreaterThan(50);
@@ -240,6 +255,7 @@ test('holding a piece at the edge of the screen scrolls the table', async ({ pag
 test('looking around stops at the edge of the table', async ({ page }) => {
   await createRoom(page, 'Pan', 'jigsaw');
   const view = page.locator('#jigsaw-view');
+  await view.locator('[data-image="dog"]').click();
   await view.locator('[data-count="50"]').click();
   await view.locator('.pz-start').click();
   await expect.poll(async () => (await pieceSpots(page)).length).toBeGreaterThan(50);
@@ -291,6 +307,7 @@ test('a finger dragging a piece gets a magnifier above it, and the piece stays u
   const seen = watchPuzzle(page);
   await createRoom(page, 'Thumb', 'jigsaw');
   const view = page.locator('#jigsaw-view');
+  await view.locator('[data-image="dog"]').click();
   await view.locator('[data-count="50"]').click();
   await view.locator('.pz-start').click();
   await expect.poll(async () => (await pieceSpots(page)).length).toBeGreaterThan(50);

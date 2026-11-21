@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-21_
 
 ## Getting set up
 
@@ -423,9 +423,16 @@ and 48 public-domain or CC0 photos and paintings.
       zooms the domino board. Pinching anywhere else at the table does nothing; the home and join
       pages still zoom like any web page.
 
-- [ ] The picker shows all 51, with "Penny Pickles" (was "Happy pup"), "Sailboat" and "Judy Jalapeño" (new) first.
-- [ ] **Pictures only on this computer** (new): with `npm run dev`, "Tree House" and
-      "Nephews" come first in the picker (53 in all), and play like any other. They're in
+- [ ] **On the iPhone** (new fix): tap a few pictures and piece counts. Only the tick moves;
+      the other pictures stay put instead of all blinking and redrawing.
+- [ ] **New order each time** (new): the pictures come in a different order every time the
+      picker opens (open /jigsaw twice, or finish or put away a puzzle), and the first one is
+      picked. Your "Continue a puzzle" list stays on top, newest first.
+- [ ] **No 1000** (new): the sizes are 6 · 20 · 50 · 100 · 250 · 500. A puzzle you saved at
+      1000 pieces still shows under "Continue a puzzle" and still opens.
+- [ ] The picker shows all 56 pictures (51 then, plus Milli, Sucia, Cricket, Leeloo and Noodle).
+- [ ] **Pictures only on this computer**: with `npm run dev`, "Tree House" and
+      "Nephews" are mixed in with the rest, and play like any other. They're in
       `local-puzzles/`, which git ignores: `git status` never lists them, and the hosted site
       won't have them. Add more with `npm run local-puzzle -- photo.jpg "Title"` (see README).
       Scroll through the 28 new ones (monarch butterflies to plankton swirls at the end) and
@@ -435,7 +442,7 @@ and 48 public-domain or CC0 photos and paintings.
       the pieces and the frame look right at 100 pieces.
 
 - [ ] Pick Jigsaw on Start a table (or open /jigsaw). Choose a
-      picture and 6, 20, 50, 100, 250, 500 or 1000 pieces (6 and 20 are for little kids). The
+      picture and 6, 20, 50, 100, 250 or 500 pieces (6 and 20 are for little kids). The
       real count is sometimes a little off (54 for 50) so the pieces come out square; the line
       under the buttons says exactly.
 - [ ] Pieces should look like real jigsaw pieces, every one a bit different: tabs in and out,
@@ -452,7 +459,7 @@ and 48 public-domain or CC0 photos and paintings.
       your screen). Tidy spreads loose pieces back around the edges for everyone.
 - [ ] Other people's pointers show with their names (on a computer, as they move the mouse).
 - [ ] Leave and come back, or press New puzzle: it's saved. Under "Continue a puzzle" it shows
-      with its progress, and Continue brings it back exactly as it was. Saves untouched for 90
+      with its progress, and Continue brings it back exactly as it was. Saves untouched for 30
       days are deleted.
 - [ ] A puzzle with nothing placed (no pieces joined, nothing in the frame) isn't kept: New
       puzzle says so, and it doesn't show up under Continue. Your old test puzzles with nothing
@@ -467,7 +474,7 @@ and 48 public-domain or CC0 photos and paintings.
 - [ ] The 🔍 button (only on phones and tablets) turns the magnifier off and on, and it stays
       that way next time. The very first time the magnifier shows, a note says what it is.
 - [ ] Finish one (50 pieces is quick): "Finished!" with the time, and a message in chat.
-- [ ] Try 1000 pieces on a computer: cutting takes a moment ("Cutting pieces… 40%"), then
+- [ ] Try 500 pieces on a phone: cutting takes a moment ("Cutting pieces… 40%"), then
       dragging should still feel smooth.
 - [ ] Phone held upright: the table starts small (pinch to zoom). Sideways fills the screen
       better. Tell me which you'd rather have.

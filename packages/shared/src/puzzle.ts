@@ -8,8 +8,11 @@
  */
 import { Rng } from './rng';
 
-/** 6 and 20 are for little kids (big pieces that snap easily). */
-export const PIECE_COUNTS = [6, 20, 50, 100, 250, 500, 1000] as const;
+/**
+ * 6 and 20 are for little kids (big pieces that snap easily). 1000 was dropped as more than
+ * anyone needs here; puzzles saved at 1000 can still be continued (resuming doesn't check).
+ */
+export const PIECE_COUNTS = [6, 20, 50, 100, 250, 500] as const;
 export type PieceCount = (typeof PIECE_COUNTS)[number];
 
 export interface PuzzleImage {
@@ -37,7 +40,7 @@ const pic = (id: string, title: string, width: number, height: number, credit: s
 /**
  * Pictures anyone can pick: ours, shared with us by the photographer, or public domain or CC0
  * only (sources in CREDITS.md). Each is
- * 2400 px wide (the user's own photos are smaller), so even 1000-piece pieces have detail. A
+ * 2400 px wide (the user's own photos are smaller), so even 500-piece pieces have detail. A
  * picture's id is saved with each puzzle, so don't change an id or remove a picture people may
  * be in the middle of (titles can change).
  */

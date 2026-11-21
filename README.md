@@ -25,7 +25,7 @@ in a felt look, like a games table.
     <td><img src="docs/screenshots/tanks.webp" alt="Tanks: felt hills in layers of green, tan, orange and rust, with helicopters dropping tanks by parachute" /></td>
   </tr>
   <tr>
-    <td align="center"><b>Jigsaw</b>: build it together, from 6 to 1000 pieces, and pick it up again later</td>
+    <td align="center"><b>Jigsaw</b>: build it together, from 6 to 500 pieces, and pick it up again later</td>
     <td align="center"><b>Tanks</b>: angle, power, wind and fire</td>
   </tr>
 </table>
