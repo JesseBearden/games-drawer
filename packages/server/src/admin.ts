@@ -33,6 +33,10 @@ export function createAdmin(o: AdminOptions) {
   const now = o.now ?? Date.now;
   const failsPerIp = new WindowCounter(TRY_WINDOW_MS);
   const failsTotal = new WindowCounter(TRY_WINDOW_MS);
+  // Tries still being checked count as wrong until they're known to be right, so a burst of
+  // tries sent all at once can't slip past the limits while the first ones are being checked.
+  const checking = new Map<string, number>();
+  let checkingTotal = 0;
   const stats = new AdminStatsCache(o.logDirs, now);
 
   /** Handles /admin and /admin/…; returns false for anything else. */
@@ -49,13 +53,24 @@ export function createAdmin(o: AdminOptions) {
     if (url.pathname === '/admin/login' && req.method === 'POST') {
       const ip = clientIp(req, o.trustProxy);
       failsPerIp.sweep(t);
-      if (failsPerIp.count(ip, t) >= TRIES_PER_IP || failsTotal.count('all', t) >= TRIES_TOTAL) {
+      if (failsPerIp.count(ip, t) + (checking.get(ip) ?? 0) >= TRIES_PER_IP || failsTotal.count('all', t) + checkingTotal >= TRIES_TOTAL) {
         page(res, 429, loginHtml('Too many wrong tries. Wait 15 minutes, then try again.'));
         return true;
       }
-      const body = await readBody(req);
-      const password = body === null ? '' : (new URLSearchParams(body).get('password') ?? '');
-      if (!verifyAdminPassword(password, hash)) {
+      checking.set(ip, (checking.get(ip) ?? 0) + 1);
+      checkingTotal++;
+      let ok = false;
+      try {
+        const body = await readBody(req);
+        const password = body === null ? '' : (new URLSearchParams(body).get('password') ?? '');
+        ok = await verifyAdminPassword(password, hash);
+      } finally {
+        const left = (checking.get(ip) ?? 1) - 1;
+        if (left > 0) checking.set(ip, left);
+        else checking.delete(ip);
+        checkingTotal--;
+      }
+      if (!ok) {
         failsPerIp.add(ip, t);
         failsTotal.add('all', t);
         o.log.event('admin_login', { ok: false, ip: shortHash(ip) });

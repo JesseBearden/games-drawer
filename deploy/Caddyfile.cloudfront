@@ -29,6 +29,8 @@
 
 # CloudFront.
 :80 {
+	# Players reach CloudFront over HTTPS; this tells their browsers to always do so, for a year.
+	header Strict-Transport-Security "max-age=31536000"
 	import site
 }
 

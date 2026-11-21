@@ -32,6 +32,9 @@
 @DOMAIN@, www.@DOMAIN@, staging.@DOMAIN@ {
 	# Only CloudFront may say where a player is; straight from the internet, nobody may.
 	request_header -CloudFront-Viewer-Address
+	# Browsers that have been here once always use HTTPS for a year (this name only, not others
+	# under the domain), so nobody on the same Wi-Fi can quietly send them to a plain-HTTP copy.
+	header Strict-Transport-Security "max-age=31536000"
 	import site
 }
 

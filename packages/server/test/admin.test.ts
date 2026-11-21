@@ -12,16 +12,16 @@ const PASSWORD = 'correct horse battery';
 const HASH = hashAdminPassword(PASSWORD);
 
 describe('the admin password', () => {
-  it('checks the password against its hash, and the hash never contains it', () => {
+  it('checks the password against its hash, and the hash never contains it', async () => {
     expect(isAdminPasswordHash(HASH)).toBe(true);
     expect(HASH).not.toContain(PASSWORD);
-    expect(verifyAdminPassword(PASSWORD, HASH)).toBe(true);
-    expect(verifyAdminPassword('correct horse batter', HASH)).toBe(false);
-    expect(verifyAdminPassword('', HASH)).toBe(false);
+    expect(await verifyAdminPassword(PASSWORD, HASH)).toBe(true);
+    expect(await verifyAdminPassword('correct horse batter', HASH)).toBe(false);
+    expect(await verifyAdminPassword('', HASH)).toBe(false);
     // Each hash is salted: the same password hashes differently every time.
     expect(hashAdminPassword(PASSWORD)).not.toBe(HASH);
     expect(isAdminPasswordHash('hunter2')).toBe(false);
-    expect(verifyAdminPassword(PASSWORD, 'hunter2')).toBe(false);
+    expect(await verifyAdminPassword(PASSWORD, 'hunter2')).toBe(false);
   });
 
   it('signs people in for a week; a tampered cookie or a new password signs them out', () => {
@@ -238,6 +238,14 @@ describe('the admin page', () => {
     const base = await start(HASH);
     for (let i = 0; i < 5; i++) expect((await login(base, `guess number ${i}`)).status).toBe(401);
     // Even the right password waits now.
+    expect((await login(base, PASSWORD)).status).toBe(429);
+  });
+
+  it('a burst of tries sent all at once gets no more than the usual few checked', async () => {
+    const base = await start(HASH);
+    const codes = (await Promise.all(Array.from({ length: 20 }, (_, i) => login(base, `burst guess ${i}`)))).map((r) => r.status);
+    expect(codes.filter((c) => c === 401).length).toBeLessThanOrEqual(5);
+    expect(codes.filter((c) => c === 429).length).toBeGreaterThanOrEqual(15);
     expect((await login(base, PASSWORD)).status).toBe(429);
   });
 });

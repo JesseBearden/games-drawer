@@ -87,6 +87,13 @@ export class FileLog implements LogSink {
         }
       }
       s = fs.createWriteStream(path.join(this.dir, `${key}.jsonl`), { flags: 'a' });
+      // A hiccup on the shared disk loses a few log lines, never the server (an unhandled
+      // stream error would end the process, and every game on it). The next line reopens.
+      const opened = s;
+      s.on('error', (err) => {
+        console.error(`log write failed (${key}): ${err.message}`);
+        if (this.streams.get(key) === opened) this.streams.delete(key);
+      });
       this.streams.set(key, s);
     }
     return s;

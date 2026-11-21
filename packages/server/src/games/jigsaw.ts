@@ -19,6 +19,15 @@ const SAVE_DELAY_MS = 4000;
 /** How close (as a fraction of a piece's short side) two pieces must be to snap together. */
 const SNAP = 0.22;
 const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+/**
+ * Puzzles one table may start or bring back per hour. Plenty for people; a wall for a script
+ * starting puzzle after puzzle, since each one can become a save file on the shared disk.
+ */
+const STARTS_PER_HOUR = 20;
+/** One person may ask "which of my saves are still there?" this often (each save is a file read). */
+const SAVES_ASK_GAP_MS = 3000;
+/** The browser remembers at most 30 saves; never look up more than that at once. */
+const SAVES_ASK_MAX = 30;
 
 /**
  * Slot positions along one axis: outside the frame's span (lo..hi), packed outwards from it to
@@ -50,6 +59,9 @@ export class JigsawGame implements ServerGame {
   /** session -> the group and piece they picked up */
   private holding = new Map<string, { g: number; piece: number }>();
   private saveAt: number | null = null;
+  /** When this table started or brought back a puzzle, over the last hour. */
+  private starts: number[] = [];
+  private savesAskedAt = new Map<string, number>();
 
   constructor(
     private host: GameHost,
@@ -193,9 +205,14 @@ export class JigsawGame implements ServerGame {
       case 'pz-setup':
         return this.backToSetup(m);
       case 'pz-saves': {
-        const saves = input.ids.flatMap((id) => this.store.summary(id) ?? []);
+        const now = this.host.now();
+        const last = this.savesAskedAt.get(m.session);
+        if (last !== undefined && now - last < SAVES_ASK_GAP_MS) return;
+        this.savesAskedAt.set(m.session, now);
+        const ids = [...new Set(input.ids)].slice(0, SAVES_ASK_MAX);
+        const saves = ids.flatMap((id) => this.store.summary(id) ?? []);
         const found = new Set(saves.map((s) => s.id));
-        this.host.send(m, { t: 'pz-saves', saves, gone: input.ids.filter((id) => !found.has(id)) });
+        this.host.send(m, { t: 'pz-saves', saves, gone: ids.filter((id) => !found.has(id)) });
         return;
       }
       case 'pz-cursor':
@@ -216,6 +233,7 @@ export class JigsawGame implements ServerGame {
     if (this.phase === 'playing') return;
     const image = puzzleImage(imageId);
     if (!image || !(PIECE_COUNTS as readonly number[]).includes(count)) return;
+    if (!this.mayStart(m)) return;
     if (this.state) this.saveNow();
     const { cols, rows } = gridFor(image.width, image.height, count);
     let id = '';
@@ -247,6 +265,7 @@ export class JigsawGame implements ServerGame {
   private resume(m: Member, id: string) {
     if (this.phase === 'playing' && this.state?.id === id) return;
     if (this.phase === 'playing') return;
+    if (!this.mayStart(m)) return;
     const s = this.store.load(id);
     if (!s) {
       this.host.send(m, { t: 'pz-saves', saves: [], gone: [id] });
@@ -258,6 +277,18 @@ export class JigsawGame implements ServerGame {
     const pct = Math.round(puzzleProgress(s.pieces, s.locked) * 100);
     this.host.systemChat(`${m.name} brought back a puzzle: ${s.title} (${pct}% done).`);
     this.host.log('jigsaw_resume', { id: s.id, by: m.pid });
+  }
+
+  /** Room for one more puzzle this hour? (If not, the person who asked is told.) */
+  private mayStart(m: Member): boolean {
+    const now = this.host.now();
+    this.starts = this.starts.filter((t) => now - t < 3_600_000);
+    if (this.starts.length >= STARTS_PER_HOUR) {
+      this.host.systemChat(`That's a lot of puzzles for one hour, ${m.name}. Try again in a few minutes.`);
+      return false;
+    }
+    this.starts.push(now);
+    return true;
   }
 
   private backToSetup(m: Member) {

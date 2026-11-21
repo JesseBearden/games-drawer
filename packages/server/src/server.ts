@@ -59,6 +59,9 @@ export const DEFAULT_LIMITS: Limits = {
   heartbeatMs: 15_000,
 };
 
+/** How often old jigsaw saves are cleared out (they're kept PUZZLE_KEEP_DAYS). */
+const PUZZLE_SWEEP_MS = 6 * 60 * 60_000;
+
 export interface ServerOptions {
   port: number;
   host: string;
@@ -403,6 +406,9 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     let last = performance.now();
     let acc = 0;
     let lastHousekeeping = Date.now();
+    // Old jigsaw saves go every 6 hours, not just at start-up: the privacy page promises 30 days
+    // even if a box runs for months.
+    let lastSweep = Date.now();
     timers.push(
       setInterval(() => {
         const now = performance.now();
@@ -422,6 +428,14 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           connects.sweep(t);
           privateCreates.sweep(t);
           failedJoins.sweep(t);
+          if (t - lastSweep >= PUZZLE_SWEEP_MS) {
+            lastSweep = t;
+            try {
+              puzzles.sweep(t);
+            } catch (err) {
+              o.log.event('puzzle_sweep_failed', { error: String(err) });
+            }
+          }
         }
       }, 4),
     );

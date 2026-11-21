@@ -133,5 +133,8 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
     res.end();
     return;
   }
-  fs.createReadStream(file).pipe(res);
+  // A file that can't be read after all ends this one response, not the server.
+  fs.createReadStream(file)
+    .on('error', () => res.destroy())
+    .pipe(res);
 }

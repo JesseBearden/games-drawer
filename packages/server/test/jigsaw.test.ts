@@ -294,6 +294,36 @@ describe('jigsaw in a room', () => {
       expect(again.pieces[30]).toEqual(spot);
     }));
 
+  it('starts at most 20 puzzles an hour at one table, and answers "which saves are left?" every few seconds at most', () =>
+    withDir((dir) => {
+      const r = jigsawRoom({ puzzles: new PuzzleStore(dir) });
+      for (let i = 0; i < 20; i++) {
+        r.send('a', { t: 'pz-new', image: 'dog', pieces: 50 });
+        expect(r.game.phase).toBe('playing');
+        r.send('a', { t: 'pz-setup' });
+        r.clock.now += 10_000;
+      }
+      r.send('a', { t: 'pz-new', image: 'dog', pieces: 50 });
+      expect(r.game.phase).toBe('setup');
+      expect(lastChat(r.a.conn)).toContain('a lot of puzzles for one hour');
+      // An hour after the first ones, there's room again.
+      r.clock.now += 60 * 60_000;
+      r.send('a', { t: 'pz-new', image: 'dog', pieces: 50 });
+      expect(r.game.phase).toBe('playing');
+
+      const asked = () => pz(r.b.conn, 'pz-saves').length;
+      const ids = Array.from({ length: 40 }, () => 'zzzzzzzzzzzzzzzz');
+      r.send('b', { t: 'pz-saves', ids });
+      expect(asked()).toBe(1);
+      // Asked twice in the same moment (and with the same id 40 times): one answer, one look.
+      expect(pz(r.b.conn, 'pz-saves')[0].gone).toEqual(['zzzzzzzzzzzzzzzz']);
+      r.send('b', { t: 'pz-saves', ids });
+      expect(asked()).toBe(1);
+      r.clock.now += 3_000;
+      r.send('b', { t: 'pz-saves', ids });
+      expect(asked()).toBe(2);
+    }));
+
   it('sweeps away saves nobody has played in 30 days', () =>
     withDir((dir) => {
       const store = new PuzzleStore(dir);

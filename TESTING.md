@@ -13,6 +13,15 @@ _Last updated: 2026-11-21_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## Security pass (new)
+
+Small fixes from the security review. Nothing should look different; these check nothing broke.
+
+- [ ] **Admin sign-in** (after the next deploy): `/admin` with the right password signs you in
+      the first time. A wrong one says "That's not the password."
+- [ ] **Jigsaw saves**: start a puzzle, place a piece, put it away, then start another. Back on
+      the picker, **Continue a puzzle** still lists the first one, and bringing it back works.
+
 ## Cut Paper, step 1: the way in (new)
 
 The site now looks like cut paper, and the way in is new. The games themselves still have their

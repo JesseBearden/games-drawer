@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scrypt, scryptSync, timingSafeEqual, type ScryptOptions } from 'node:crypto';
 
 /**
  * The admin page's password. The server never holds the password itself, only a one-way hash
@@ -34,10 +34,17 @@ function parse(stored: string) {
   return { n, r, p, salt, hash };
 }
 
-export function verifyAdminPassword(password: string, stored: string): boolean {
+/**
+ * Checks a password against the stored hash. Asynchronous: scrypt is slow on purpose (tens of
+ * milliseconds), and done in Node's worker threads it can't stall the games while it runs.
+ */
+export async function verifyAdminPassword(password: string, stored: string): Promise<boolean> {
   const h = parse(stored);
   if (!h || typeof password !== 'string' || password.length > 200) return false;
-  const got = scryptSync(password.normalize('NFC'), h.salt, h.hash.length, { N: h.n, r: h.r, p: h.p, maxmem: 256 * h.n * h.r * 2 });
+  const opts: ScryptOptions = { N: h.n, r: h.r, p: h.p, maxmem: 256 * h.n * h.r * 2 };
+  const got = await new Promise<Buffer>((resolve, reject) =>
+    scrypt(password.normalize('NFC'), h.salt, h.hash.length, opts, (err, key) => (err ? reject(err) : resolve(key))),
+  );
   return timingSafeEqual(got, h.hash);
 }
 
