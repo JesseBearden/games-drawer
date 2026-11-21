@@ -14,4 +14,5 @@ export * from './games';
 export * from './spades';
 export * from './chatFilter';
 export * from './dominoes';
+export * from './threeThirteen';
 export * from './puzzle';

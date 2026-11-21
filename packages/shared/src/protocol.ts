@@ -5,6 +5,7 @@ import type { World } from './world';
 import { isCard, type HeartsView } from './hearts';
 import type { SpadesView } from './spades';
 import { isTileId, type DominoesView } from './dominoes';
+import { isTTCard, type ThreeThirteenView } from './threeThirteen';
 import { isPuzzleId, type PuzzleState, type PuzzleSummary } from './puzzle';
 
 /**
@@ -87,6 +88,18 @@ export type SpadesInput = { t: 'bid'; bid: number } | { t: 'play'; card: string 
 export type DominoesInput = { t: 'place'; tile: string; arm: string } | { t: 'draw' } | { t: 'ready' } | { t: 'again' };
 
 /**
+ * Input for Three Thirteen: take the top of the pile or the discards, throw a card away (which
+ * goes out if the rest is all melds), put your hand in the order you like, say you're ready for
+ * the next round, or deal a new game.
+ */
+export type ThreeThirteenInput =
+  | { t: 'tt-draw'; from: 'stock' | 'discard' }
+  | { t: 'tt-discard'; card: string }
+  | { t: 'tt-arrange'; cards: string[] }
+  | { t: 'ready' }
+  | { t: 'again' };
+
+/**
  * Input for the jigsaw: pick a picture and piece count (or continue a saved puzzle), pick up a
  * piece (its whole group comes with it), drag it, drop it, show where your pointer is, tidy the
  * loose pieces, go back to choosing, or look up saved puzzles. Positions are board coordinates.
@@ -102,7 +115,7 @@ export type PuzzleInput =
   | { t: 'pz-tidy' }
   | { t: 'pz-saves'; ids: string[] };
 
-export type GameInput = TankInput | HeartsInput | SpadesInput | DominoesInput | PuzzleInput;
+export type GameInput = TankInput | HeartsInput | SpadesInput | DominoesInput | ThreeThirteenInput | PuzzleInput;
 
 // ------------------------------------------------------------------ client -> server
 
@@ -125,6 +138,8 @@ export type ClientMessage =
   | { t: 'sit'; seat: number }
   /** At the table: you're ready to start the picked game (or not, any more). */
   | { t: 'ready'; ready: boolean }
+  /** At the table: how many play the picked game (2 to 4), for games that let the table choose. */
+  | { t: 'players'; n: number }
   /** End the current game and take everyone back to the lobby (private rooms). */
   | { t: 'lobby' }
   /** Private rooms: change how swearing in chat is handled (anyone in the room can). */
@@ -277,6 +292,8 @@ export type SpadesServerMessage = { t: 'spades'; view: SpadesView };
 
 export type DominoesServerMessage = { t: 'dominoes'; view: DominoesView };
 
+export type ThreeThirteenServerMessage = { t: 'threethirteen'; view: ThreeThirteenView };
+
 export type PuzzlePhase = 'setup' | 'playing' | 'done';
 
 export type PuzzleServerMessage =
@@ -301,9 +318,11 @@ export interface TableSetup {
   pick: GameId | null;
   seats: (string | null)[];
   ready: string[];
+  /** How many play the picked game (games in CHOOSE_PLAYERS; SEAT_COUNT for the rest). */
+  players: number;
 }
 
-export type GameServerMessage = TankServerMessage | HeartsServerMessage | SpadesServerMessage | DominoesServerMessage | PuzzleServerMessage;
+export type GameServerMessage = TankServerMessage | HeartsServerMessage | SpadesServerMessage | DominoesServerMessage | ThreeThirteenServerMessage | PuzzleServerMessage;
 
 export type ServerMessage =
   | {
@@ -448,6 +467,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     }
     case 'pick':
       return isGameId(o.game) ? { t: 'pick', game: o.game } : null;
+    case 'players':
+      return Number.isInteger(o.n) && (o.n as number) >= 2 && (o.n as number) <= 4 ? { t: 'players', n: o.n as number } : null;
     case 'sit':
       return Number.isInteger(o.seat) && (o.seat as number) >= 0 && (o.seat as number) < 4 ? { t: 'sit', seat: o.seat as number } : null;
     case 'ready':
@@ -516,6 +537,15 @@ export function parseGameInput(v: unknown): GameInput | null {
       return { t: 'draw' };
     case 'ready':
       return { t: 'ready' };
+    case 'tt-draw':
+      return o.from === 'stock' || o.from === 'discard' ? { t: 'tt-draw', from: o.from } : null;
+    case 'tt-discard':
+      return isTTCard(o.card) ? { t: 'tt-discard', card: o.card } : null;
+    case 'tt-arrange': {
+      // A whole hand (at most 14 cards), each card once.
+      if (!Array.isArray(o.cards) || o.cards.length > 14 || !o.cards.every(isTTCard) || new Set(o.cards).size !== o.cards.length) return null;
+      return { t: 'tt-arrange', cards: [...(o.cards as string[])] };
+    }
     case 'bid':
       return Number.isInteger(o.bid) && (o.bid as number) >= 0 && (o.bid as number) <= 13 ? { t: 'bid', bid: o.bid as number } : null;
     default:

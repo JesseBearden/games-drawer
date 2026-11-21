@@ -11,6 +11,7 @@ import {
   INVITE_TOKEN_ALPHABET,
   INVITE_TOKEN_LENGTH,
   isSeated,
+  choosesPlayers,
   PROTOCOL_VERSION,
   SEAT_COUNT,
   Rng,
@@ -34,6 +35,7 @@ import type { LogSink } from './eventlog';
 import { HeartsGame } from './games/hearts';
 import { SpadesGame } from './games/spades';
 import { DominoesGame } from './games/dominoes';
+import { ThreeThirteenGame } from './games/threeThirteen';
 import { JigsawGame } from './games/jigsaw';
 import { PuzzleStore } from './puzzleStore';
 import { TanksGame } from './games/tanks';
@@ -187,7 +189,7 @@ export class Room {
    * Between games (private tables): the game picked to play next, who picked which seat
    * (sessions; seated games only) and who is ready. It starts once everyone here is ready.
    */
-  private setup: { pick: GameId | null; seats: (string | null)[]; ready: Set<string> } = { pick: null, seats: [], ready: new Set() };
+  private setup: { pick: GameId | null; seats: (string | null)[]; ready: Set<string>; players: number } = { pick: null, seats: [], ready: new Set(), players: SEAT_COUNT };
 
   constructor(
     readonly code: string,
@@ -265,10 +267,12 @@ export class Room {
     });
   }
 
-  private makeGame(id: GameId): ServerGame {
+  /** `table`: how many play and who sat where, for games that let the table choose how many. */
+  private makeGame(id: GameId, table?: { players: number; seats: (string | null)[] }): ServerGame {
     if (id === 'hearts') return new HeartsGame(this.host);
     if (id === 'spades') return new SpadesGame(this.host);
     if (id === 'dominoes') return new DominoesGame(this.host);
+    if (id === 'threethirteen') return new ThreeThirteenGame(this.host, table);
     if (id === 'jigsaw') return new JigsawGame(this.host, (this.deps.puzzles ??= new PuzzleStore(null)));
     return new TanksGame(this.host, { cfg: this.deps.cfg, seed: this.deps.seed });
   }
@@ -596,7 +600,14 @@ export class Room {
   }
 
   private setPick(id: GameId | null) {
-    this.setup = { pick: id, seats: isSeated(id) ? Array<string | null>(SEAT_COUNT).fill(null) : [], ready: new Set() };
+    this.setup = { pick: id, seats: isSeated(id) ? Array<string | null>(SEAT_COUNT).fill(null) : [], ready: new Set(), players: SEAT_COUNT };
+  }
+
+  /** How many play the picked game (2 to 4), for games that let the table choose. */
+  private setPlayers(p: Player, n: number) {
+    if (this.game || !choosesPlayers(this.setup.pick) || n < 2 || n > SEAT_COUNT || n === this.setup.players) return;
+    this.setup.players = n;
+    this.broadcastTable();
   }
 
   /** Sit at a seat for the picked game (Hearts, Spades, Dominoes); moving leaves your old one. */
@@ -636,8 +647,9 @@ export class Room {
 
   private startGame(id: GameId) {
     const seats = this.setup.seats;
+    const players = this.setup.players;
     this.setPick(null);
-    this.game = this.makeGame(id);
+    this.game = this.makeGame(id, { players, seats });
     this.beginSession(id);
     this.broadcastTable();
     this.broadcast({ t: 'game', game: id });
@@ -660,6 +672,7 @@ export class Room {
       pick: this.setup.pick,
       seats: this.setup.seats.map(alias),
       ready: [...this.setup.ready].map((s) => this.players.get(s)?.alias).filter((a): a is string => !!a),
+      players: this.setup.players,
     };
   }
 
@@ -735,6 +748,9 @@ export class Room {
         return;
       case 'sit':
         this.sit(p, msg.seat);
+        return;
+      case 'players':
+        this.setPlayers(p, msg.n);
         return;
       case 'ready':
         this.setReady(p, msg.ready);

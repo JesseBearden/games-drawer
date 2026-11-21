@@ -10,7 +10,7 @@ import { DOMINOES_RULES } from './dominoes';
 const DOMINO_ICON =
   '<svg class="domino-icon" viewBox="0 0 24 44" width="1em" height="1.8em" aria-hidden="true"><rect x="1" y="1" width="22" height="42" rx="4" fill="#fffdf6" stroke="#1b1b28" stroke-width="2"/><line x1="4" y1="22" x2="20" y2="22" stroke="#1b1b28" stroke-width="2"/><circle cx="7" cy="7" r="2.4" fill="#1b1b28"/><circle cx="12" cy="12" r="2.4" fill="#1b1b28"/><circle cx="17" cy="17" r="2.4" fill="#1b1b28"/><circle cx="7" cy="27" r="2.4" fill="#1b1b28"/><circle cx="17" cy="27" r="2.4" fill="#1b1b28"/><circle cx="7" cy="37" r="2.4" fill="#1b1b28"/><circle cx="17" cy="37" r="2.4" fill="#1b1b28"/></svg>';
 
-export type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'jigsaw';
+export type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'threethirteen' | 'jigsaw';
 
 /**
  * How far a game is rolled out. A new game ships as 'private' (only private rooms can pick
@@ -124,6 +124,26 @@ export const GAMES: GameInfo[] = [
     landscape: false,
   },
   {
+    id: 'threethirteen',
+    name: 'Three Thirteen',
+    title: 'Three Thirteen',
+    slug: 'threethirteen',
+    aliases: ['three-thirteen', '3-13', '313', 'threetothirteen'],
+    icon: '🃏',
+    tagline: 'Rummy in 11 rounds: 3 cards, then 4, up to 13, with a new wild card each round.',
+    blurb: 'Rummy in 11 rounds: make sets and runs, with jokers and a new wild card every round.',
+    howTo: [
+      'Round 1 deals 3 cards, round 2 deals 4, up to 13. The jokers are always wild, and so is the card that matches the number dealt (3s in round 1, Kings in round 11).',
+      'On your turn, take the top card from the pile or the discards, then throw one away. Drag your cards to arrange them however you like.',
+      'Make sets (three or more of a kind) and runs (three or more in a row, one suit, Ace low). When everything but your last card fits, you go out, and everyone else gets one more turn.',
+      'Cards left over count against you: Aces 1, number cards their number, J/Q/K 10, jokers 20. Lowest total after 11 rounds wins.',
+    ],
+    players: '4 seats · computers fill in',
+    availability: 'private',
+    underConstruction: false,
+    landscape: false,
+  },
+  {
     id: 'jigsaw',
     name: 'Jigsaw',
     title: 'Jigsaw Puzzle',
@@ -146,9 +166,18 @@ export const GAMES: GameInfo[] = [
 
 export const GAME_IDS: GameId[] = GAMES.map((g) => g.id);
 /** Games where where you sit matters (turn order, partners): people pick their seats first. */
-export const SEATED_GAMES: readonly GameId[] = ['hearts', 'spades', 'dominoes'];
+export const SEATED_GAMES: readonly GameId[] = ['hearts', 'spades', 'dominoes', 'threethirteen'];
 export const isSeated = (g: GameId | null): boolean => !!g && SEATED_GAMES.includes(g);
 export const SEAT_COUNT = 4;
+
+/**
+ * Games where the table chooses how many play, 2 up to SEAT_COUNT (user, 2026-11-20): computers
+ * fill only that many seats, so two people can play without a computer going out on them.
+ */
+export const CHOOSE_PLAYERS: readonly GameId[] = ['threethirteen'];
+export const choosesPlayers = (g: GameId | null): boolean => !!g && CHOOSE_PLAYERS.includes(g);
+/** With fewer than four playing, empty seats come into play in this order: across first, so two face each other. */
+export const SEAT_FILL_ORDER: readonly number[] = [0, 2, 1, 3];
 export const GAME_NAMES = Object.fromEntries(GAMES.map((g) => [g.id, g.name])) as Record<GameId, string>;
 
 export function isGameId(v: unknown): v is GameId {

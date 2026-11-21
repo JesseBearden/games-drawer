@@ -257,6 +257,26 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
   - **Score sheets** have one row per player (you first): the name with all the room it needs,
     then the points each hand scored, then a narrow, bold Total. The hand just ended is darker.
     Phones show the last 3 hands, bigger screens 8 (`scoreSheet.ts`).
+- **Three Thirteen** (user, 2026-11-20) is played at the same green table as Hearts, with the
+  user's family rules: two decks with their jokers, 11 rounds (3 cards up to 13), jokers and the
+  round's own rank wild, Ace low with no wrapping, any number of wilds in a meld, one last turn
+  each after someone goes out, no adding to other people's melds. Unmelded cards: Ace 1, number
+  cards their number, J/Q/K 10, jokers 20; lowest total wins. You can't throw back the card you
+  just took from the discards (standard, so nobody stalls).
+  - **The table picks how many play**, 2 to 4 (never fewer than the people there), so two people
+    can play without a computer going out on them. Seats come into play across first.
+  - **The middle of the table:** the round and what's wild, the pile (with its count) and the
+    top discard side by side; the one you can take from glows sunflower.
+  - **Your hand:** drag cards to arrange them, in any order (no sort buttons; the server keeps
+    your order). Tap a card to lift it, tap it again (or the discards) to throw it away. Cards
+    already in a meld get a strip of green felt along the bottom; this round's wild rank wears a
+    small sunflower star under its corner (where it still shows when the hand overlaps); the card
+    you just took says "Taken". A tag beside your name shows the points still loose. **Go out**
+    appears only when you can, and the card that does it is outlined.
+  - **Between rounds:** everyone's hand, melds first then what's loose and what it cost, then the
+    score sheet (headed Round, not Hand), and Ready for the next round.
+  - Icon: the left one of the user's sheet (`scripts/art/three-thirteen-icons.webp`); its tile is
+    blush (peach is Tanks).
 - **Jigsaw** is played on the mat too. The frame where the finished picture goes is cream paper
   with a dashed ink edge, and the tools are a paper strip along the bottom (it wraps onto two rows
   on phones rather than hiding buttons off the edge). Chosen options are cobalt.

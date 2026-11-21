@@ -263,6 +263,7 @@ body *::after {
 }
 /* The green card table, for every card and tile game (the user, 2026-11-20). */
 #game[data-view='dominoes'],
+#game[data-view='threethirteen'],
 #game[data-view='hearts'],
 #game[data-view='spades'] {
   --fc: var(--baize);

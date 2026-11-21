@@ -2,6 +2,7 @@ import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMod
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
 import { SpadesTable } from './spadesView';
 import { DominoesTable } from './dominoesView';
+import { ThreeThirteenTable } from './threeThirteenView';
 import { JigsawTable } from './jigsawView';
 import { HeartsTable } from './heartsView';
 import { LobbyView } from './lobby';
@@ -133,6 +134,7 @@ export class RoomApp {
       table: () => this.tableState,
       pickGame: (game) => this.net.send({ t: 'pick', game }),
       sit: (seat) => this.net.send({ t: 'sit', seat }),
+      setPlayers: (n) => this.net.send({ t: 'players', n }),
       setReady: (ready) => this.net.send({ t: 'ready', ready }),
       toLobby: () => this.net.send({ t: 'lobby' }),
       toast: (t) => this.toast(t),
@@ -172,6 +174,7 @@ export class RoomApp {
     else if (id === 'hearts') this.view = new HeartsTable(this.api);
     else if (id === 'spades') this.view = new SpadesTable(this.api);
     else if (id === 'dominoes') this.view = new DominoesTable(this.api);
+    else if (id === 'threethirteen') this.view = new ThreeThirteenTable(this.api);
     else if (id === 'jigsaw') this.view = new JigsawTable(this.api);
     else this.view = new LobbyView(this.api);
     gameEl.classList.toggle('landscape-only', this.view.landscape);

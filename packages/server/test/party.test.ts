@@ -154,7 +154,7 @@ describe('private rooms are parties', () => {
     a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
     a.room.handle('session-aaaa', { t: 'ready', ready: true });
     b.room.handle('session-bbbb', { t: 'pick', game: 'spades' });
-    expect(a.room.tableSetup()).toEqual({ pick: 'spades', seats: [null, null, null, null], ready: [] });
+    expect(a.room.tableSetup()).toEqual({ pick: 'spades', seats: [null, null, null, null], ready: [], players: 4 });
     b.room.handle('session-bbbb', { t: 'ready', ready: true });
     expect(a.room.game).toBeNull();
     // Not ready any more, then ready again.
@@ -205,7 +205,7 @@ describe('private rooms are parties', () => {
     expect(spades.seatOf('session-aaaa')).toBe(2);
     expect(spades.seatOf('session-bbbb')).toBe(3);
     // The table is clear again for next time.
-    expect(a.room.tableSetup()).toEqual({ pick: null, seats: [], ready: [] });
+    expect(a.room.tableSetup()).toEqual({ pick: null, seats: [], ready: [], players: 4 });
   });
 
   it('people who didn’t pick a seat get a free one, around those who did', () => {
@@ -226,7 +226,7 @@ describe('private rooms are parties', () => {
     const a = joinPrivate(mgr, 'session-aaaa');
     a.room.handle('session-aaaa', { t: 'pick', game: 'jigsaw' });
     a.room.handle('session-aaaa', { t: 'sit', seat: 1 });
-    expect(a.room.tableSetup()).toEqual({ pick: 'jigsaw', seats: [], ready: [] });
+    expect(a.room.tableSetup()).toEqual({ pick: 'jigsaw', seats: [], ready: [], players: 4 });
   });
 
   it('someone who dropped out doesn’t hold up the start, and keeps their seat', () => {
@@ -309,7 +309,7 @@ describe('private rooms are parties', () => {
     if (!r.ok) throw new Error(r.code);
     lookup.room.sendWelcome('session-aaaa', r);
     expect(lookup.room.game).toBeNull();
-    expect(conn.of('welcome')[0].table).toEqual({ pick: 'hearts', seats: [null, null, null, null], ready: [] });
+    expect(conn.of('welcome')[0].table).toEqual({ pick: 'hearts', seats: [null, null, null, null], ready: [], players: 4 });
     lookup.room.handle('session-aaaa', { t: 'ready', ready: true });
     expect(lookup.room.game?.id).toBe('hearts');
   });

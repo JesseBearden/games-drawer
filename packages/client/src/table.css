@@ -676,8 +676,23 @@
   box-shadow: var(--lift-0);
   color: var(--ink-soft);
 }
+/* A seat not in play (the table chose fewer players): faded, but you can still sit there. */
+.tb-seat.is-off {
+  opacity: 0.55;
+}
 .tb-seat[aria-disabled='true'] {
   cursor: default;
+}
+/* How many players: 2, 3 or 4, in a row (Three Thirteen). */
+.tb-count {
+  display: flex;
+  gap: 10px;
+}
+.tb-count .pc-btn {
+  min-width: 64px;
+}
+.tb-count .pc-btn:disabled {
+  opacity: 0.45;
 }
 .tb-seat.is-ready {
   --fc: var(--mint);

@@ -392,6 +392,26 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       hand after the first? What does a blocked hand (nobody can play) score? Right now the
       lowest hand scores everyone else's pips, rounded to 5.
 
+## Three Thirteen (new)
+
+- [ ] At the table, pick Three Thirteen (the blush tile). **How many players?** shows 2 · 3 · 4.
+      With two of you, pick 2: the line under it says "just the people here, no computers", and
+      the side seats say "Not playing". Start: only the two of you are at the green table, across
+      from each other.
+- [ ] Round 1 deals 3 cards, "3s are wild". On your turn the pile and the top discard glow: tap
+      one to take it. Then tap a card to lift it, and tap it again (or tap the discards) to throw
+      it away. The card you took from the discards says "Taken" and can't go straight back.
+- [ ] **Drag** cards in your hand to put them in any order, on the phone and the computer. Reload
+      the page: your order is kept.
+- [ ] Cards in a meld get a green strip along the bottom; wild cards (and jokers) a star; the tag
+      beside your name says how many points are loose ("All in melds" when nothing is).
+- [ ] When you can go out, **Go out** appears (and the card to throw is outlined). Everyone else
+      then gets one last turn, then everyone's hand is shown with the points, and the score sheet
+      says "Round 1".
+- [ ] A late round (10+ cards) on an upright phone: the hand fits in one row and every corner
+      is readable.
+- [ ] Play to the end (or with computers): lowest total after 11 rounds wins.
+
 ## Jigsaw puzzle
 
 Up to 4 people build one puzzle together; no bots. 51 pictures: Penny Pickles, your sailboat, Judy Jalapeño,

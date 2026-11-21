@@ -5,8 +5,9 @@ chat that keep going from one game to the next. It's made for people who aren't 
 started as a way to play with a mom and a brother), so it works the same on a phone, a tablet
 or a computer, with big buttons, plain words and nothing to install.
 
-Five games so far: **Hearts**, **Spades**, **Dominoes** (All Fives), a co-op **Jigsaw** puzzle and
-**Tanks** ("Tank You For Being A Friend"), all in a felt look, like a games table.
+Six games so far: **Hearts**, **Spades**, **Dominoes** (All Fives), **Three Thirteen** (rummy in 11
+rounds, with jokers), a co-op **Jigsaw** puzzle and **Tanks** ("Tank You For Being A Friend"), all
+in a felt look, like a games table.
 
 ![The home page: felt hands fitting two puzzle pieces together, "Play a game together.", a Start a table button and a box for a table code](docs/screenshots/home.webp)
 
@@ -36,7 +37,7 @@ Five games so far: **Hearts**, **Spades**, **Dominoes** (All Fives), a co-op **J
 2. **Invite people**: a link (it says who sent it, and can name who it's for) or the table's
    five-letter code. Before joining, the join page says who's already at the table.
 3. **Gather at the table**: talk, pick a game together (anyone can pick or change it), and for
-   Hearts, Spades and Dominoes pick where you sit.
+   the card and tile games pick where you sit (Three Thirteen also picks how many play, 2 to 4).
 4. **Play**: the game starts once everyone at the table taps **I'm ready**. Someone whose phone
    drops doesn't hold it up, and the computer plays any empty seat. **Switch game** in the menu
    brings everyone back to the table.
@@ -123,7 +124,7 @@ DNS, the boxes' launch template, a shared disk, budgets and a spending kill swit
 
 ## Layout
 
-- `packages/shared` — game rules and computer players (Hearts, Spades, Dominoes, the jigsaw's
+- `packages/shared` — game rules and computer players (Hearts, Spades, Dominoes, Three Thirteen, the jigsaw's
   cutting, and the deterministic tank simulation), the WebSocket message contract, names and
   the chat filter. The server runs them; the client reuses what it needs.
 - `packages/server` — the authoritative Node server. A room (`room.ts`) is the table: the people,
@@ -133,7 +134,7 @@ DNS, the boxes' launch template, a shared disk, budgets and a spending kill swit
   which is saved for review.
 - `packages/client` — the Vite + TypeScript client. `main.ts` is the way in (home, start, join);
   `shell.ts` is the table (bar, menu, messages, voice). The views it swaps in: `lobby.ts` (the
-  table between games), `heartsView.ts`, `spadesView.ts`, `dominoesView.ts`, `jigsawView.ts` and
+  table between games), `heartsView.ts`, `spadesView.ts`, `dominoesView.ts`, `threeThirteenView.ts`, `jigsawView.ts` and
   `tankView.ts` (Canvas 2D).
 - `e2e/` — browser tests (Playwright) that play the site like people do, at computer and phone
   sizes.

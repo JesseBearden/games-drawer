@@ -33,6 +33,7 @@
 .game[data-view='hearts'] .toolbar,
 .game[data-view='spades'] .toolbar,
 .game[data-view='dominoes'] .toolbar,
+.game[data-view='threethirteen'] .toolbar,
 .game[data-view='jigsaw'] .toolbar {
   top: calc(8px + var(--safe-t));
   bottom: auto;
@@ -44,6 +45,7 @@
 .game[data-view='hearts'] .toasts,
 .game[data-view='spades'] .toasts,
 .game[data-view='dominoes'] .toasts,
+.game[data-view='threethirteen'] .toasts,
 .game[data-view='jigsaw'] .toasts {
   bottom: auto;
   top: 34%;
@@ -53,6 +55,7 @@
 .game[data-view='hearts'] .arena,
 .game[data-view='spades'] .arena,
 .game[data-view='dominoes'] .arena,
+.game[data-view='threethirteen'] .arena,
 .game[data-view='jigsaw'] .arena {
   background: radial-gradient(ellipse at 50% 40%, #233089 0%, var(--navy) 70%);
 }

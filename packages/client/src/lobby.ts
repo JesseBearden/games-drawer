@@ -1,12 +1,12 @@
-import { canPlayPrivately, GAMES, gameInfo, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
+import { canPlayPrivately, choosesPlayers, GAMES, SEAT_FILL_ORDER, gameInfo, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
 import { escapeHtml } from './state';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** Each game's felt colour and the order they're listed (the same as home). */
-const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', hearts: 'butter', spades: 'lilac', tanks: 'peach' };
-const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'tanks'];
+const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', hearts: 'butter', spades: 'lilac', threethirteen: 'blush', tanks: 'peach' };
+const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'threethirteen', 'tanks'];
 
 /** Games a table can pick: everything not switched off (see games.ts). */
 const pickable = () => GAMES.filter((g) => canPlayPrivately(g.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
@@ -128,19 +128,36 @@ export class LobbyView implements View {
     const t = this.table;
     const ready = new Set(t.ready);
     const away = new Set(this.members.filter((m) => !m.connected).map((m) => m.id));
-    let html = `<section class="tb-seats"><h2 class="pc-h3">Pick your seat</h2><div class="tb-ring">`;
+    let html = `<section class="tb-seats">`;
+    // Games that let the table choose how many play (the server picks the seats the same way).
+    const chooses = choosesPlayers(game);
+    const people = Math.min(SEAT_COUNT, this.members.length);
+    const count = chooses ? Math.max(2, Math.min(SEAT_COUNT, Math.max(t.players, people))) : SEAT_COUNT;
+    const inPlay = new Set(t.seats.flatMap((s, i) => (s ? [i] : [])));
+    for (const i of SEAT_FILL_ORDER) if (inPlay.size < count) inPlay.add(i);
+    if (chooses) {
+      html += '<h2 class="pc-h3">How many players?</h2><div class="tb-count" role="radiogroup" aria-label="How many players">';
+      for (let k = 2; k <= SEAT_COUNT; k++) {
+        const on = k === count;
+        html += `<button class="pc-btn ${on ? 'pc-btn-main' : 'pc-btn-plain'}" data-players="${k}" role="radio" aria-checked="${on}" type="button"${k < people ? ' disabled' : ''}>${k}</button>`;
+      }
+      const computers = count - people;
+      html += `</div><p class="tb-sub">${count} players: ${computers <= 0 ? 'just the people here, no computers' : `${people === 1 ? 'you' : `the ${people} people here`} and ${computers === 1 ? 'a computer' : `${computers} computers`}`}.</p>`;
+    }
+    html += '<h2 class="pc-h3">Pick your seat</h2><div class="tb-ring">';
     for (let seat = 0; seat < SEAT_COUNT; seat++) {
       const who = t.seats[seat] ?? null;
       const mine = who === this.shell.alias;
       const name = who ? this.nameOf(who) : '';
-      const note = !who ? 'Tap to sit' : [mine ? 'You' : '', away.has(who) ? 'Away' : '', ready.has(who) ? 'Ready' : ''].filter(Boolean).join(' · ');
-      const cls = `tb-seat ${SEAT_PLACE[seat]}${!who ? ' is-open' : ''}${mine ? ' is-mine' : ''}${who && ready.has(who) ? ' is-ready' : ''}`;
-      const label = !who ? 'Open seat' : name;
+      const off = !who && !inPlay.has(seat);
+      const note = off ? 'Not playing' : !who ? 'Tap to sit' : [mine ? 'You' : '', away.has(who) ? 'Away' : '', ready.has(who) ? 'Ready' : ''].filter(Boolean).join(' · ');
+      const cls = `tb-seat ${SEAT_PLACE[seat]}${!who ? ' is-open' : ''}${off ? ' is-off' : ''}${mine ? ' is-mine' : ''}${who && ready.has(who) ? ' is-ready' : ''}`;
+      const label = off ? 'Empty' : !who ? 'Open seat' : name;
       html += `<button class="${cls}" data-seat="${seat}" type="button"${who && !mine ? ' aria-disabled="true"' : ''}><span class="pc-nm">${escapeHtml(label)}</span>${note ? `<small>${note}</small>` : ''}</button>`;
     }
     html += `<div class="tb-mat" aria-hidden="true"><img src="/art/games/${game}.webp" alt="" width="52" height="52" /></div></div>`;
 
-    const notes: string[] = ['Tap a seat to sit there. Anyone who doesn’t pick gets a free seat, and the computer plays the rest.'];
+    const notes: string[] = [chooses ? 'Tap a seat to sit there. Anyone who doesn’t pick gets a free seat in play.' : 'Tap a seat to sit there. Anyone who doesn’t pick gets a free seat, and the computer plays the rest.'];
     if (game === 'spades') {
       // "Jesse and Mom play against Sam and the computer": people first, the computer once.
       const team = (a: number, b: number) => [a, b].map((i) => t.seats[i]).filter((x): x is string => !!x).map((x) => this.nameOf(x));
@@ -183,6 +200,11 @@ export class LobbyView implements View {
       this.shell.play('lobbyJoin');
       this.showSeats = isSeated(game);
       this.shell.pickGame(game);
+      return;
+    }
+    const players = t.closest<HTMLElement>('[data-players]')?.dataset.players;
+    if (players !== undefined) {
+      this.shell.setPlayers(Number(players));
       return;
     }
     const seat = t.closest<HTMLElement>('[data-seat]')?.dataset.seat;

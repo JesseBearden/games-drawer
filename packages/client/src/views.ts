@@ -21,6 +21,8 @@ export interface ShellApi {
   table(): TableSetup;
   pickGame(game: GameId): void;
   sit(seat: number): void;
+  /** How many play the picked game (2 to 4), for games that let the table choose. */
+  setPlayers(n: number): void;
   setReady(ready: boolean): void;
   toLobby(): void;
   toast(text: string): void;
