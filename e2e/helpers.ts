@@ -9,7 +9,9 @@ export { newPlayer } from './fixtures';
  */
 export function at(pathname: string) {
   const slot = process.env.E2E_SLOT;
-  return slot ? `${pathname}?slot=${slot}` : pathname;
+  if (!slot) return pathname;
+  // An address may already have a query (an invite's ?i=…): add to it, don't start another.
+  return `${pathname}${pathname.includes('?') ? '&' : '?'}slot=${slot}`;
 }
 
 /** Fail on uncaught page errors (console noise like a blocked autoplay is fine). */
