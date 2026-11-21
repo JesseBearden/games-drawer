@@ -113,6 +113,9 @@ made from the same files. The first 20 were downloaded 2026-11-16, the rest 2026
 | `packages/client/public/puzzles/judy.jpg` | Judy Jalapeño | Jesse Bearden | Shared by the photographer for use here (2016 px wide: the size it was shared at; camera data removed) |
 | `packages/client/public/puzzles/milli.jpg` | Milli | James Montemagno | Shared with us for use here (portrait, 1024 px wide: the size it was shared at; no camera data) |
 | `packages/client/public/puzzles/sucia.jpg` | Sucia | Samantha DeLuna | Shared with us for use here (resized to 2400 px wide; camera data removed) |
+| `packages/client/public/puzzles/cricket.jpg` | Cricket | Ashley Clark | Shared with us for use here (portrait, 1536 px wide: the size it was shared at; camera data removed) |
+| `packages/client/public/puzzles/leeloo.jpg` | Leeloo | Ashley Clark | Shared with us for use here (1199 px wide: the size it was shared at; camera data removed) |
+| `packages/client/public/puzzles/noodle.jpg` | Noodle | Ashley Clark | Shared with us for use here (763 px wide: the size it was shared at; camera data removed) |
 | `packages/client/public/puzzles/fruit-market.jpg` | Uptown fruit market, New Orleans — [source](https://www.loc.gov/item/2011633038/) | Carol M. Highsmith | Public domain (Carol M. Highsmith Archive, Library of Congress: "No known restrictions on publication") |
 | `packages/client/public/puzzles/spice-stall.jpg` | Spice stall, Sao Paulo municipal market — [source](https://commons.wikimedia.org/wiki/File:Spices_of_Mercado_Municipal_de_S%C3%A3o_Paulo.jpg) | Wilfredor (Wilfredo Rodriguez) | CC0 1.0 Universal (public domain dedication) |
 | `packages/client/public/puzzles/tulips.jpg` | Tulips at Bayou Bend Gardens, Houston — [source](https://www.loc.gov/item/2014630980/) | Carol M. Highsmith | Public domain (Carol M. Highsmith Archive, Library of Congress: "No known restrictions on publication") |
