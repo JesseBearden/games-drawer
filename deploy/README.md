@@ -86,6 +86,25 @@ A box from an earlier deploy may still be finishing its games when the next depl
 keeps its slot, and the new box takes a free one. If all four are taken, the oldest retiring
 box stops at once.
 
+## Trying a release on staging first
+
+`staging.<domain>` is the beta site (user, 2026-11-21). `STAGING_ONLY=1 bash deploy/deploy.sh
+<commit>` does step 1 only: a new box with that release, smoke tests against staging, and it
+stops there. Staging shows the new box; everyone on the site itself stays on the current box,
+and nobody is sent to the new one. Try it on staging from a phone and a computer, then either:
+
+- **go live:** deploy the same commit again without `STAGING_ONLY` (its launch replaces the
+  staging box with a fresh one, then canary, checks and promote as usual), or
+- **take it down:** `npx tsx deploy/fleet.ts rollback <commit>`; staging goes back to the
+  current box.
+
+Any commit in the releases bucket can go to staging, pushed or not; only push and deploy pushed
+commits to the site itself, so GitHub matches what's live. While it's up, the staging box is a
+second server (about 1.4¢ an hour), so take it down or go live the same day. It shares the
+site's disk and secrets: saved puzzles and logs are the real ones, so testing there shows up on
+the admin page, and anything it can do (such as checking photos with Rekognition) needs the same
+AWS set-up as the site.
+
 ## The fleet tool by hand
 
 From the repo, with the `games-drawer` AWS profile (needs `AWS_REGION` and `LAUNCH_TEMPLATE`, as
@@ -95,9 +114,9 @@ tool refuses to run if they disagree. (A wrong front door would be bad: a promot
 `origin.`, leaving the site on the old box, which then shuts itself down.)
 `bash deploy/deploy.sh <commit>` runs a whole
 deploy this way, for a release already in the bucket. On Windows (Git Bash), also set
-`MSYS_NO_PATHCONV=1`, skip deploy.sh's `npx playwright install --with-deps` line (the local
-browser works), and build the release from a clean copy of the pushed commit
-(`git archive origin/main`) rather than the working folder:
+`MSYS_NO_PATHCONV=1` and `SKIP_BROWSER_INSTALL=1` (Playwright's `--with-deps` can't run there;
+the local browser works), and build the release from a clean copy of the commit
+(`git archive <commit>`, `origin/main` for the site itself) rather than the working folder:
 
 ```bash
 export AWS_PROFILE=games-drawer AWS_REGION=us-east-2 SITE_DOMAIN=gamesdrawer.com LAUNCH_TEMPLATE=games-drawer-box FRONT_DOOR=direct
