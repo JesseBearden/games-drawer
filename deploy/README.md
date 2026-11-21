@@ -87,11 +87,16 @@ box stops at once.
 ## The fleet tool by hand
 
 From the repo, with the `games-drawer` AWS profile (needs `AWS_REGION`, `SITE_DOMAIN` and
-`LAUNCH_TEMPLATE`, as the deploy project sets them). `bash deploy/deploy.sh <commit>` runs a
-whole deploy this way, for a release already in the bucket:
+`LAUNCH_TEMPLATE`, as the deploy project sets them, and **`FRONT_DOOR=direct` while the site runs
+without CloudFront**: without it, a promote moves only `origin.`, the site and `www` stay on the
+old box, and that box then shuts itself down). `bash deploy/deploy.sh <commit>` runs a whole
+deploy this way, for a release already in the bucket. On Windows (Git Bash), also set
+`MSYS_NO_PATHCONV=1`, skip deploy.sh's `npx playwright install --with-deps` line (the local
+browser works), and build the release from a clean copy of the pushed commit
+(`git archive origin/main`) rather than the working folder:
 
 ```bash
-export AWS_PROFILE=games-drawer AWS_REGION=us-east-2 SITE_DOMAIN=gamesdrawer.com LAUNCH_TEMPLATE=games-drawer-box
+export AWS_PROFILE=games-drawer AWS_REGION=us-east-2 SITE_DOMAIN=gamesdrawer.com LAUNCH_TEMPLATE=games-drawer-box FRONT_DOOR=direct
 npx tsx deploy/fleet.ts status                 # the live boxes, and where the front door points
 npx tsx deploy/fleet.ts rollback <commit>      # remove a new box by hand
 npx tsx deploy/fleet.ts launch <commit>        # e.g. bring the site back after the kill switch
