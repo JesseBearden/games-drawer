@@ -6,7 +6,7 @@ import { isCard, type HeartsView } from './hearts';
 import type { SpadesView } from './spades';
 import { isTileId, type DominoesView } from './dominoes';
 import { isTTCard, type ThreeThirteenView } from './threeThirteen';
-import { isPuzzleId, type PuzzleState, type PuzzleSummary } from './puzzle';
+import { isPuzzleId, type PuzzleState, type PuzzleSummary, type TablePhotoInfo } from './puzzle';
 
 /**
  * WebSocket message contract. Bump PROTOCOL_VERSION on any breaking change; the server
@@ -307,7 +307,9 @@ export type PuzzleServerMessage =
   | { t: 'pz-held'; g: number; by: string | null }
   | { t: 'pz-cursor'; by: string; x: number; y: number }
   /** Saved puzzles you asked about; `gone` are ones that no longer exist (forget them). */
-  | { t: 'pz-saves'; saves: PuzzleSummary[]; gone: string[] };
+  | { t: 'pz-saves'; saves: PuzzleSummary[]; gone: string[] }
+  /** Photos people at this table uploaded, and whether uploading is on at all. */
+  | { t: 'pz-photos'; on: boolean; photos: TablePhotoInfo[] };
 
 /**
  * At the table between games: the game picked to play next, who sits where (seated games only:

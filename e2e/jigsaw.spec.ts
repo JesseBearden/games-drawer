@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, newPlayer, test } from './fixtures';
 import { at, createRoom, joinByInvite, watchErrors, tapBar } from './helpers';
+import sharp from 'sharp';
 import { PUZZLE_IMAGES } from '../packages/shared/src/puzzle';
 
 /**
@@ -167,15 +168,17 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
   const errors = watchErrors(page);
   await createRoom(page, 'Tot', 'jigsaw');
   const view = page.locator('#jigsaw-view');
-  await expect(view.locator('.pz-image')).toHaveCount(PUZZLE_IMAGES.length);
+  // The site's own pictures (the 'Your photo' tile and any photos come first, apart from these).
+  const pictures = view.locator('.pz-images > .pz-image');
+  await expect(pictures).toHaveCount(PUZZLE_IMAGES.length);
   // Sizes up to 500 (1000 was dropped); the first picture in the shuffled order is picked.
   await expect(view.locator('[data-count]')).toHaveCount(6);
   await expect(view.locator('[data-count="1000"]')).toHaveCount(0);
-  await expect(view.locator('.pz-image').first()).toHaveClass(/picked/);
-  const orderOf = () => view.locator('.pz-image').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.image));
+  await expect(pictures.first()).toHaveClass(/picked/);
+  const orderOf = () => pictures.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.image));
   const before = await orderOf();
   // Picking only moves the tick: the pictures aren't rebuilt (that made them all blink on iPhones).
-  const firstPic = await view.locator('.pz-image img').first().elementHandle();
+  const firstPic = await pictures.locator('img').first().elementHandle();
   await view.locator('[data-image="toy-shop"]').click();
   await view.locator('[data-count="6"]').click();
   expect(await firstPic!.evaluate((el) => el.isConnected)).toBe(true);
@@ -200,7 +203,7 @@ test('a 6-piece puzzle for little kids: big pieces, any picture', async ({ page 
   await page.locator('#menu [data-menu-item="new-puzzle"]').click();
   await expect(view.locator('.pz-setup')).toBeVisible();
   expect(asked).toContain('won’t be kept');
-  await expect(view.locator('.pz-image')).toHaveCount(PUZZLE_IMAGES.length);
+  await expect(pictures).toHaveCount(PUZZLE_IMAGES.length);
   // Back at the picker, the pictures come in a new order.
   expect(await orderOf()).not.toEqual(before);
   await expect(view.locator('.pz-saves')).toHaveCount(0);
@@ -445,4 +448,55 @@ test('a finger dragging a piece gets a magnifier above it, and the piece stays u
   await expect(loupe).not.toHaveClass(/\bon\b/);
   await touch('touchEnd', at.x + 40, at.y);
   await expect.poll(() => seen.state!.pieces[a].x).toBeCloseTo(pair.x + 40 / scale, -1);
+});
+
+test('your own photo: checked, shared with the table, puzzled together, never saved', async ({ page, browser }) => {
+  const errors = watchErrors(page);
+  const code = await createRoom(page, 'Pip', 'jigsaw');
+  const view = page.locator('#jigsaw-view');
+  // (The test server's pretend check refuses a photo exactly 404 pixels wide.)
+  const jpeg = (width: number, height: number) => sharp({ create: { width, height, channels: 3, background: { r: 240, g: 140, b: 90 } } }).jpeg().toBuffer();
+
+  // The tile says what happens to it first.
+  await view.locator('.pz-upload').click();
+  await expect(view.locator('.pz-photo-note')).toBeVisible();
+  await expect(view.locator('.pz-photo-note')).toContainText('deleted when the table closes');
+  await view.locator('.pz-photo-file').setInputFiles({ name: 'beach.jpg', mimeType: 'image/jpeg', buffer: await jpeg(1200, 800) });
+  const tile = view.locator('.pz-own [data-image^="photo-"]');
+  await expect(tile).toHaveCount(1);
+  await expect(tile).toHaveClass(/picked/);
+  await expect(tile).toContainText('Pip’s photo');
+  await expect(view.locator('.pz-photo-note')).toBeHidden();
+
+  // One that doesn't pass isn't added.
+  await view.locator('.pz-photo-file').setInputFiles({ name: 'no.jpg', mimeType: 'image/jpeg', buffer: await jpeg(404, 300) });
+  await expect(page.getByText('That photo didn’t pass the family-friendly check')).toBeVisible();
+  await expect(tile).toHaveCount(1);
+
+  // A friend who joins has it in their picker too.
+  const friend = await newPlayer(browser, page);
+  await joinByInvite(friend, code, 'Rue');
+  await expect(friend.locator('#jigsaw-view .pz-own [data-image^="photo-"]')).toHaveCount(1);
+
+  await view.locator('[data-count="20"]').click();
+  await view.locator('.pz-start').click();
+  await expect(view.locator('.pz-loading')).toBeHidden();
+  await expect(view.locator('.pz-status')).toContainText('Pip’s photo');
+  await expect.poll(async () => (await pieceSpots(page)).length).toBeGreaterThan(20);
+  await expect.poll(async () => (await pieceSpots(friend)).length).toBeGreaterThan(20);
+
+  // Never on the "Continue a puzzle" list, and putting it away says so.
+  expect((await page.evaluate(() => localStorage.getItem('gd.puzzles'))) ?? '[]').toBe('[]');
+  let asked = '';
+  page.once('dialog', (d) => {
+    asked = d.message();
+    void d.accept();
+  });
+  await tapBar(page, '#btn-menu');
+  await page.locator('#menu [data-menu-item="new-puzzle"]').click();
+  await expect(view.locator('.pz-setup')).toBeVisible();
+  expect(asked).toContain('aren’t saved');
+  await expect(view.locator('.pz-saves')).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await friend.context().close();
 });

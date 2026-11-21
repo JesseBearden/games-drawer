@@ -14,7 +14,8 @@ test('Three Thirteen: take a card, drag one to rearrange, and throw one away @sm
 
   await view.locator('.tt-stock').click();
   await expect(hand).toHaveCount(4);
-  await expect(view.locator('.ht-status')).toContainText('tap a card to throw away');
+  // (The deal is random: now and then the card you take already lets you go out.)
+  await expect(view.locator('.ht-status')).toContainText(/tap a card to throw away|you can go out/);
 
   // Drag the first card to the far right: it stays there (the server keeps your order).
   const first = await hand.first().getAttribute('data-card');

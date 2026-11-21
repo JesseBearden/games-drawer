@@ -153,6 +153,31 @@ The boxes can read that parameter and their shared secrets, and no other. Parame
 standard tier is free, unlike Secrets Manager, and does the same job here. The admin page on any
 box adds up every box's logs from the shared disk.
 
+## Your own photos (jigsaw)
+
+People at a private table can add their own photo for a jigsaw. The phone shrinks it, the box
+checks it with Amazon Rekognition (`DetectModerationLabels`, the photo sent in the request) and
+keeps it in memory only until the table closes (packages/server/src/photos.ts). The boxes call
+Rekognition with their own role, so two things have to be set up in AWS once, **before** the
+first deploy that has it:
+
+1. **Permission:** the boxes' role may call `rekognition:DetectModerationLabels`
+   (infra/lib/stack.ts). Apply it with `npm run infra -- deploy`. Until then, every photo is
+   refused with "couldn't be checked just now" (never let through unchecked).
+2. **Opt out of AI training.** By default AWS may keep pictures sent to Rekognition to improve
+   its services; the privacy page says we've told it not to. In the AWS console: **AWS
+   Organizations** (create an organization if the account isn't in one; it's free) → **Policies**
+   → **AI services opt-out policies** → enable them → create a policy with this content, and
+   attach it to the root:
+
+   ```json
+   { "services": { "default": { "opt_out_policy": { "@@assign": "optOut" } } } }
+   ```
+
+To turn uploads off, set `PHOTO_CHECK=off` in setup.sh (`pretend` lets every photo through:
+only for your own computer and tests). The admin logs show `photo_added`, `photo_refused` (with
+what kind of thing the check found) and `photo_check_failed`; never the photo.
+
 ## Voice relay (TURN)
 
 Voice chat connects players directly. Some networks (strict routers, some mobile carriers,

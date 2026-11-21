@@ -62,8 +62,15 @@
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
 }
+/* A size the picked picture is too small for: greyed out. */
+#game .pz-btn:disabled {
+  cursor: not-allowed;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ink) 22%, transparent);
+  color: color-mix(in oklab, var(--ink) 40%, transparent);
+  opacity: 0.55;
+}
 @media (hover: hover) {
-  #game .pz-btn:hover {
+  #game .pz-btn:hover:not(:disabled) {
     box-shadow:
       0 0 0 2px var(--cobalt),
       var(--lift-2);
@@ -91,6 +98,53 @@
   box-shadow:
     0 0 0 3px var(--cobalt),
     var(--lift-2);
+}
+
+/* Your own photos: the table's photos sit in the grid with the rest, after a "Your own photo"
+   tile (a dashed space with a camera, where a picture would be). */
+#game .pz-own {
+  display: contents;
+}
+#game .pz-upload-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border: 2px dashed color-mix(in oklab, var(--cobalt) 55%, transparent);
+  border-radius: 6px;
+  color: var(--cobalt);
+}
+#game .pz-upload:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+/* What happens to your photo, shown before you choose one. */
+#game .pz-photo-note {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--ink);
+  font: 600 0.95rem/1.4 var(--font);
+}
+#game .pz-photo-note[hidden] {
+  display: none;
+}
+#game .pz-photo-note p {
+  margin: 0 0 8px;
+}
+#game .pz-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+#game .pz-photo-actions label {
+  cursor: pointer;
 }
 
 /* Start stays in reach: a strip of paper along the bottom of the sheet. */

@@ -2,6 +2,11 @@ import { CARD_SOUNDS } from './audio';
 import {
   cutPuzzle,
   gridFor,
+  maxPieces,
+  photoIdOf,
+  PHOTO_MAX_BYTES,
+  PHOTO_MAX_SIDE,
+  PHOTO_MIN_SIDE,
   PIECE_COUNTS,
   puzzleProgress,
   puzzleUntouched,
@@ -18,9 +23,11 @@ import {
   type PuzzleState,
   type PuzzleImage,
   type PuzzleSummary,
+  type TablePhotoInfo,
   type TabShape,
 } from '@tank/shared';
 import { loupeZoom } from './loupe';
+import { getSession } from './net';
 import { colorCss, escapeHtml } from './state';
 import type { SafariGesture, ShellApi, View } from './views';
 
@@ -142,6 +149,56 @@ function forget(ids: string[]) {
   }
 }
 
+/** A camera, for the "Your own photo" tile. */
+const CAMERA_ICON =
+  '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l1.6-2.4h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.6"/></svg>';
+
+/** What to tell you when your photo isn't used (photos.ts says why). */
+const PHOTO_REFUSED: Record<string, string> = {
+  blocked: 'That photo didn’t pass the family-friendly check. Try a different one.',
+  'too-small': 'That photo is too small for a puzzle. Try a bigger one.',
+  'too-big': 'That photo is too big. Try a different one.',
+  'not-image': 'That doesn’t look like a photo. Try a different one.',
+  busy: 'Lots of photos are being added right now. Try again in a little while.',
+  full: 'This table can’t take any more photos right now.',
+  'not-at-table': 'Only people at the table can add a photo.',
+  off: 'Adding your own photos is turned off right now.',
+  unavailable: 'Your photo couldn’t be checked just now. Try again in a minute.',
+};
+
+/**
+ * Your photo, smaller (PHOTO_MAX_SIDE on its long side) and as a fresh JPEG: drawing it onto a
+ * canvas keeps only the picture, so its location, camera and date stay on your device. Throws
+ * 'not-image', 'too-small' or 'too-big' (PHOTO_REFUSED).
+ */
+async function shrinkPhoto(file: File): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+    } catch {
+      throw new Error('not-image');
+    }
+    const k = Math.min(1, PHOTO_MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * k);
+    const h = Math.round(img.naturalHeight * k);
+    if (Math.min(w, h) < PHOTO_MIN_SIDE) throw new Error('too-small');
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+    for (const quality of [0.85, 0.7, 0.55]) {
+      const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', quality));
+      if (blob && blob.size <= PHOTO_MAX_BYTES) return blob;
+    }
+    throw new Error('too-big');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /**
  * The jigsaw table. Pieces are cut from the picture once (each with its own tab shapes) and
  * drawn on a canvas you can pan and zoom. Dragging moves the piece straight away; the server
@@ -159,7 +216,7 @@ interface TableLook {
 export class JigsawTable implements View {
   readonly landscape = false;
   readonly helpHtml =
-    '<p>Drag pieces around the table; when two fit together they snap and move as one. A group dropped where it belongs locks into the frame.</p><p>Scroll or pinch to zoom, drag the empty table to look around. <b>Edges</b> hides the middle pieces (just for you), <b>Tidy</b> spreads loose pieces back around the edges.</p><p>On a touch screen, a magnifier above your finger shows the piece you’re dragging. The magnifier button turns it off.</p><p>The puzzle saves as you go: pick it again under “Continue a puzzle”. A puzzle nobody plays for 30 days is cleared away.</p>';
+    '<p>Drag pieces around the table; when two fit together they snap and move as one. A group dropped where it belongs locks into the frame.</p><p>Scroll or pinch to zoom, drag the empty table to look around. <b>Edges</b> hides the middle pieces (just for you), <b>Tidy</b> spreads loose pieces back around the edges.</p><p>On a touch screen, a magnifier above your finger shows the piece you’re dragging. The magnifier button turns it off.</p><p>The puzzle saves as you go: pick it again under “Continue a puzzle”. A puzzle nobody plays for 30 days is cleared away.</p><p><b>Your photo</b> makes a puzzle of your own picture. Only the people at this table see it, and it’s deleted when the table closes, so that puzzle isn’t saved.</p>';
   private el = $('jigsaw-view');
   private phase: PuzzlePhase = 'setup';
   private state: PuzzleState | null = null;
@@ -176,6 +233,12 @@ export class JigsawTable implements View {
    */
   private setupBuilt = false;
   private savesHtml = '';
+  /** Photos people at this table uploaded (only in memory, gone when the table closes). */
+  private photos: TablePhotoInfo[] = [];
+  /** Whether this table may upload photos at all. */
+  private photosOn = false;
+  /** A photo of yours is being shrunk, sent and checked. */
+  private uploading = false;
 
   // The table.
   private canvas!: HTMLCanvasElement;
@@ -272,6 +335,7 @@ export class JigsawTable implements View {
     this.loupe = this.el.querySelector('.pz-loupe') as HTMLCanvasElement;
     this.loupeCtx = this.loupe.getContext('2d')!;
     this.el.addEventListener('click', this.onClick);
+    this.el.addEventListener('change', this.onChange);
     this.canvas.addEventListener('pointerdown', this.onDown);
     this.canvas.addEventListener('pointermove', this.onMove);
     this.canvas.addEventListener('pointerup', this.onUp);
@@ -312,7 +376,12 @@ export class JigsawTable implements View {
         this.dragging = null;
         this.pendingGrab = null;
         this.stopEdgeScroll();
-        if (m.state) remember(m.state.id);
+        // A finished puzzle comes off your "Continue a puzzle" list; one in progress goes on it.
+        // (Puzzles of your own photos are never saved, so they never go on it.)
+        if (m.state) {
+          if (m.phase === 'done') forget([m.state.id]);
+          else if (!photoIdOf(m.state.image)) remember(m.state.id);
+        }
         if (fresh) this.cursors.clear();
         this.rebuildGroups(true);
         this.show();
@@ -369,13 +438,23 @@ export class JigsawTable implements View {
         this.invalidate();
         return;
       case 'pz-saves': {
-        // Puzzles that no longer exist (nothing placed, or not played for 30 days) leave the list.
-        forget(m.gone);
-        const gone = new Set(m.gone);
-        this.saves = m.saves.length ? m.saves : this.saves.filter((s) => !gone.has(s.id));
+        // Puzzles that no longer exist (nothing placed, or not played for 30 days) leave the list,
+        // and so do finished ones: there's nothing left to continue.
+        const drop = [...m.gone, ...m.saves.filter((s) => s.done).map((s) => s.id)];
+        forget(drop);
+        const gone = new Set(drop);
+        this.saves = (m.saves.length ? m.saves : this.saves).filter((s) => !gone.has(s.id));
         if (this.phase === 'setup') this.renderSaves();
         return;
       }
+      case 'pz-photos':
+        this.photos = m.photos;
+        this.photosOn = m.on;
+        if (this.setupBuilt) {
+          this.renderPhotos();
+          this.renderPicks();
+        }
+        return;
     }
   }
 
@@ -425,7 +504,14 @@ export class JigsawTable implements View {
     let html = '<div class="pz-setup-card"><h2>Jigsaw puzzle</h2><div class="pz-saves-box"></div>';
     html += '<h4>How many pieces?</h4><div class="pz-counts">';
     for (const n of PIECE_COUNTS) html += `<button type="button" class="pz-btn" data-count="${n}">${n}</button>`;
-    html += '</div><h4>Choose a puzzle</h4><div class="pz-images">';
+    html += '</div><h4>Choose a puzzle</h4>';
+    // What happens to your own photo, before you pick one (the tile opens it).
+    html +=
+      '<div class="pz-photo-note" hidden><p><b>Use your own photo.</b> Only the people at this table see it, and it’s deleted when the table closes, so this puzzle can’t be continued another day.</p>' +
+      '<p>It’s checked automatically first: photos that aren’t family friendly are turned away.</p>' +
+      '<div class="pz-photo-actions"><label class="pc-btn pc-btn-main">Choose a photo<input type="file" accept="image/*" class="pz-photo-file" hidden /></label>' +
+      '<button type="button" class="pc-btn pc-btn-plain" data-pz="photo-cancel">Not now</button></div></div>';
+    html += '<div class="pz-images"><div class="pz-own"></div>';
     for (const i of this.pictures) {
       html += `<button type="button" class="pz-image" data-image="${i.id}"><img src="${i.thumb}" alt="" loading="lazy" /><span>${escapeHtml(i.title)}</span></button>`;
     }
@@ -436,7 +522,44 @@ export class JigsawTable implements View {
     this.setupBuilt = true;
     this.savesHtml = '';
     this.renderSaves();
+    this.renderPhotos();
     this.renderPicks();
+  }
+
+  /**
+   * The table's own photos, first in the grid, after the "Your own photo" tile. Tiles are added
+   * and removed one by one (rebuilding them all made pictures blink on iPhones).
+   */
+  private renderPhotos() {
+    const own = this.el.querySelector<HTMLElement>('.pz-own');
+    if (!own) return;
+    let tile = own.querySelector<HTMLButtonElement>('.pz-upload');
+    if (this.photosOn && !tile) {
+      own.insertAdjacentHTML('afterbegin', `<button type="button" class="pz-image pz-upload" data-pz="photo"><span class="pz-upload-art">${CAMERA_ICON}</span><span class="pz-upload-label"></span></button>`);
+      tile = own.querySelector<HTMLButtonElement>('.pz-upload');
+    }
+    if (!this.photosOn) tile?.remove();
+    if (tile) {
+      tile.disabled = this.uploading;
+      tile.querySelector('.pz-upload-label')!.textContent = this.uploading ? 'Checking…' : 'Your photo';
+    }
+    const want = new Set(this.photos.map((p) => p.image));
+    for (const b of own.querySelectorAll<HTMLElement>('[data-image]')) if (!want.has(b.dataset.image!)) b.remove();
+    const have = new Set([...own.querySelectorAll<HTMLElement>('[data-image]')].map((b) => b.dataset.image));
+    for (const p of this.photos) {
+      if (have.has(p.image)) continue;
+      // Newest first, right after the tile.
+      const html = `<button type="button" class="pz-image" data-image="${escapeHtml(p.image)}"><img src="${escapeHtml(p.url)}" alt="" /><span>${escapeHtml(p.title)}</span></button>`;
+      if (tile) tile.insertAdjacentHTML('afterend', html);
+      else own.insertAdjacentHTML('afterbegin', html);
+    }
+  }
+
+  /** The picture that's picked (a photo of the table's, or one of the site's), with its credit line. */
+  private picked(): { id: string; title: string; width: number; height: number; credit: string } {
+    const photo = this.photos.find((p) => p.image === this.pickImage);
+    if (photo) return { id: photo.image, title: photo.title, width: photo.width, height: photo.height, credit: 'Only people at this table see this photo' };
+    return this.pictures.find((i) => i.id === this.pickImage) ?? this.pictures[0] ?? PUZZLE_IMAGES[0];
   }
 
   /** The pictures in a new order with the first one picked, so different ones are up top each time. */
@@ -460,8 +583,8 @@ export class JigsawTable implements View {
       for (const s of [...this.saves].sort((a, b) => b.updatedAt - a.updatedAt)) {
         const when = new Date(s.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
         // Each part kept together (no-break spaces), so a narrow row breaks only between them.
-        const about = [`${s.pieces} pieces`, s.done ? 'finished' : `${Math.round(s.progress * 100)}% done`, when].map((p) => p.replace(/ /g, ' ')).join(' · ');
-        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${escapeHtml(about)}</small></span><button type="button" class="pc-btn pc-btn-plain" data-resume="${s.id}">${s.done ? 'Look again' : 'Continue'}</button><button type="button" class="pc-btn pc-btn-alert pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">${TRASH_ICON}</button></li>`;
+        const about = [`${s.pieces} pieces`, `${Math.round(s.progress * 100)}% done`, when].map((p) => p.replace(/ /g, ' ')).join(' · ');
+        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${escapeHtml(about)}</small></span><button type="button" class="pc-btn pc-btn-plain" data-resume="${s.id}">Continue</button><button type="button" class="pc-btn pc-btn-alert pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">${TRASH_ICON}</button></li>`;
       }
       html += '</ul><h3>Or start a new one</h3>';
     }
@@ -471,21 +594,33 @@ export class JigsawTable implements View {
     box.innerHTML = html;
   }
 
+  /** The size to start: the one picked, or the picked picture's most if that's fewer. */
+  private count() {
+    const img = this.picked();
+    return Math.min(this.pickCount, maxPieces(img.width, img.height));
+  }
+
   /** Mark the picked picture and size, and say what you'd get, without rebuilding anything. */
   private renderPicks() {
     const card = this.el.querySelector<HTMLElement>('.pz-setup-card');
     if (!card) return;
-    const img = this.pictures.find((i) => i.id === this.pickImage) ?? this.pictures[0] ?? PUZZLE_IMAGES[0];
+    const img = this.picked();
     for (const b of card.querySelectorAll<HTMLElement>('[data-image]')) b.classList.toggle('picked', b.dataset.image === img.id);
-    for (const b of card.querySelectorAll<HTMLElement>('[data-count]')) {
+    // A smaller picture offers fewer pieces: bigger sizes are greyed out, and a size you picked
+    // that's too big for it comes down to its most (and comes back with a bigger picture).
+    const most = maxPieces(img.width, img.height);
+    const count = this.count();
+    for (const b of card.querySelectorAll<HTMLButtonElement>('[data-count]')) {
       const n = Number(b.dataset.count);
       const g = gridFor(img.width, img.height, n);
-      b.classList.toggle('picked', n === this.pickCount);
-      b.title = `${g.cols * g.rows} pieces`;
+      b.disabled = n > most;
+      b.classList.toggle('picked', n === count);
+      b.title = n > most ? `This picture is too small for ${n} pieces` : `${g.cols * g.rows} pieces`;
     }
     // The grid has to fit the picture, so the real count is close to the one picked.
-    const grid = gridFor(img.width, img.height, this.pickCount);
-    card.querySelector('.pz-grid')!.innerHTML = `<b>${escapeHtml(img.title)}</b>: ${grid.cols * grid.rows} pieces, ${grid.cols} across and ${grid.rows} down.`;
+    const grid = gridFor(img.width, img.height, count);
+    const cap = most < PIECE_COUNTS[PIECE_COUNTS.length - 1] ? ` This picture is big enough for up to ${most}.` : '';
+    card.querySelector('.pz-grid')!.innerHTML = `<b>${escapeHtml(img.title)}</b>: ${grid.cols * grid.rows} pieces, ${grid.cols} across and ${grid.rows} down.${cap}`;
     card.querySelector('.pz-credit')!.textContent = `Anyone at the table can pick. ${img.credit}.`;
   }
 
@@ -495,7 +630,7 @@ export class JigsawTable implements View {
    */
   private forgetSave(id: string) {
     const s = this.saves.find((x) => x.id === id);
-    if (s && !s.done && s.progress > 0) {
+    if (s && s.progress > 0) {
       const pct = Math.round(s.progress * 100);
       if (!confirm(`Take “${s.title}” (${s.pieces} pieces, ${pct}% done) off your list? Friends who worked on it can still continue it.`)) return;
     }
@@ -1387,6 +1522,50 @@ export class JigsawTable implements View {
     this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
   };
 
+  /** A photo of your own was chosen. */
+  private onChange = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.classList?.contains('pz-photo-file')) return;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void this.uploadPhoto(file);
+  };
+
+  /**
+   * Shrink your photo here (which also leaves its location and camera details behind), send it
+   * to be checked, and pick it once it's in. Everyone at the table gets it in their picker.
+   */
+  private async uploadPhoto(file: File) {
+    if (this.uploading) return;
+    this.uploading = true;
+    const note = this.el.querySelector<HTMLElement>('.pz-photo-note');
+    if (note) note.hidden = true;
+    this.renderPhotos();
+    let reason = 'unavailable';
+    try {
+      const jpeg = await shrinkPhoto(file);
+      const res = await fetch(`/api/photo?table=${encodeURIComponent(this.shell.roomCode)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'image/jpeg', 'x-gd-session': getSession() ?? '' },
+        body: jpeg,
+      });
+      const out = (await res.json().catch(() => ({}))) as { ok?: boolean; image?: string; reason?: string };
+      if (out.ok && out.image) {
+        this.pickImage = out.image;
+        reason = '';
+      } else reason = out.reason ?? reason;
+    } catch (err) {
+      reason = err instanceof Error && err.message in PHOTO_REFUSED ? err.message : reason;
+    } finally {
+      this.uploading = false;
+      if (this.setupBuilt) {
+        this.renderPhotos();
+        this.renderPicks();
+      }
+    }
+    if (reason) this.shell.toast(PHOTO_REFUSED[reason] ?? PHOTO_REFUSED.unavailable);
+  }
+
   private onClick = (e: Event) => {
     const t = e.target as HTMLElement;
     const pickImage = t.closest<HTMLElement>('[data-image]')?.dataset.image;
@@ -1409,7 +1588,13 @@ export class JigsawTable implements View {
     const r = this.canvas.getBoundingClientRect();
     switch (act) {
       case 'start':
-        return this.shell.sendGame({ t: 'pz-new', image: this.pickImage, pieces: this.pickCount });
+        return this.shell.sendGame({ t: 'pz-new', image: this.picked().id, pieces: this.count() });
+      case 'photo':
+      case 'photo-cancel': {
+        const note = this.el.querySelector<HTMLElement>('.pz-photo-note');
+        if (note) note.hidden = act === 'photo-cancel' || !note.hidden;
+        return;
+      }
       case 'picture': {
         const img = this.el.querySelector('.pz-preview') as HTMLElement;
         img.hidden = !img.hidden;
@@ -1455,9 +1640,11 @@ export class JigsawTable implements View {
   private newPuzzle() {
     const s = this.state;
     const ask =
-      s && puzzleUntouched(s)
-        ? 'Put this puzzle away? Nothing’s been placed yet, so it won’t be kept.'
-        : 'Put this puzzle away? It’s saved, so anyone here can continue it later.';
+      s && photoIdOf(s.image)
+        ? 'Put this puzzle away? Puzzles of your own photos aren’t saved, so it can’t be continued later.'
+        : s && puzzleUntouched(s)
+          ? 'Put this puzzle away? Nothing’s been placed yet, so it won’t be kept.'
+          : 'Put this puzzle away? It’s saved, so anyone here can continue it later.';
     if (this.phase === 'done' || confirm(ask)) this.shell.sendGame({ t: 'pz-setup' });
   }
 
@@ -1469,6 +1656,7 @@ export class JigsawTable implements View {
     this.stopEdgeScroll();
     this.observer.disconnect();
     this.el.removeEventListener('click', this.onClick);
+    this.el.removeEventListener('change', this.onChange);
     this.el.hidden = true;
     this.el.innerHTML = '';
   }

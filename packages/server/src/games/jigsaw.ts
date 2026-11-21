@@ -1,5 +1,7 @@
 import {
   gridFor,
+  maxPieces,
+  photoIdOf,
   PIECE_COUNTS,
   puzzleImage,
   puzzleProgress,
@@ -166,6 +168,19 @@ export class JigsawGame implements ServerGame {
 
   sendInit(m: Member, _reclaimed = false) {
     this.host.send(m, this.stateMessage());
+    this.host.send(m, this.photosMessage());
+  }
+
+  private photosMessage(): PuzzleServerMessage {
+    return { t: 'pz-photos', on: !!this.host.photoUploads, photos: this.host.photos?.() ?? [] };
+  }
+
+  photosChanged() {
+    this.host.broadcast(this.photosMessage());
+  }
+
+  usesPhoto(image: string) {
+    return this.state?.image === image;
   }
 
   private broadcastState() {
@@ -181,8 +196,11 @@ export class JigsawGame implements ServerGame {
     this.saveAt = null;
     const s = this.state;
     if (!s) return;
-    // A puzzle nobody has placed anything in isn't kept (so trying one out leaves no clutter).
-    if (puzzleUntouched(s)) this.store.remove(s.id);
+    // Puzzles of your own photos are never saved: the photo is only in memory, for this table.
+    if (photoIdOf(s.image)) return;
+    // A puzzle nobody has placed anything in isn't kept (so trying one out leaves no clutter),
+    // and a finished one has nothing left to continue.
+    if (puzzleUntouched(s) || s.doneAt !== null) this.store.remove(s.id);
     else this.store.save(s);
   }
 
@@ -231,11 +249,14 @@ export class JigsawGame implements ServerGame {
 
   private newPuzzle(m: Member, imageId: string, count: number) {
     if (this.phase === 'playing') return;
-    const image = puzzleImage(imageId);
+    const photo = photoIdOf(imageId) ? this.host.photos?.().find((p) => p.image === imageId) : undefined;
+    const image = photo ? { id: photo.image, file: photo.url, title: photo.title, width: photo.width, height: photo.height } : puzzleImage(imageId);
     if (!image || !(PIECE_COUNTS as readonly number[]).includes(count)) return;
     if (!this.mayStart(m)) return;
     if (this.state) this.saveNow();
-    const { cols, rows } = gridFor(image.width, image.height, count);
+    // A small picture offers fewer pieces (each keeps MIN_PIECE_PX of it across): asking for
+    // more gets its most. (The picker greys out the sizes it can't do.)
+    const { cols, rows } = gridFor(image.width, image.height, Math.min(count, maxPieces(image.width, image.height)));
     let id = '';
     for (let i = 0; i < 16; i++) id += ID_CHARS[this.host.randomInt(ID_CHARS.length)];
     const now = this.host.now();
@@ -259,7 +280,7 @@ export class JigsawGame implements ServerGame {
     this.reset('playing');
     this.saveNow();
     this.host.systemChat(`${m.name} started a ${cols * rows}-piece puzzle: ${image.title}.`);
-    this.host.log('jigsaw_new', { image: image.id, pieces: cols * rows, by: m.pid });
+    this.host.log('jigsaw_new', { image: photo ? 'photo' : image.id, pieces: cols * rows, by: m.pid });
   }
 
   private resume(m: Member, id: string) {
@@ -293,14 +314,21 @@ export class JigsawGame implements ServerGame {
 
   private backToSetup(m: Member) {
     if (this.phase === 'setup') return;
-    const kept = !!this.state && !puzzleUntouched(this.state);
-    if (this.state) this.saveNow();
+    const s = this.state;
+    const photo = !!s && !!photoIdOf(s.image);
+    const done = !!s && s.doneAt !== null;
+    const untouched = !s || puzzleUntouched(s);
+    if (s) this.saveNow();
     this.state = null;
     this.reset('setup');
     this.host.systemChat(
-      kept
-        ? `${m.name} put the puzzle away (it's saved). Pick another, or continue one.`
-        : `${m.name} put the puzzle away (nothing was placed, so it wasn't kept).`,
+      photo
+        ? `${m.name} put the puzzle away. Puzzles of your own photos aren't saved.`
+        : done
+          ? `${m.name} put the finished puzzle away.`
+          : untouched
+            ? `${m.name} put the puzzle away (nothing was placed, so it wasn't kept).`
+            : `${m.name} put the puzzle away (it's saved). Pick another, or continue one.`,
     );
   }
 

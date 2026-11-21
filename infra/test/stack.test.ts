@@ -45,6 +45,12 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     });
   });
 
+  it('lets the boxes ask Rekognition about photos people add, and nothing else of it', () => {
+    const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+    expect(policies).toContain('"Action":"rekognition:DetectModerationLabels"');
+    expect(policies.match(/rekognition:/g)).toHaveLength(1);
+  });
+
   it('keeps what matters off the boxes: a shared disk that survives them, reachable only from them', () => {
     t.hasResource('AWS::EFS::FileSystem', { DeletionPolicy: 'Retain', Properties: Match.objectLike({ Encrypted: true }) });
     t.hasResourceProperties('AWS::EC2::SecurityGroupIngress', { IpProtocol: 'tcp', FromPort: 2049, ToPort: 2049, SourceSecurityGroupId: Match.anyValue() });

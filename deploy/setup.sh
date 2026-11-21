@@ -104,6 +104,10 @@ MAX_PRIVATE_ROOMS=${MAX_PRIVATE_ROOMS:-50}
 # The 50-table cap still bounds the cost. (Single quotes: systemd would strip the double ones.)
 LIMITS='{"privateRoomsPer10Min":30}'
 PUZZLE_DIR=${mnt}/puzzles
+# Photos people add to a jigsaw are checked by Amazon Rekognition, with this box's own role. The
+# AI services opt-out policy must be on first (deploy/README.md), or the privacy page isn't true.
+PHOTO_CHECK=rekognition
+PHOTO_CHECK_REGION=${REGION}
 LOG_DIR=${mnt}/logs/${instance_id}
 ADMIN_LOG_DIRS=${mnt}/logs
 TURN_URLS=turn:${public_ip}:3478?transport=udp,turn:${public_ip}:3478?transport=tcp

@@ -167,6 +167,28 @@ export function gridFor(width: number, height: number, target: number): { cols: 
   return { cols: best.cols, rows: best.rows };
 }
 
+/**
+ * Each piece keeps at least this many of the picture's pixels across (its shorter side), so a
+ * piece still looks sharp zoomed in on a phone. A smaller picture offers fewer pieces.
+ */
+export const MIN_PIECE_PX = 60;
+
+/** Whether a picture this size is big enough for about `count` pieces. */
+export function piecesFit(width: number, height: number, count: number): boolean {
+  const { cols, rows } = gridFor(width, height, count);
+  return Math.min(width / cols, height / rows) >= MIN_PIECE_PX;
+}
+
+/**
+ * The most pieces (from PIECE_COUNTS) a picture this size offers: 500 for a photo of about 2
+ * megapixels or more, 250 from about 1, 100 from about 0.4, and so on. Never fewer than 6.
+ */
+export function maxPieces(width: number, height: number): PieceCount {
+  let best: PieceCount = PIECE_COUNTS[0];
+  for (const n of PIECE_COUNTS) if (piecesFit(width, height, n)) best = n;
+  return best;
+}
+
 // ------------------------------------------------------------------ piece shapes
 
 /**
@@ -328,3 +350,39 @@ export interface PuzzleSummary {
 export function isPuzzleId(v: unknown): v is string {
   return typeof v === 'string' && /^[a-z0-9]{16}$/.test(v);
 }
+
+// ------------------------------------------------------------------ your own photos
+
+/**
+ * A photo someone at the table uploaded for a puzzle. It lives only in the server's memory, only
+ * the people at that table can see it, and it's gone when the table closes, so its puzzles are
+ * never saved. As a puzzle's picture its id is `photo-<id>`.
+ */
+export interface TablePhotoInfo {
+  /** The picture id a puzzle uses: `photo-<id>`. */
+  image: string;
+  url: string;
+  title: string;
+  width: number;
+  height: number;
+}
+
+/** Photos are shrunk on the phone or computer to at most this many pixels on their long side. */
+export const PHOTO_MAX_SIDE = 2048;
+/** Smaller than this on the short side makes too blurry a puzzle. */
+export const PHOTO_MIN_SIDE = 300;
+/** The most one upload may be (the shrunk photo is usually well under 1 MB). */
+export const PHOTO_MAX_BYTES = 3 * 1024 * 1024;
+/** Photos one table keeps; adding another lets go of the oldest not being puzzled. */
+export const PHOTOS_PER_TABLE = 4;
+
+/** 22 url-safe characters: 128 random bits, so nobody can guess another table's photo. */
+const PHOTO_ID = /^[A-Za-z0-9_-]{22}$/;
+export const isPhotoId = (v: unknown): v is string => typeof v === 'string' && PHOTO_ID.test(v);
+export const photoImageId = (id: string) => `photo-${id}`;
+/** The photo id inside a puzzle's picture id, or null for one of the site's own pictures. */
+export function photoIdOf(image: string): string | null {
+  const id = image.startsWith('photo-') ? image.slice(6) : '';
+  return isPhotoId(id) ? id : null;
+}
+export const photoUrl = (table: string, id: string) => `/api/photo/${table}/${id}.jpg`;

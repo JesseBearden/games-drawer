@@ -23,6 +23,8 @@ import { clientIp, originAllowed, SessionSigner, TokenBucket, WindowCounter } fr
 import { RoomManager } from './manager';
 import type { Conn, Room, TurnSettings } from './room';
 import { PuzzleStore } from './puzzleStore';
+import type { PhotoChecker } from './photoCheck';
+import { photoRoutes } from './photos';
 import { serveStatic } from './static';
 import { createAdmin } from './admin';
 
@@ -98,6 +100,8 @@ export interface ServerOptions {
   release?: string;
   /** Folder for jigsaw saves (kept in memory if not given). */
   puzzleDir?: string;
+  /** Checks photos people upload for a jigsaw; without one, uploading is off. */
+  photoCheck?: PhotoChecker | null;
   /** scrypt hash of the admin page's password (see adminAuth.ts); no admin page without it. */
   adminPasswordHash?: string;
   /** Log folders the admin page adds up (default: none, so empty numbers). */
@@ -133,7 +137,9 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     turn: o.turn,
     cfg: o.gameConfig,
     puzzles,
+    photoUploads: !!o.photoCheck,
   });
+  const photos = photoRoutes({ rooms: manager.rooms, checker: o.photoCheck ?? null, log: o.log });
   const counters = {
     connections: 0,
     rejectedOrigin: 0,
@@ -186,6 +192,8 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
         });
         return;
       }
+      // Your own photos for a jigsaw: uploading one (POST) and showing it to the table.
+      if (url.pathname.startsWith('/api/photo') && photos.handle(req, res, url, clientIp(req, o.trustProxy))) return;
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         res.writeHead(405, { allow: 'GET, HEAD' }).end();
         return;

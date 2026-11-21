@@ -12,6 +12,9 @@ import {
   INVITE_TOKEN_LENGTH,
   isSeated,
   choosesPlayers,
+  photoImageId,
+  PHOTOS_PER_TABLE,
+  photoUrl,
   PROTOCOL_VERSION,
   SEAT_COUNT,
   Rng,
@@ -40,6 +43,7 @@ import { JigsawGame } from './games/jigsaw';
 import { PuzzleStore } from './puzzleStore';
 import { TanksGame } from './games/tanks';
 import type { Conn, GameHost, Member, ServerGame } from './games/types';
+import type { TablePhoto } from './photos';
 
 export type { Conn } from './games/types';
 
@@ -75,6 +79,8 @@ export interface RoomDeps {
   randomInt?: (n: number) => number;
   /** Where jigsaw puzzles are saved (in memory if not given). */
   puzzles?: PuzzleStore;
+  /** People at private tables may upload their own photos for a jigsaw (photos.ts). */
+  photoUploads?: boolean;
 }
 
 /** Default idle time before a table closes, and the warning before it does. */
@@ -170,6 +176,8 @@ export function pseudonym(session: string) {
 export class Room {
   readonly players = new Map<string, Player>();
   readonly chatHistory: ChatMessage[] = [];
+  /** Photos people here uploaded for a jigsaw (oldest first): only in memory, gone at close. */
+  readonly photos = new Map<string, TablePhoto>();
   readonly createdAt: number;
   game: ServerGame | null = null;
   private session: GameSession | null = null;
@@ -293,6 +301,9 @@ export class Room {
       systemChat: (text) => this.systemChat(text),
       log: (type, fields) => room.log(type, { game: room.game?.id, ...fields }),
       randomInt: (n) => (this.deps.randomInt ?? randomInt)(n),
+      photos: () =>
+        [...this.photos.values()].map((p) => ({ image: photoImageId(p.id), url: photoUrl(this.code, p.id), title: `${p.byName}’s photo`, width: p.width, height: p.height })),
+      photoUploads: !!this.deps.photoUploads && this.kind === 'private',
     };
   }
 
@@ -347,6 +358,24 @@ export class Room {
 
   hasSession(session: string) {
     return this.players.has(session);
+  }
+
+  /**
+   * Someone here added a checked photo. A table keeps PHOTOS_PER_TABLE; one more lets go of the
+   * oldest nobody is puzzling ('full' if they all are).
+   */
+  addPhoto(session: string, photo: Pick<TablePhoto, 'id' | 'jpeg' | 'width' | 'height'>): 'ok' | 'gone' | 'full' {
+    const p = this.players.get(session);
+    if (!p || this.closed) return 'gone';
+    while (this.photos.size >= PHOTOS_PER_TABLE) {
+      const old = [...this.photos.keys()].find((id) => !this.game?.usesPhoto?.(photoImageId(id)));
+      if (!old) return 'full';
+      this.photos.delete(old);
+    }
+    this.photos.set(photo.id, { ...photo, by: p.alias, byName: p.name, at: this.deps.now() });
+    this.systemChat(`${p.name} added a photo for a puzzle.`);
+    this.game?.photosChanged?.();
+    return 'ok';
   }
 
   members(): MemberInfo[] {
@@ -549,8 +578,9 @@ export class Room {
     this.closed = true;
     this.endSession('room_closed');
     this.game?.dispose();
-    // The table's messages go with it.
+    // The table's messages and photos go with it.
     this.chatHistory.length = 0;
+    this.photos.clear();
     this.recentMessages.clear();
     const minutes = Math.round((this.deps.idleRoomMs ?? IDLE_ROOM_MS) / 60_000);
     const message = reason === 'idle' ? `This table closed after ${minutes} minute${minutes === 1 ? '' : 's'} with nobody playing or talking.` : 'This room has closed.';

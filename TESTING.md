@@ -422,6 +422,31 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       is readable.
 - [ ] Play to the end (or with computers): lowest total after 11 rounds wins.
 
+## Your own photos in Jigsaw (new)
+
+On your computer the check is pretend: every photo passes except one exactly 404 pixels wide.
+The real check (Amazon Rekognition) only runs on the site. For the phone, use `npm run dev:https`.
+
+- [ ] At a Jigsaw table the first tile is **Your photo** (a dashed space with a camera). Tap it:
+      a note says only this table sees it, it's deleted when the table closes (so it can't be
+      continued another day), and it's checked first. **Choose a photo** opens your photos;
+      **Not now** closes the note.
+- [ ] Pick a photo: the tile says "Checking…", then your photo shows next to it as "Jesse's
+      photo", picked, and chat says "Jesse added a photo for a puzzle." Someone else at the table
+      gets it in their picker too (not picked for them).
+- [ ] On the iPhone, try one taken upright and one sideways: both puzzles come out the right way
+      up. A screenshot or a very wide panorama says it's too small if it's under 300 pixels high.
+- [ ] Start a puzzle of it: the status says "20 pieces · Jesse's photo". Put it away from the
+      Menu: it asks first and says it can't be continued later, and it isn't under "Continue a
+      puzzle".
+- [ ] Everyone leaves the table and it closes (a minute later): the photo is gone with it.
+- [ ] **Before the first push with this** (see deploy/README.md, "Your own photos"): run
+      `npm run infra -- deploy` so the boxes may call Rekognition, and turn on the AWS AI
+      services opt-out policy (the privacy page says Amazon doesn't keep the photos). Then on
+      the site: an everyday family photo passes, and so does a beach photo.
+- [ ] Read the new **Privacy** section "Your own photos" and the new **House rules** line ("Only
+      add photos you're allowed to share"). Both pages are dated November 21.
+
 ## Jigsaw puzzle
 
 Up to 4 people build one puzzle together; no bots. 51 pictures: Penny Pickles, your sailboat, Judy Jalapeño,
@@ -439,6 +464,10 @@ and 48 public-domain or CC0 photos and paintings.
       picked. Your "Continue a puzzle" list stays on top, newest first.
 - [ ] **No 1000** (new): the sizes are 6 · 20 · 50 · 100 · 250 · 500. A puzzle you saved at
       1000 pieces still shows under "Continue a puzzle" and still opens.
+- [ ] **Fewer pieces for small pictures** (new): pick Noodle: 250 and 500 are greyed out, and
+      the line under the buttons says "up to 100". Pick 250 on a big picture, then Noodle: it
+      drops to 100; back to the big one: 250 again. Penny Pickles, Sailboat, Milli and Leeloo go
+      up to 250, the rest to 500. A small photo of your own works the same way.
 - [ ] The picker shows all 56 pictures (51 then, plus Milli, Sucia, Cricket, Leeloo and Noodle).
 - [ ] **Pictures only on this computer**: with `npm run dev`, "Tree House" and
       "Nephews" are mixed in with the rest, and play like any other. They're in
@@ -483,6 +512,8 @@ and 48 public-domain or CC0 photos and paintings.
 - [ ] The 🔍 button (only on phones and tablets) turns the magnifier off and on, and it stays
       that way next time. The very first time the magnifier shows, a note says what it is.
 - [ ] Finish one (50 pieces is quick): "Finished!" with the time, and a message in chat.
+      Then press New puzzle: the finished one isn't under "Continue a puzzle" (no more "Look
+      again"; new). Finished puzzles already on your list drop off too.
 - [ ] Try 500 pieces on a phone: cutting takes a moment ("Cutting pieces… 40%"), then
       dragging should still feel smooth.
 - [ ] Phone held upright: the table starts small (pinch to zoom). Sideways fills the screen

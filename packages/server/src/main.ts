@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isAdminPasswordHash } from './adminAuth';
 import { FileLog, pruneLogs } from './eventlog';
+import { pretendChecker, RekognitionChecker } from './photoCheck';
 import { startGameServer, type Limits } from './server';
 import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from '@tank/shared';
 
@@ -32,6 +33,9 @@ import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from
  *   DRAIN_MAX_MS       on SIGUSR2, finish games for at most this long, then exit (default 3 hours)
  *   CLIENT_DIST, BLOCKLIST_PATH   file locations (defaults work in the repo and in a release bundle)
  *   PUZZLE_DIR         where jigsaw puzzles are saved (default ./data/puzzles)
+ *   PHOTO_CHECK        rekognition | pretend | off: how uploaded jigsaw photos are checked
+ *                      (default: off in production, pretend elsewhere); PHOTO_CHECK_REGION (or
+ *                      AWS_REGION, default us-east-2) is Rekognition's region
  *   ADMIN_PASSWORD_HASH  turns on /admin; make it with `npm run admin-password` (never the
  *                      password itself). In development it's read from .env.local (git ignores it).
  *   ADMIN_LOG_DIRS     comma-separated log folders /admin adds up, with the folders directly inside
@@ -104,6 +108,17 @@ if (turnUrls.length && !env.TURN_SECRET) {
 }
 const turn = turnUrls.length ? { urls: turnUrls, secret: env.TURN_SECRET!, ttlSeconds: Number(env.TURN_TTL_SECONDS ?? 86_400) } : undefined;
 if (turn) console.log(`Voice relay: ${turnUrls.join(', ')}`);
+// Your own photos for a jigsaw are checked by Amazon Rekognition on AWS. Elsewhere there's no
+// AWS, so on your own computer (and in tests) a pretend check lets them through; a production
+// server without PHOTO_CHECK=rekognition doesn't offer uploads at all.
+const photoCheckMode = env.PHOTO_CHECK ?? (production ? 'off' : 'pretend');
+if (!['rekognition', 'pretend', 'off'].includes(photoCheckMode)) {
+  console.error('PHOTO_CHECK must be rekognition, pretend or off.');
+  process.exit(1);
+}
+const photoCheck =
+  photoCheckMode === 'rekognition' ? new RekognitionChecker({ region: env.PHOTO_CHECK_REGION || env.AWS_REGION || 'us-east-2' }) : photoCheckMode === 'pretend' ? pretendChecker : null;
+console.log(`Photo uploads: ${photoCheck ? `on (${photoCheck.name} check)` : 'off'}`);
 const port = Number(env.GAME_PORT ?? 8787);
 const server = await startGameServer({
   port,
@@ -127,6 +142,7 @@ const server = await startGameServer({
   slot,
   release: env.RELEASE,
   puzzleDir: env.PUZZLE_DIR ?? path.join(bundled ? process.cwd() : root, 'data', 'puzzles'),
+  photoCheck,
   adminPasswordHash,
   adminLogDirs,
   // Local testing opens lots of tabs (and phones, which reach the server through Vite as the same

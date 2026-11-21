@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { addLocalPuzzleImages, allPuzzleImages, cutPuzzle, gridFor, isPuzzleId, parseGameInput, parseLocalPuzzles, PIECE_COUNTS, puzzleImage, puzzleProgress, PUZZLE_IMAGES, tabCurve } from '../src';
+import {
+  addLocalPuzzleImages,
+  allPuzzleImages,
+  cutPuzzle,
+  gridFor,
+  isPuzzleId,
+  maxPieces,
+  MIN_PIECE_PX,
+  parseGameInput,
+  parseLocalPuzzles,
+  PIECE_COUNTS,
+  piecesFit,
+  puzzleImage,
+  puzzleProgress,
+  PUZZLE_IMAGES,
+  tabCurve,
+} from '../src';
 
 describe('pictures only on this computer (local-puzzles/puzzles.json)', () => {
   it('become puzzles served from /puzzles/local, and anything odd is skipped', () => {
@@ -43,6 +59,33 @@ describe('jigsaw grids', () => {
   it('cut the dog photo the way we expect', () => {
     expect(gridFor(1600, 1067, 100)).toEqual({ cols: 12, rows: 8 });
     expect(gridFor(1600, 1067, 50)).toEqual({ cols: 9, rows: 6 });
+  });
+});
+
+describe('how many pieces a picture offers', () => {
+  it('goes by its size: about 2 megapixels for 500, 1 for 250, 0.4 for 100, 0.2 for 50', () => {
+    expect(maxPieces(2400, 1600)).toBe(500);
+    expect(maxPieces(2048, 1536)).toBe(500); // a phone photo as it's uploaded
+    expect(maxPieces(1920, 1080)).toBe(500);
+    expect(maxPieces(1600, 1067)).toBe(250); // Penny Pickles
+    expect(maxPieces(1200, 800)).toBe(250);
+    expect(maxPieces(1024, 768)).toBe(100);
+    expect(maxPieces(763, 521)).toBe(100); // Noodle
+    expect(maxPieces(640, 480)).toBe(50);
+    expect(maxPieces(300, 300)).toBe(20); // the smallest photo you can upload
+    expect(maxPieces(120, 80)).toBe(6);
+  });
+
+  it('keeps every piece at least MIN_PIECE_PX across, and every picture of ours offers at least 100', () => {
+    for (const img of PUZZLE_IMAGES) {
+      const most = maxPieces(img.width, img.height);
+      expect(most, img.id).toBeGreaterThanOrEqual(100);
+      for (const n of PIECE_COUNTS.filter((c) => c <= most)) {
+        const { cols, rows } = gridFor(img.width, img.height, n);
+        expect(Math.min(img.width / cols, img.height / rows), `${img.id} ${n}`).toBeGreaterThanOrEqual(MIN_PIECE_PX);
+        expect(piecesFit(img.width, img.height, n)).toBe(true);
+      }
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Device, GameId, GameInput, GameServerMessage, RoomKind } from '@tank/shared';
+import type { Device, GameId, GameInput, GameServerMessage, RoomKind, TablePhotoInfo } from '@tank/shared';
 
 /** A client connection. `send` takes pre-serialised JSON so broadcasts serialise once. */
 export interface Conn {
@@ -35,6 +35,10 @@ export interface GameHost {
   log(type: string, fields: Record<string, unknown>): void;
   /** Uniform random integer in [0, n): crypto-strength on the server, seeded in tests. */
   randomInt(n: number): number;
+  /** Photos people at the table uploaded for a jigsaw (in memory until the table closes). */
+  photos?(): TablePhotoInfo[];
+  /** Whether people at this table may upload photos at all. */
+  readonly photoUploads?: boolean;
 }
 
 /**
@@ -63,4 +67,8 @@ export interface ServerGame {
   step(): void;
   dispose(): void;
   stats(): Record<string, unknown>;
+  /** The table's photos changed (someone added one). */
+  photosChanged?(): void;
+  /** Whether this photo (its picture id, `photo-…`) is in use, so it isn't let go. */
+  usesPhoto?(image: string): boolean;
 }

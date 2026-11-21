@@ -57,7 +57,8 @@ export function securityHeaders(host: string | undefined): Record<string, string
       // Inline style attributes colour player names. The fonts are the site's own (no Google Fonts).
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self'",
-      "img-src 'self' data:",
+      // blob: is your own jigsaw photo, read on your device before it's shrunk and sent.
+      "img-src 'self' data: blob:",
       `connect-src 'self'${h ? ` wss://${h} ws://${h}` : ''}`,
       "object-src 'none'",
       "base-uri 'none'",

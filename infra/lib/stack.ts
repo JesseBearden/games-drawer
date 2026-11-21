@@ -146,6 +146,9 @@ export class GamesDrawerStack extends cdk.Stack {
     // boxes' shared secrets, which the first box makes.
     role.addToPolicy(new iam.PolicyStatement({ actions: ['ssm:GetParameter'], resources: [param('admin-password-hash'), param('secrets')] }));
     role.addToPolicy(new iam.PolicyStatement({ actions: ['ssm:PutParameter'], resources: [param('secrets')] }));
+    // The automatic check for photos people add to a jigsaw (Rekognition's moderation labels; the
+    // photo goes in the request, nothing is stored in S3). The action has no resource to name.
+    role.addToPolicy(new iam.PolicyStatement({ actions: ['rekognition:DetectModerationLabels'], resources: ['*'] }));
     const profile = new iam.CfnInstanceProfile(this, 'ServerProfile', { roles: [role.roleName] });
 
     const userData = ec2.UserData.forLinux();

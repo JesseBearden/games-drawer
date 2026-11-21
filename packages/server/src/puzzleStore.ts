@@ -82,8 +82,8 @@ export class PuzzleStore {
   }
 
   /**
-   * Delete saves nobody has touched in a long time, and any with nothing placed (those are no
-   * longer saved; older ones may be lying around). Returns how many went.
+   * Delete saves nobody has touched in a long time, and any with nothing placed or finished
+   * (those are no longer saved; older ones may be lying around). Returns how many went.
    */
   sweep(nowMs: number, keepDays = PUZZLE_KEEP_DAYS): number {
     const cutoff = nowMs - keepDays * 86_400_000;
@@ -98,7 +98,7 @@ export class PuzzleStore {
       try {
         const old = fs.statSync(full).mtimeMs < cutoff;
         const s = old ? null : this.load(f.slice(0, -5));
-        if (old || (s && puzzleUntouched(s))) {
+        if (old || (s && (puzzleUntouched(s) || s.doneAt !== null))) {
           fs.unlinkSync(full);
           removed++;
         }

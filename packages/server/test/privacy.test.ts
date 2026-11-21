@@ -43,6 +43,16 @@ describe('the privacy page and house rules match the code', () => {
     expect(JSON.stringify(DEFAULT_ICE_SERVERS)).toContain('google');
   });
 
+  it('says what happens to your own photos: checked by Rekognition, never saved, gone with the table', () => {
+    expect(privacy).toContain('checked automatically for nudity, violence and the like by Amazon Rekognition');
+    expect(privacy).toContain('kept only in our server’s memory, never saved, and it’s deleted when the table closes');
+    expect(privacy).toContain('location, date and camera details behind on your device');
+    expect(privacy).toContain('A finished puzzle is deleted');
+    expect(rules).toContain('Only add photos you’re allowed to share');
+    // Reading the chosen photo on the device (blob:) is the one extra the page needs.
+    expect(securityHeaders('gamesdrawer.com')['content-security-policy']).toContain("img-src 'self' data: blob:");
+  });
+
   it('carries a date', () => {
     expect(privacy).toMatch(/Last updated [A-Z][a-z]+ \d{1,2}, \d{4}/);
     expect(rules).toMatch(/Last updated [A-Z][a-z]+ \d{1,2}, \d{4}/);

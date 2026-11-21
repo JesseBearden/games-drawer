@@ -54,6 +54,8 @@ export default defineConfig({
           RELEASE: 'e2e',
           LOG_DIR: 'test-results/server-logs',
           PUZZLE_DIR: 'test-results/puzzles',
+          // Photo uploads with the pretend check (no AWS here): it refuses a photo 404 px wide.
+          PHOTO_CHECK: 'pretend',
           ADMIN_PASSWORD_HASH: hashAdminPassword(E2E_ADMIN_PASSWORD),
           // Many tests open rooms at once; production keeps the 10-room caps.
           MAX_PRIVATE_ROOMS: '200',

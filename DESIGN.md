@@ -215,7 +215,8 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
   linked under every way-in page and under the menu's Close. Keep the privacy page true to the
   code: change it in the same commit as anything it describes (what's kept, for how long, who
   else is involved), and update its date. Today: logs 30 days, puzzles 30, no cookies, fonts
-  and voice set-up from our own servers only. **Before every push, read both pages against
+  and voice set-up from our own servers only, your own photos checked by Rekognition (with the
+  AWS AI services opt-out on) and kept in memory until the table closes. **Before every push, read both pages against
   what's being pushed** (user, 2026-11-20); `packages/server/test/privacy.test.ts` catches the
   numbers and outside servers, the rest needs reading.
 
@@ -293,6 +294,22 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
     2026-11-20: that does the job of name tags here). With less motion asked for, it's a steady
     ring instead. The pointers are page elements over the table, not drawn on it, so the pulse
     doesn't redraw the puzzle every frame.
+  - **The picker** (user, 2026-11-21): sizes 6 to 500 (no 1000), the pictures in a new order each
+    time it opens with the first one picked, and picking only moves the tick (rebuilding the grid
+    made every picture blink on iPhones). Finished puzzles leave "Continue a puzzle" (no "Look
+    again") and their saves are deleted.
+  - **Smaller pictures offer fewer pieces** (user, 2026-11-21): every piece keeps at least 60 of
+    the picture's pixels across (`MIN_PIECE_PX`), so about 2 megapixels for 500, 1 for 250, 0.4
+    for 100, 0.2 for 50. Bigger sizes are greyed out; a size you picked that's too big comes down
+    to the picture's most, and comes back with a bigger picture. The server holds to it too.
+  - **Your own photos** (user, 2026-11-21): a "Your photo" tile first in the grid opens a note
+    (only this table sees it, deleted when the table closes, checked first), then the file
+    picker. The phone shrinks it to 2048 px and re-saves it, which leaves location and camera
+    details behind; the server strips any that remain, has Amazon Rekognition check it (nudity,
+    sexual content, violence, disturbing images, hate symbols, rude gestures are refused;
+    swimsuits, a bare chest, a kiss, drinks and cigarettes are fine), and keeps it in the table's
+    memory only. Anyone at the table can add one (4 a table); everyone gets it in their picker.
+    Puzzles of photos are never saved. Off unless the server has a check (`PHOTO_CHECK`).
 - **Tanks** is a cut-paper scene:
   - a paper sky with paper clouds
   - torn-paper hills (lilac far away, mint nearer)
