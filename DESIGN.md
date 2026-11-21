@@ -274,9 +274,11 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
     top discard side by side; the one you can take from glows sunflower.
   - **Your hand:** drag cards to arrange them, in any order (no sort buttons; the server keeps
     your order). Tap a card to lift it, tap it again (or the discards) to throw it away. Cards
-    already in a meld get a strip of green felt along the bottom; this round's wild rank wears a
+    already in a meld are tinted light green all over (a strip of green felt along the bottom
+    looked like the table cutting the cards off, user 2026-11-20); this round's wild rank wears a
     small sunflower star under its corner (where it still shows when the hand overlaps); the card
-    you just took says "Taken". A tag beside your name shows the points still loose. **Go out**
+    you just took says "Taken". A tag beside your name says "Left over: 7 pts": what the cards not
+    in a meld would cost if the round ended now ("loose" didn't explain itself). **Go out**
     appears only when you can, and the card that does it is outlined.
   - **Between rounds:** everyone's hand, melds first then what's loose and what it cost, then the
     score sheet (headed Round, not Hand), and Ready for the next round.

@@ -880,16 +880,15 @@ body.pad-mode #game .dm-mine.pad-cursor {
   color: var(--sunflower);
 }
 
-/* Cards already in a meld: a strip of green felt along the bottom. */
+/* Cards already in a meld: tinted green all over (a strip of green felt along the bottom looked
+   like the table cutting the cards off). The tint shows on the strip of each overlapped card. */
 #game .tt-view .card.tt-meld::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 8%;
-  --fc: var(--grass);
-  background: var(--grass) var(--grass-img) 0 0 / 200px;
+  inset: 0;
+  background: color-mix(in oklab, var(--mint) 60%, transparent);
+  mix-blend-mode: multiply;
+  pointer-events: none;
 }
 /* This round's wild rank (jokers are wild too, and say so themselves): a star under the corner,
    on the strip of the card that shows when the hand overlaps. */

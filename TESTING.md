@@ -403,8 +403,9 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       it away. The card you took from the discards says "Taken" and can't go straight back.
 - [ ] **Drag** cards in your hand to put them in any order, on the phone and the computer. Reload
       the page: your order is kept.
-- [ ] Cards in a meld get a green strip along the bottom; wild cards (and jokers) a star; the tag
-      beside your name says how many points are loose ("All in melds" when nothing is).
+- [ ] Cards in a meld are tinted light green (nothing looks cut off at the bottom any more); wild
+      cards a star; the tag beside your name says "Left over: 7 pts" (what the cards outside your
+      melds would cost), or "All in melds" when nothing is left over.
 - [ ] When you can go out, **Go out** appears (and the card to throw is outlined). Everyone else
       then gets one last turn, then everyone's hand is shown with the points, and the score sheet
       says "Round 1".

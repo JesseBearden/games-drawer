@@ -37,7 +37,7 @@ export class ThreeThirteenTable implements View {
   readonly helpHtml =
     '<p>Round 1 deals 3 cards, round 2 deals 4, up to 13. Jokers are always wild, and so is the card matching the number dealt (3s in round 1, Kings in round 11). Wild cards wear a small star.</p>' +
     '<p>On your turn, tap the pile or the discards to take a card. Then tap a card to lift it, and tap it again to throw it away (not the card you just took from the discards).</p>' +
-    '<p>Make sets (three or more of a kind) and runs (three or more in a row in one suit, Ace low). Cards already in a meld have a green edge. When everything but one card fits, <b>Go out</b> lights up; everyone else then gets one last turn.</p>' +
+    '<p>Make sets (three or more of a kind) and runs (three or more in a row in one suit, Ace low). Cards already in a meld are tinted green, and the tag beside your name shows the points left over (what you’d score if the round ended now). When everything but one card fits, <b>Go out</b> lights up; everyone else then gets one last turn.</p>' +
     '<p>Drag your cards to arrange them however you like. Leftover cards count against you: Aces 1, number cards their number, J/Q/K 10, jokers 20. Lowest total after 11 rounds wins.</p>';
   private el = $('threethirteen-view');
   private view: ThreeThirteenView | null = null;
@@ -168,7 +168,7 @@ export class ThreeThirteenTable implements View {
     goOut.disabled = this.pending;
 
     const loose = q<HTMLElement>('.tt-loose');
-    loose.textContent = v.plan && v.phase === 'playing' && v.cards.length ? (v.plan.points ? `${v.plan.points} loose` : 'All in melds') : '';
+    loose.textContent = v.plan && v.phase === 'playing' && v.cards.length ? (v.plan.points ? `Left over: ${v.plan.points} pts` : 'All in melds') : '';
     loose.classList.toggle('done', !!v.plan && v.plan.points === 0 && v.cards.length > 0);
 
     let text = '';
