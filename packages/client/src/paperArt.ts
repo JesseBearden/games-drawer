@@ -52,6 +52,10 @@ const LAYOUT: Record<string, [number, number][]> = {
  * cut out of their white backgrounds, with their paper shadow baked in (PAD px around each, so
  * the cards need no SVG filter: filters made every redraw slow). Pixel sizes, padding included,
  * so all 12 share one scale.
+ *
+ * Jokers (no game deals them yet) are whole card faces instead: public/art/cards/joker-black.webp
+ * and joker-red.webp, 420 x 588, the card's own 250 x 350 shape, so a joker's face is just
+ * <image href="/art/cards/joker-red.webp" width="250" height="350"/>.
  */
 const PORTRAIT: Record<string, [number, number]> = {
   JD: [381, 410], QD: [380, 414], KD: [392, 416],

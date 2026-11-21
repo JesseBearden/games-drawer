@@ -96,6 +96,9 @@ lighter papers: paper, white and mat.
   - **The Jacks, Queens and Kings are cut-paper portraits,** our own art, one per card, in
     `public/art/cards/`. All 12 share one scale, sit left of center so the upside-down corner stays
     clear, and cast a small paper shadow.
+  - **Jokers** (the user's felt art, 2026-11-20): a black one and a red one, as whole card faces
+    (`public/art/cards/joker-black.webp`, `joker-red.webp`, 420 x 588, the same shape as a card's
+    250 x 350). No game deals them yet; one that does shows the picture as the card's whole face.
   - Suits are classic red (`#d4351f`, deeper than tomato so small corner numbers stay readable) and
     black (`#1e1e26`).
   - Backs have a white border around a cobalt panel, like a real deck.
@@ -310,6 +313,10 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 - **`packages/client/public/art/`:** the card stock, the hero picture, game icons, the card royals,
   app icons and the link-preview card.
   - The hero picture is cut out of its white background (transparent WebP).
+  - The game icons (`art/games/<id>.webp`, 176 px) come from the user's felt icon sheet,
+    `scripts/art/game-icons.webp`, which has a see-through background, so they're lifted out as
+    drawn with no cutting (the earlier set, cut from cream felt, had a cream fringe). The jokers'
+    full-size originals are in `scripts/art/` too.
   - `brand.webp`, the drawer beside "Games Drawer" on the way-in pages, is the user's cut-paper
     art cut out of its cream background (its soft shadow kept as a see-through tint). The
     browser-tab icon is still the older flat `drawer.svg`.
