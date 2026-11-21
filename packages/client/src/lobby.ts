@@ -99,7 +99,7 @@ export class LobbyView implements View {
           ? 'Your browser is blocking the mic.'
           : s.voice.micProblem === 'missing'
             ? 'No microphone found on this device.'
-            : 'Everyone here can talk while you play.';
+            : 'Your friends won’t be able to hear you.';
       html += `<div class="pc-alert"><span style="flex: 1">Your mic is off. ${why}</span><button class="pc-btn pc-btn-plain" data-act="voice" type="button">Turn on mic</button></div>`;
     }
 
