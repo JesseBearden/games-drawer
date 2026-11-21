@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { hashAdminPassword, isAdminPasswordHash, issueAdminSession, verifyAdminPassword, verifyAdminSession, ADMIN_SESSION_MS } from '../src/adminAuth';
 import { dayRange, logFolders, readLogs, summarize } from '../src/adminStats';
-import { MemoryLog } from '../src/eventlog';
+import { MemoryLog, pruneLogs } from '../src/eventlog';
 import { startGameServer, type GameServer } from '../src/server';
 
 // A made-up password for tests (the real one is never in the repo).
@@ -78,6 +78,26 @@ describe('the admin numbers', () => {
     expect(s.voice).toEqual({ links: 0, relayed: 0, failed: 0, people: 0, peopleRelayed: 0, peopleFailed: 0 });
   });
 
+  it('counts people by device: several tabs on one computer are one person', () => {
+    const days = dayRange('2026-11-17', 7);
+    const join = (pid: string, did?: string) => ({ type: 'join', at: at('2026-11-17'), pid, roomKind: 'private', ...(did && { did }) });
+    // You test in three tabs on the computer and one on the phone; a friend plays once; an old
+    // tab from before device numbers counts on its own.
+    const events = [
+      join('tab1', 'computer'), join('tab2', 'computer'), join('tab3', 'computer'), join('tab4', 'phone'),
+      join('friend', 'friends-ipad'),
+      join('old-tab'),
+      session('2026-11-17', 'jigsaw', { activeMs: H, groupMs: H, personMs: 3 * H, peak: 3, pids: ['tab1', 'tab2', 'friend'] }),
+      { type: 'voice_link', at: at('2026-11-17'), pid: 'tab1', route: 'direct' },
+      { type: 'voice_link', at: at('2026-11-17'), pid: 'tab2', route: 'direct' },
+    ];
+    const s = summarize(events, [], days);
+    expect(s.players).toBe(4);
+    expect(s.daily.at(-1)!.players).toBe(4);
+    expect(s.games.find((g) => g.game === 'jigsaw')!.players).toBe(2);
+    expect(s.voice.people).toBe(1);
+  });
+
   it('counts how often voice needed the relay, or never connected', () => {
     const days = dayRange('2026-11-17', 7);
     const link = (pid: string, route: string) => ({ type: 'voice_link', at: at('2026-11-17'), pid, route });
@@ -108,6 +128,34 @@ describe('the admin numbers', () => {
       expect(events.map((e) => e.pid).sort()).toEqual(['p1', 'p2', 'p3']);
       // A folder that isn't there yet is fine.
       expect(logFolders([path.join(root, 'nope')])).toEqual([path.join(root, 'nope')]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('deletes logs more than 30 days old, from every box, and a shut-down box’s empty folder', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-logs-'));
+    try {
+      const now = Date.parse('2026-12-31T12:00:00Z');
+      // Kept: 30 days back (Dec 1) and newer. Gone: Nov 30 and older.
+      for (const box of ['i-old', 'i-new']) fs.mkdirSync(path.join(root, box));
+      const files = {
+        'i-old/events-2026-11-20.jsonl': false,
+        'i-old/chat-2026-11-30.jsonl': false,
+        'i-new/events-2026-11-30.jsonl': false,
+        'i-new/events-2026-12-01.jsonl': true,
+        'i-new/chat-2026-12-31.jsonl': true,
+        'events-2026-10-01.jsonl': false,
+        'notes.txt': true,
+      };
+      for (const f of Object.keys(files)) fs.writeFileSync(path.join(root, f), '{}\n');
+      expect(pruneLogs([path.join(root, 'i-new'), root], { now, keepDir: path.join(root, 'i-new') })).toBe(4);
+      for (const [f, kept] of Object.entries(files)) expect(fs.existsSync(path.join(root, f)), f).toBe(kept);
+      // The old box's folder is empty now and goes; this box's own folder stays even if empty.
+      expect(fs.existsSync(path.join(root, 'i-old'))).toBe(false);
+      expect(fs.existsSync(path.join(root, 'i-new'))).toBe(true);
+      // Nothing there, or a folder that isn't there, is fine.
+      expect(pruneLogs([path.join(root, 'nope')], { now })).toBe(0);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

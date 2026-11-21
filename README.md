@@ -158,8 +158,8 @@ DNS, the boxes' launch template, a shared disk, budgets and a spending kill swit
 | `EMPTY_ROOM_MS`, `RECLAIM_MS` | 60000 | Shorten to test room expiry and reclaim |
 | `IDLE_ROOM_MS` | 10 minutes | Close a table after this long with nobody playing or talking (after a minute's warning) |
 | `MAX_PUBLIC_ROOMS`, `MAX_PRIVATE_ROOMS` | 10 | Room caps |
-| `LOG_DIR` | `./logs` | Where the JSONL logs go |
-| `VOICE_ICE_SERVERS` | public STUN | JSON list of STUN servers for voice chat |
+| `LOG_DIR` | `./logs` | Where the JSONL logs go. Files more than 30 days old are deleted, here and in every `ADMIN_LOG_DIRS` folder (the privacy page promises it) |
+| `VOICE_ICE_SERVERS` | our relay's STUN, or Google's public STUN without a relay | JSON list of STUN servers for voice chat |
 | `TURN_URLS`, `TURN_SECRET` | none | Our own voice relay (coturn); players get expiring credentials. See [deploy/README.md](deploy/README.md) |
 | `TURN_TTL_SECONDS` | 86400 | How long each player's relay credentials last |
 | `GAME_CONFIG` | none | JSON gameplay overrides for playtests, e.g. `{"winLevel":3}` |
@@ -167,7 +167,7 @@ DNS, the boxes' launch template, a shared disk, budgets and a spending kill swit
 | `SLOT`, `RELEASE` | none | Set by deploys: this box's slot letter (a-d; its table codes all name it) and its git commit, shown on `/healthz` |
 | `DRAIN_MAX_MS` | 3 hours | On `SIGUSR2`, finish games for at most this long, then exit |
 | `CLIENT_DIST`, `BLOCKLIST_PATH` | in the repo or release | Where the built client and the server-only blocklist are |
-| `PUZZLE_DIR` | `./data/puzzles` | Where jigsaw saves go (one small JSON file each; untouched for 90 days, deleted) |
+| `PUZZLE_DIR` | `./data/puzzles` | Where jigsaw saves go (one small JSON file each; deleted once nobody has played it for 30 days) |
 | `ADMIN_PASSWORD_HASH` | none (no admin page) | Turns on `/admin`. A one-way hash from `npm run admin-password`, never the password |
 | `ADMIN_LOG_DIRS` | `LOG_DIR` | Comma-separated log folders `/admin` adds up, with the folders directly inside them (one per box on AWS) |
 
@@ -183,6 +183,8 @@ public.
   `.env.local`), restart `npm run dev`, then open http://localhost:5173/admin.
 - **On AWS:** store the hash in Parameter Store; each deploy fetches it (see
   [deploy/README.md](deploy/README.md#admin-page)).
+
+It looks back at most 30 days, since logs are deleted after that.
 
 Each game logs one `game_session` line when it ends (back to the table, or the table closing), so
 a game still going shows up once it's over. Five wrong passwords from one address (or 30 in

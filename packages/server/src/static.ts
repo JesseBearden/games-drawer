@@ -13,6 +13,8 @@ export function pageMeta(pathname: string): { title: string; description: string
   const game = gameForPath(pathname);
   if (game) return { title: `${game.title} · Games Drawer`, description: game.tagline };
   if (/^\/r\/[A-Za-z]+\/?$/.test(pathname)) return { title: 'Join my table · Games Drawer', description: 'Come play a game with us. Tap to join.' };
+  if (pathname === '/privacy') return { title: 'Privacy · Games Drawer', description: 'What Games Drawer keeps, and for how long.' };
+  if (pathname === '/rules') return { title: 'House rules · Games Drawer', description: 'A few rules that keep every table friendly.' };
   return null;
 }
 
@@ -52,9 +54,9 @@ export function securityHeaders(host: string | undefined): Record<string, string
     'content-security-policy': [
       "default-src 'self'",
       "script-src 'self'",
-      // Inline style attributes colour player names; Google Fonts serves the CSS and fonts.
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      'font-src https://fonts.gstatic.com',
+      // Inline style attributes colour player names. The fonts are the site's own (no Google Fonts).
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
       "img-src 'self' data:",
       `connect-src 'self'${h ? ` wss://${h} ws://${h}` : ''}`,
       "object-src 'none'",

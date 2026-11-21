@@ -26,7 +26,8 @@ export interface AdminOptions {
 const TRIES_PER_IP = 5;
 const TRIES_TOTAL = 30;
 const TRY_WINDOW_MS = 15 * 60_000;
-const DAY_CHOICES = [1, 7, 30, 90];
+/** Logs are kept 30 days (LOG_KEEP_DAYS), so the page looks back at most that far. */
+const DAY_CHOICES = [1, 7, 30];
 
 export function createAdmin(o: AdminOptions) {
   const now = o.now ?? Date.now;
@@ -178,14 +179,14 @@ function statsHtml(s: AdminStats) {
     .reverse()
     .map((d) => `<tr><td>${esc(d.day)}</td><td>${d.players}</td><td>${d.rooms}</td><td>${d.sessions}</td><td>${d.personHours}</td><td>${d.chats}</td></tr>`)
     .join('');
-  const days = [1, 7, 30, 90].map((n) => `<a href="/admin?days=${n}" class="${n === s.days ? 'on' : ''}">${n === 1 ? 'Today' : `${n} days`}</a>`).join('');
+  const days = DAY_CHOICES.map((n) => `<a href="/admin?days=${n}" class="${n === s.days ? 'on' : ''}">${n === 1 ? 'Today' : `${n} days`}</a>`).join('');
   return shell(
     'Admin · Games Drawer',
     `<header><h1>Games Drawer admin</h1><form method="post" action="/admin/logout"><button class="link" type="submit">Sign out</button></form></header>
 <p class="days">${days}</p><p class="note">${esc(s.from)} to ${esc(s.to)} (UTC). A game counts once it ends. Numbers refresh every minute.</p>
 <div class="tiles">${tile(s.players, 'people who played')}${tile(s.sessions, 'games played')}${tile(s.personHours, 'person-hours')}${tile(s.privateRooms, 'private rooms opened')}${tile(s.publicJoins, 'joins in public games')}${tile(s.chat.delivered, 'chat messages')}</div>
 <h2>Games, most played first</h2><div class="card scroll"><table><thead><tr><th>Game</th><th>Person-hours</th><th>Games</th><th>Picked</th><th>People</th><th>Avg minutes</th><th>Time with 2+</th><th>Games with 2+</th><th>Avg most at once</th><th>Most at once</th><th>Chat per person-hour</th></tr></thead><tbody>${gameRows}</tbody></table></div>
-<p class="note">Person-hours: two people for an hour is two. “Time with 2+” is the share of play time with at least two people at once. “Picked” counts private-room picks.</p>
+<p class="note">Person-hours: two people for an hour is two. “Time with 2+” is the share of play time with at least two people at once. “Picked” counts private-room picks. People are counted by device: someone on a phone and a computer counts twice. Days logged before this counted every browser tab, so they read high.</p>
 <h2>Chat</h2><div class="tiles">${tile(s.chat.delivered, 'messages sent')}${tile(s.chat.perPersonHour, 'messages per person-hour')}${tile(s.sessions ? pct(s.chat.sessionsWithChat / s.sessions) : '0%', 'games with any chat')}${tile(s.chat.blocked, 'messages blocked by the filter')}${tile(s.chat.reported, 'messages reported')}</div>
 <h2>Voice</h2><div class="tiles">${tile(s.voice.people, 'people who talked')}${tile(s.voice.links ? pct(s.voice.relayed / s.voice.links) : '0%', 'voice links through the relay')}${tile(s.voice.peopleRelayed, 'people who needed the relay')}${tile(s.voice.links ? pct(s.voice.failed / s.voice.links) : '0%', 'voice links that never connected')}${tile(s.voice.peopleFailed, 'people who couldn’t connect to someone')}</div>
 <p class="note">Voice normally goes straight between players. Some networks (phone data, offices, schools) need our relay, which costs bandwidth; a link that never connected usually means a network that blocks voice.</p>

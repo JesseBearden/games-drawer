@@ -1,5 +1,17 @@
 # Credits
 
+## Fonts
+
+Both are served from the site itself (installed from [Fontsource](https://fontsource.org), which
+packages them as Google Fonts publishes them), under the SIL Open Font License 1.1, which allows
+bundling them with a site. Their license texts ship with the site, in
+`packages/client/public/licenses/`.
+
+| Font | Used for | By | License |
+| --- | --- | --- | --- |
+| Atkinson Hyperlegible Next | All the site's words | The Atkinson Hyperlegible Next Project Authors (Braille Institute) | SIL Open Font License 1.1 |
+| Lilita One | Game titles | Juan Montoreano | SIL Open Font License 1.1 (Reserved Font Name "Lilita One") |
+
 ## Sound effects
 
 Every sample under `packages/client/public/sfx/` is dedicated to the public domain under
@@ -88,8 +100,8 @@ than editing by hand). Sounds without a sample here are synthesized in code
 
 ## Jigsaw pictures
 
-Every picture is ours or in the public domain (or CC0), so none needs permission or a credit;
-we credit them anyway. Each was resized to 2400 px wide and re-encoded (metadata stripped); the
+Every picture is ours, shared with us for use here by the person who took it, or in the public
+domain (or CC0). The public-domain ones need no credit; we credit them anyway. Each was resized to 2400 px wide and re-encoded (metadata stripped); the
 paintings whose museum photo showed a frame or background had their edges trimmed, and the
 candy stall was cropped to leave out a passer-by's T-shirt. Thumbnails in `puzzles/thumbs/` are
 made from the same files. The first 20 were downloaded 2026-11-16, the rest 2026-11-17.
@@ -99,6 +111,8 @@ made from the same files. The first 20 were downloaded 2026-11-16, the rest 2026
 | `packages/client/public/puzzles/dog.jpg` | Penny Pickles | Jesse Bearden | Shared by the photographer for use here |
 | `packages/client/public/puzzles/sailboat.jpg` | Sailboat | Jesse Bearden | Shared by the photographer for use here (portrait, 1073 px wide: the size it was shared at) |
 | `packages/client/public/puzzles/judy.jpg` | Judy Jalapeño | Jesse Bearden | Shared by the photographer for use here (2016 px wide: the size it was shared at; camera data removed) |
+| `packages/client/public/puzzles/milli.jpg` | Milli | James Montemagno | Shared with us for use here (portrait, 1024 px wide: the size it was shared at; no camera data) |
+| `packages/client/public/puzzles/sucia.jpg` | Sucia | Samantha DeLuna | Shared with us for use here (resized to 2400 px wide; camera data removed) |
 | `packages/client/public/puzzles/fruit-market.jpg` | Uptown fruit market, New Orleans — [source](https://www.loc.gov/item/2011633038/) | Carol M. Highsmith | Public domain (Carol M. Highsmith Archive, Library of Congress: "No known restrictions on publication") |
 | `packages/client/public/puzzles/spice-stall.jpg` | Spice stall, Sao Paulo municipal market — [source](https://commons.wikimedia.org/wiki/File:Spices_of_Mercado_Municipal_de_S%C3%A3o_Paulo.jpg) | Wilfredor (Wilfredo Rodriguez) | CC0 1.0 Universal (public domain dedication) |
 | `packages/client/public/puzzles/tulips.jpg` | Tulips at Bayou Bend Gardens, Houston — [source](https://www.loc.gov/item/2014630980/) | Carol M. Highsmith | Public domain (Carol M. Highsmith Archive, Library of Congress: "No known restrictions on publication") |

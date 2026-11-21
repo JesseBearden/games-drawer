@@ -7,7 +7,8 @@ import { HAND_END_MS, HeartsGame, TRICK_PAUSE_MS } from '../src/games/hearts';
 import { SpadesGame } from '../src/games/spades';
 import { DominoesGame } from '../src/games/dominoes';
 import { RoomManager } from '../src/manager';
-import { IDLE_ROOM_MS, IDLE_WARNING_MS, turnCredentials, type Conn, type RoomDeps, type Room } from '../src/room';
+import { devicePseudonym, IDLE_ROOM_MS, IDLE_WARNING_MS, turnCredentials, type Conn, type RoomDeps, type Room } from '../src/room';
+import { stunFromTurn } from '../src/server';
 
 /** Pick a game at the table and have everyone here say they're ready, so it starts. */
 function play(room: Room, game: GameId) {
@@ -926,6 +927,25 @@ describe('voice relay credentials', () => {
     expect(va[1].username).not.toBe(vb[1].username);
     // The secret itself never goes to a client.
     expect(JSON.stringify(a.conn.sent)).not.toContain('shh');
+  });
+
+  it('logs a browser’s device number only scrambled, so the admin page can count devices', () => {
+    const { mgr, log } = setup();
+    const lookup = mgr.resolve({ kind: 'create-private' }, 'session-aaaa');
+    if (!lookup.ok) throw new Error(lookup.code);
+    const id = '0123456789abcdef0123456789abcdef';
+    lookup.room.join(new FakeConn(), 'session-aaaa', 'Jesse', 'desktop', id);
+    lookup.room.join(new FakeConn(), 'session-bbbb', 'Sam', 'phone');
+    const joins = log.events.filter((e) => e.type === 'join');
+    expect(joins[0].did).toBe(devicePseudonym(id));
+    expect(joins[0].did).not.toContain(id.slice(0, 8));
+    expect(joins[1]).not.toHaveProperty('did');
+    expect(JSON.stringify(log.events)).not.toContain(id);
+  });
+
+  it('with our own relay, STUN goes to it too, not to Google', () => {
+    expect(stunFromTurn(['turn:203.0.113.7:3478?transport=udp', 'turn:203.0.113.7:3478?transport=tcp'])).toEqual([{ urls: ['stun:203.0.113.7:3478'] }]);
+    expect(stunFromTurn([])).toEqual([]);
   });
 });
 

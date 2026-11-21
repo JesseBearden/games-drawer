@@ -210,6 +210,15 @@ describe('protocol parsing', () => {
     expect(hello).toEqual({ t: 'hello', v: 1, session: null, name: 'a', device: 'phone', room: { kind: 'public' } });
   });
 
+  it('keeps a device number only if it looks like one of ours', () => {
+    const hello = (deviceId: unknown) => parseClientMessage(JSON.stringify({ t: 'hello', v: 1, session: null, name: 'a', device: 'phone', room: { kind: 'public' }, deviceId }));
+    const id = '0123456789abcdef0123456789abcdef';
+    expect(hello(id)).toMatchObject({ t: 'hello', deviceId: id });
+    // Anything else is just left off; the player still gets in.
+    for (const bad of ['Jesse', id + '0', id.toUpperCase(), 42, null]) expect(hello(bad)).not.toHaveProperty('deviceId');
+    expect(hello('Jesse')).toMatchObject({ t: 'hello', name: 'a' });
+  });
+
   it('survives random garbage (fuzz)', () => {
     const rng = new Rng(1234);
     const pieces = ['{', '}', '[', ']', '"t"', ':', ',', '"fire"', '"hello"', '"g"', '"m"', '"play"', '"QS"', '1e308', '-0', 'null', 'true', '"\\u0000"', '"angle"', '"power"', '"room"', '{"kind":"private"}'];

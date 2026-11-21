@@ -151,6 +151,11 @@ interface GameSession {
 
 export type JoinResult = { ok: true; reclaimed: boolean; name: string } | { ok: false; code: 'room-full'; message: string };
 
+/** A device number as it goes in the logs: scrambled, so the logs never hold the number itself. */
+export function devicePseudonym(deviceId: string) {
+  return createHash('sha256').update('gd-device:' + deviceId).digest('hex').slice(0, 16);
+}
+
 export function pseudonym(session: string) {
   return createHash('sha256').update('tank-pid:' + session).digest('hex').slice(0, 16);
 }
@@ -346,7 +351,7 @@ export class Room {
 
   // ------------------------------------------------------------------ joining and leaving
 
-  join(conn: Conn, session: string, requestedName: string, device: Device): JoinResult {
+  join(conn: Conn, session: string, requestedName: string, device: Device, deviceId?: string): JoinResult {
     const now = this.deps.now();
     const existing = this.players.get(session);
     if (existing) {
@@ -425,7 +430,8 @@ export class Room {
     this.starter ??= session;
     this.countPeople();
     this.emptySince = null;
-    this.log('join', { pid: p.pid, device });
+    // did: the browser's device number, scrambled, so the admin page counts devices, not tabs.
+    this.log('join', { pid: p.pid, device, ...(deviceId && { did: devicePseudonym(deviceId) }) });
     this.announce(p, 'arrive', `${p.name} is here.`);
     this.broadcastMembers();
     return { ok: true, reclaimed: false, name: p.name };

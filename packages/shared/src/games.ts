@@ -135,7 +135,7 @@ export const GAMES: GameInfo[] = [
     howTo: [
       'Drag pieces around the table. When two fit, they snap together and move as one.',
       'Pinch or scroll to zoom, and drag the empty table to look around.',
-      'It saves as you go: come back any time and pick “Continue a puzzle”.',
+      'It saves as you go: come back and pick “Continue a puzzle” (a puzzle nobody plays for 30 days is cleared away).',
     ],
     players: 'Up to 4 together',
     availability: 'public',

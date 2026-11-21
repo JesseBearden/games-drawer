@@ -125,8 +125,8 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     maxPublicRooms: o.maxPublicRooms,
     maxPrivateRooms: o.maxPrivateRooms,
     slot: o.slot,
-    chatHistorySize: 10,
-    iceServers: o.iceServers ?? DEFAULT_ICE_SERVERS,
+    chatHistorySize: CHAT_HISTORY_SIZE,
+    iceServers: o.iceServers ?? (o.turn?.urls.length ? stunFromTurn(o.turn.urls) : DEFAULT_ICE_SERVERS),
     turn: o.turn,
     cfg: o.gameConfig,
     puzzles,
@@ -359,7 +359,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           const lookup = manager.resolve(req, session);
           if (!lookup.ok) return fail(lookup.code, lookup.message);
           if (req.kind === 'create-private') privateCreates.add(ip, now);
-          const result = lookup.room.join(conn, session, msg.name || randomName(), msg.device);
+          const result = lookup.room.join(conn, session, msg.name || randomName(), msg.device, msg.deviceId);
           if (!result.ok) return fail(result.code, result.message);
           room = lookup.room;
           clearTimeout(helloTimer);
@@ -483,4 +483,18 @@ function hashIp(ip: string) {
  * networks (strict routers, some mobile carriers) also need a TURN relay: see TURN_URLS and
  * deploy/turnserver.conf.
  */
+/** Messages a table keeps for someone who joins late (the privacy page says how many). */
+export const CHAT_HISTORY_SIZE = 10;
+
 export const DEFAULT_ICE_SERVERS: VoiceSettings['iceServers'] = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+/**
+ * With our own relay set up (the hosted site), it answers STUN as well (coturn does unless told
+ * not to), so players' devices ask no one else: the privacy page says only AWS is involved.
+ * Google's public STUN above is only for running without a relay (local testing).
+ */
+export function stunFromTurn(urls: string[]): VoiceSettings['iceServers'] {
+  const hosts = urls.map((u) => /^turn:([^?]+)/.exec(u)?.[1]).filter((h): h is string => !!h);
+  const stun = [...new Set(hosts)].map((h) => `stun:${h}`);
+  return stun.length ? [{ urls: stun }] : [];
+}

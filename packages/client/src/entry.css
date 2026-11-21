@@ -226,3 +226,34 @@
     padding-bottom: 6px;
   }
 }
+
+/* ------------------------------------------------------------------ Privacy and House rules */
+
+/* Plain reading pages: no picture, headings and lists at a comfortable reading width. */
+.entry-doc h2 {
+  margin: 1.1em 0 0.3em;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.entry-doc ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.entry-doc li,
+.entry-doc p {
+  margin: 0.45em 0;
+}
+.entry-doc li::marker {
+  color: var(--ink-soft);
+}
+/* Links in words: cobalt and underlined, like the Change link. */
+.entry-link {
+  color: var(--cobalt);
+  font-weight: 800;
+  text-underline-offset: 3px;
+}
+/* Privacy and House rules sit after the fine print, kept together on one line. */
+.entry-legal {
+  white-space: nowrap;
+}

@@ -129,6 +129,26 @@ else
   rm -f /etc/turnserver.conf.new
 fi
 
+# ---------------------------------------------------------------- this box's own logs: 30 days
+# Like the game's logs (pruned by the server), nothing on the box is kept longer than 30 days;
+# the privacy page says so. The relay's log notes the addresses it relays for; the journal has
+# the web server's and relay's messages. The journal stops copying into /var/log/syslog, which
+# Ubuntu keeps for about five weeks.
+cat > /etc/logrotate.d/games-drawer-turnserver <<'ROTATE'
+/var/log/turnserver.log {
+  daily
+  rotate 30
+  maxage 30
+  missingok
+  notifempty
+  copytruncate
+  compress
+}
+ROTATE
+mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nMaxRetentionSec=30day\nForwardToSyslog=no\n' > /etc/systemd/journald.conf.d/games-drawer.conf
+systemctl restart systemd-journald || true
+
 # ---------------------------------------------------------------- web server
 if [ ! -f /etc/caddy/games-drawer-routes.caddy ]; then
   echo 'respond "Starting up. Try again in a minute." 503' > /etc/caddy/games-drawer-routes.caddy

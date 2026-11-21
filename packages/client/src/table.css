@@ -246,6 +246,11 @@
 .sheet-part[hidden] {
   display: none;
 }
+/* Privacy and House rules, under the menu's Close (they open in a new tab). */
+.menu-legal {
+  margin: 0;
+  text-align: center;
+}
 .sheet-note {
   margin-top: -6px !important;
 }

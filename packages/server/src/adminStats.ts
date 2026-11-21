@@ -133,6 +133,11 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
   const ch = chats.filter((c) => inRange.has(dayOf(c.at)));
   const sessions = ev.filter((e) => e.type === 'game_session' && GAME_IDS.includes(e.game as GameId));
   const joins = ev.filter((e) => e.type === 'join');
+  // People are counted by device: each tab's player (pid) maps to its browser's device number
+  // (did) where the join logged one. Older logs, and browsers without storage, count per tab.
+  const deviceOf = new Map<string, string>();
+  for (const j of events) if (j.type === 'join' && typeof j.pid === 'string' && typeof j.did === 'string') deviceOf.set(j.pid, j.did);
+  const who = (pid: unknown) => (typeof pid === 'string' ? (deviceOf.get(pid) ?? pid) : pid);
 
   const games: GameStats[] = GAME_IDS.map((game) => {
     const mine = sessions.filter((s) => s.game === game);
@@ -140,7 +145,7 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
     const group = mine.reduce((t, s) => t + num(s.groupMs), 0);
     const person = mine.reduce((t, s) => t + num(s.personMs), 0);
     const chatCount = mine.reduce((t, s) => t + num(s.chats), 0);
-    const pids = new Set(mine.flatMap((s) => (Array.isArray(s.pids) ? (s.pids as unknown[]).filter((p): p is string => typeof p === 'string') : [])));
+    const pids = new Set(mine.flatMap((s) => (Array.isArray(s.pids) ? (s.pids as unknown[]).filter((p): p is string => typeof p === 'string').map(who) : [])));
     const played = mine.filter((s) => num(s.activeMs) > 0);
     return {
       game,
@@ -161,7 +166,7 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
   }).sort((a, b) => b.personHours - a.personHours || b.sessions - a.sessions || b.picks - a.picks);
 
   const links = ev.filter((e) => e.type === 'voice_link');
-  const peopleWith = (route?: string) => new Set(links.filter((l) => !route || l.route === route).map((l) => l.pid)).size;
+  const peopleWith = (route?: string) => new Set(links.filter((l) => !route || l.route === route).map((l) => who(l.pid))).size;
   const voice = {
     links: links.length,
     relayed: links.filter((l) => l.route === 'relayed').length,
@@ -178,7 +183,7 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
     const daySessions = dayEv.filter((e) => e.type === 'game_session');
     return {
       day,
-      players: new Set(dayEv.filter((e) => e.type === 'join').map((j) => j.pid)).size,
+      players: new Set(dayEv.filter((e) => e.type === 'join').map((j) => who(j.pid))).size,
       rooms: dayEv.filter((e) => e.type === 'room_created' && e.roomKind === 'private').length,
       sessions: daySessions.filter((s) => num(s.activeMs) > 0).length,
       personHours: round(daySessions.reduce((t, s) => t + num(s.personMs), 0) / HOUR),
@@ -190,7 +195,7 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
     from: days[0],
     to: days.at(-1)!,
     days: days.length,
-    players: new Set(joins.map((j) => j.pid)).size,
+    players: new Set(joins.map((j) => who(j.pid))).size,
     privateRooms: ev.filter((e) => e.type === 'room_created' && e.roomKind === 'private').length,
     publicJoins: joins.filter((j) => j.roomKind === 'public').length,
     sessions: sessions.filter((s) => num(s.activeMs) > 0).length,

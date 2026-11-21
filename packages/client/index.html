@@ -32,10 +32,8 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/art/drawer.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/art/apple-touch-icon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Atkinson Hyperlegible Next is the site's font; Lilita One stays for game titles until each game gets its paper look. -->
-    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;800&family=Lilita+One&display=swap" rel="stylesheet" />
+    <!-- Fonts (Atkinson Hyperlegible Next, and Lilita One for game titles) come with the site's
+         own styles (main.ts), not from Google Fonts. -->
   </head>
   <body>
     <!-- Shared SVG paper: the card stock as a fill (domino faces use it). -->
@@ -92,8 +90,69 @@
           <a id="join-home" class="pc-btn pc-btn-plain entry-home" href="/" data-nav="/">Back to home</a>
         </section>
 
+        <!-- What the site keeps, and the rules (user, 2026-11-20). Keep them true to the code:
+             log expiry is LOG_KEEP_DAYS (server/eventlog.ts), puzzles PUZZLE_KEEP_DAYS. -->
+        <section id="page-privacy" class="entry-page entry-doc" hidden>
+          <h1 class="pc-h2">Privacy</h1>
+          <p class="pc-lead entry-detail">Games Drawer is a small, free site for playing games with family and friends. There are no accounts, no ads and no trackers, and we never sell anything about you. This is everything it keeps, and for how long.</p>
+          <div>
+            <h2>What you type</h2>
+            <ul>
+              <li><b>Your name.</b> Everyone at your table sees it. Your browser remembers it for next time; our server forgets it when the table closes.</li>
+              <li><b>A name on an invite.</b> If you make an invite for someone by name, the server keeps both names with the table until it closes.</li>
+              <li><b>Chat messages.</b> Everyone at the table sees them. The server keeps the last 10 while the table is open, so someone who joins late can catch up, and erases them when it closes.</li>
+              <li><b>A reported message.</b> If someone taps Report on a message, that message and the sender’s name are saved so it can be looked at. It’s deleted after 30 days.</li>
+            </ul>
+            <h2>Your voice</h2>
+            <ul>
+              <li>The mic is only used once you turn it on.</li>
+              <li>Your voice goes straight to the others at your table, encrypted, or through our own relay server when a direct connection won’t work. It’s never recorded or saved.</li>
+              <li>To connect directly, the devices at your table learn each other’s internet address. With your mic off, they don’t.</li>
+            </ul>
+            <h2>What the site keeps to work</h2>
+            <ul>
+              <li><b>In your browser:</b> your name, a random number that gives you your seat back if you drop out, another for this device, your list of saved puzzles, and your sound settings. No cookies. Clearing your browser’s data for this site removes them.</li>
+              <li><b>The device number</b> lets us count how many devices play, rather than every tab or visit. It’s random, says nothing about you, and is only ever written down scrambled.</li>
+              <li><b>Saved puzzles:</b> kept on our server so anyone at the table can carry on later. Just the picture and where the pieces are, no names. A puzzle nobody has played for 30 days is deleted.</li>
+              <li><b>Logs:</b> what happens in the games (a table opened, a game played, for how long) under scrambled numbers instead of your name, and how many chat messages were sent, not what they said. They help us see what people enjoy and fix problems, and only the people who run the site see them. Your internet address is used for a moment to stop abuse, like too many tries, and is only ever written down scrambled. Logs are deleted after 30 days.</li>
+              <li><b>Our servers’ own logs:</b> the voice relay and the web server keep short technical notes, which can include internet addresses. They’re deleted after 30 days too.</li>
+            </ul>
+            <h2>Who else is involved</h2>
+            <p>Only Amazon Web Services, which runs the computers the site is on, in the United States. The fonts and pictures come from the site itself, so your browser doesn’t contact anyone else.</p>
+            <h2>Children</h2>
+            <p>Games Drawer isn’t meant for children under 13 on their own. Kids are welcome to play alongside a parent or grandparent.</p>
+            <h2>Questions</h2>
+            <p>Want something deleted, or have a question? Write to us on <a class="entry-link" href="https://github.com/JesseBearden/games-drawer/issues" target="_blank" rel="noopener">GitHub</a>.</p>
+            <p class="pc-small">Last updated November 20, 2026. If this page changes, so will this date.</p>
+          </div>
+          <a class="pc-btn pc-btn-plain entry-home" href="/" data-nav="/">Back to home</a>
+        </section>
+
+        <section id="page-rules" class="entry-page entry-doc" hidden>
+          <h1 class="pc-h2">House rules</h1>
+          <p class="pc-lead entry-detail">Games Drawer is for playing games and talking with people you know. A few rules keep every table friendly.</p>
+          <div>
+            <ul>
+              <li><b>Be kind.</b> No bullying, threats, hate, or anything you wouldn’t say at a family dinner.</li>
+              <li><b>Invite people you know.</b> Anyone with your table’s link or code can join it, so share it only with them. You can always see who’s at a table before you join.</li>
+              <li><b>Kids under 13 must play with a grown-up</b> at their table.</li>
+              <li><b>Mute or report.</b> Tap someone’s message to mute them just for you, or to report it. In the Menu you can mute someone’s voice just for you, or leave the table.</li>
+              <li><b>Chat has a swearing filter.</b> The people at a table can choose how strict it is, in the Menu.</li>
+              <li><b>Chats don’t last.</b> Messages are erased when the table closes. A reported message is kept for 30 days so it can be looked at.</li>
+            </ul>
+            <h2>The fine print</h2>
+            <ul>
+              <li>Games Drawer is free and comes as it is. We try to keep it running and working well, but can’t promise it always will, and we can’t be responsible for what other people say or do at a table.</li>
+              <li>We may remove a message, close a table, or keep someone out if they break these rules.</li>
+              <li>Using the site means you agree to these rules and to the <a class="entry-link" href="/privacy" data-nav="/privacy">privacy page</a>.</li>
+            </ul>
+            <p class="pc-small">Last updated November 20, 2026. If these rules change, so will this date.</p>
+          </div>
+          <a class="pc-btn pc-btn-plain entry-home" href="/" data-nav="/">Back to home</a>
+        </section>
+
         <p id="landing-error" class="entry-error" role="alert" hidden></p>
-        <p class="pc-small entry-fine">Chat messages are erased with the table.</p>
+        <p class="pc-small entry-fine">Chat messages are erased with the table. <span class="entry-legal"><a class="entry-link" href="/privacy" data-nav="/privacy">Privacy</a> · <a class="entry-link" href="/rules" data-nav="/rules">House rules</a></span></p>
       </div>
     </main>
 
@@ -270,6 +329,8 @@
               <p id="menu-filter-detail" class="pc-small"></p>
             </section>
             <button id="menu-close" class="pc-btn pc-btn-main pc-btn-wide" type="button">Close</button>
+            <!-- New tabs, so reading them doesn't leave the table. -->
+            <p class="pc-small menu-legal"><a class="entry-link" href="/privacy" target="_blank" rel="noopener">Privacy</a> · <a class="entry-link" href="/rules" target="_blank" rel="noopener">House rules</a></p>
           </div>
         </div>
         <div id="reconnect" class="overlay" hidden><div class="overlay-card">Reconnecting…</div></div>

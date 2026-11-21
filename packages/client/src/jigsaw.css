@@ -116,29 +116,55 @@
   border-radius: 12px;
   box-shadow: var(--lift-1);
   color: var(--ink);
-  /* On a phone there isn't room for the picture, the words and both buttons in one row: the
-     buttons drop to a row of their own, on the right. */
+  /* One row, even on a phone (user, 2026-11-20): the picture, the words, Continue and the bin.
+     The words take what's left and wrap; the buttons keep their size. */
   min-width: 0;
-  flex-wrap: wrap;
-  row-gap: 8px;
 }
-#game .pz-saves span {
-  flex: 1 1 150px;
-}
-#game .pz-saves [data-resume] {
-  margin-left: auto;
+#game .pz-saves li > span {
+  flex: 1 1 0;
+  min-width: 0;
 }
 /* A long puzzle name takes two lines rather than being cut short. */
 #game .pz-saves b {
   white-space: normal;
 }
+/* "48 pieces · 2% done · Nov 20" breaks only between its parts (jigsawView.ts keeps each part
+   together). */
 #game .pz-saves small {
   color: var(--ink-soft);
+  line-height: 1.3;
 }
 #game .pz-saves .pc-btn {
+  flex: none;
   min-height: 44px;
   padding: 6px 14px;
   font-size: 0.95rem;
+}
+@media (max-width: 480px) {
+  #game .pz-saves li {
+    gap: 8px;
+    padding: 6px;
+  }
+  #game .pz-saves img {
+    width: 48px;
+    height: 40px;
+  }
+  #game .pz-saves .pc-btn:not(.pz-forget) {
+    padding: 6px 10px;
+  }
+}
+/* The narrowest phones: no room for the little picture as well (the name says which puzzle). */
+@media (max-width: 380px) {
+  #game .pz-saves li {
+    gap: 6px;
+    padding: 6px 6px 6px 10px;
+  }
+  #game .pz-saves img {
+    display: none;
+  }
+  #game .pz-saves .pz-forget {
+    width: 40px;
+  }
 }
 /* Remove: a raised tomato button with a bin on it. */
 #game .pz-saves .pz-forget {

@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isPuzzleId, puzzleProgress, puzzleUntouched, type PuzzleState, type PuzzleSummary } from '@tank/shared';
 
-/** Saves untouched this long are deleted. */
-export const PUZZLE_KEEP_DAYS = 90;
+/** Saves nobody has played this long are deleted (user, 2026-11-20; the privacy page says so). */
+export const PUZZLE_KEEP_DAYS = 30;
 
 /**
  * Jigsaw saves: one small JSON file per puzzle (about 20-60 KB even at 1,000 pieces), named by

@@ -107,7 +107,8 @@ export type GameInput = TankInput | HeartsInput | SpadesInput | DominoesInput | 
 // ------------------------------------------------------------------ client -> server
 
 export type ClientMessage =
-  | { t: 'hello'; v: number; session: string | null; name: string; room: RoomRequest; device: Device }
+  /** `deviceId`: a random number this browser keeps (localStorage), so the admin page counts devices, not tabs. */
+  | { t: 'hello'; v: number; session: string | null; name: string; room: RoomRequest; device: Device; deviceId?: string }
   | { t: 'chat'; text: string }
   | { t: 'name'; name: string }
   | { t: 'ping'; at: number }
@@ -425,7 +426,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       else if (room.kind === 'create-private') req = game ? { kind: 'create-private', game } : { kind: 'create-private' };
       else if (room.kind === 'private' && str(room.code, 12)) req = { kind: 'private', code: room.code };
       else return null;
-      return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device };
+      // A device number that isn't one of ours is just left off (it only feeds the admin counts).
+      const deviceId = typeof o.deviceId === 'string' && /^[0-9a-f]{32}$/.test(o.deviceId) ? o.deviceId : undefined;
+      return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device, ...(deviceId && { deviceId }) };
     }
     case 'leave':
       return { t: 'leave' };

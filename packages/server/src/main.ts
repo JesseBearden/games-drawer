@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isAdminPasswordHash } from './adminAuth';
-import { FileLog } from './eventlog';
+import { FileLog, pruneLogs } from './eventlog';
 import { startGameServer, type Limits } from './server';
 import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from '@tank/shared';
 
@@ -63,6 +63,12 @@ if (!production) {
 }
 const logDir = env.LOG_DIR ?? path.join(root, 'logs');
 const log = new FileLog(logDir);
+const adminLogDirs = env.ADMIN_LOG_DIRS ? env.ADMIN_LOG_DIRS.split(',').map((s) => s.trim()).filter(Boolean) : [logDir];
+// Logs are kept LOG_KEEP_DAYS (30) days: older ones go now and every 6 hours, from every box's
+// folder (a replaced box's too). The privacy page promises this.
+const pruneOldLogs = () => pruneLogs([...new Set([logDir, ...adminLogDirs])], { keepDir: logDir });
+pruneOldLogs();
+setInterval(pruneOldLogs, 6 * 3_600_000).unref();
 const adminPasswordHash = env.ADMIN_PASSWORD_HASH?.trim() || undefined;
 if (adminPasswordHash && !isAdminPasswordHash(adminPasswordHash)) {
   console.error('ADMIN_PASSWORD_HASH is not a hash from `npm run admin-password`.');
@@ -122,7 +128,7 @@ const server = await startGameServer({
   release: env.RELEASE,
   puzzleDir: env.PUZZLE_DIR ?? path.join(bundled ? process.cwd() : root, 'data', 'puzzles'),
   adminPasswordHash,
-  adminLogDirs: env.ADMIN_LOG_DIRS ? env.ADMIN_LOG_DIRS.split(',').map((s) => s.trim()).filter(Boolean) : [logDir],
+  adminLogDirs,
   // Local testing opens lots of tabs (and phones, which reach the server through Vite as the same
   // address) from one machine.
   limits: { ...(production ? {} : { maxConnectionsPerIp: 40, connectsPerMinute: 200, privateRoomsPer10Min: 100 }), ...limits },

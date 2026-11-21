@@ -158,7 +158,7 @@ interface TableLook {
 export class JigsawTable implements View {
   readonly landscape = false;
   readonly helpHtml =
-    '<p>Drag pieces around the table; when two fit together they snap and move as one. A group dropped where it belongs locks into the frame.</p><p>Scroll or pinch to zoom, drag the empty table to look around. <b>Edges</b> hides the middle pieces (just for you), <b>Tidy</b> spreads loose pieces back around the edges.</p><p>On a touch screen, a magnifier above your finger shows the piece you’re dragging. The magnifier button turns it off.</p><p>The puzzle saves as you go: pick it again any time under “Continue a puzzle”.</p>';
+    '<p>Drag pieces around the table; when two fit together they snap and move as one. A group dropped where it belongs locks into the frame.</p><p>Scroll or pinch to zoom, drag the empty table to look around. <b>Edges</b> hides the middle pieces (just for you), <b>Tidy</b> spreads loose pieces back around the edges.</p><p>On a touch screen, a magnifier above your finger shows the piece you’re dragging. The magnifier button turns it off.</p><p>The puzzle saves as you go: pick it again under “Continue a puzzle”. A puzzle nobody plays for 30 days is cleared away.</p>';
   private el = $('jigsaw-view');
   private phase: PuzzlePhase = 'setup';
   private state: PuzzleState | null = null;
@@ -357,7 +357,7 @@ export class JigsawTable implements View {
         this.invalidate();
         return;
       case 'pz-saves': {
-        // Puzzles that no longer exist (nothing placed, or untouched for months) leave the list.
+        // Puzzles that no longer exist (nothing placed, or not played for 30 days) leave the list.
         forget(m.gone);
         const gone = new Set(m.gone);
         this.saves = m.saves.length ? m.saves : this.saves.filter((s) => !gone.has(s.id));
@@ -413,7 +413,9 @@ export class JigsawTable implements View {
       html += '<h3>Continue a puzzle</h3><ul class="pz-saves">';
       for (const s of [...this.saves].sort((a, b) => b.updatedAt - a.updatedAt)) {
         const when = new Date(s.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
-        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${s.pieces} pieces · ${s.done ? 'finished' : `${Math.round(s.progress * 100)}% done`} · ${when}</small></span><button type="button" class="pc-btn pc-btn-plain" data-resume="${s.id}">${s.done ? 'Look again' : 'Continue'}</button><button type="button" class="pc-btn pc-btn-alert pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">${TRASH_ICON}</button></li>`;
+        // Each part kept together (no-break spaces), so a narrow row breaks only between them.
+        const about = [`${s.pieces} pieces`, s.done ? 'finished' : `${Math.round(s.progress * 100)}% done`, when].map((p) => p.replace(/ /g, ' ')).join(' · ');
+        html += `<li><img src="${escapeHtml(puzzleImage(s.image)?.thumb ?? s.imageFile)}" alt="" loading="lazy" /><span><b>${escapeHtml(puzzleImage(s.image)?.title ?? s.title)}</b><small>${escapeHtml(about)}</small></span><button type="button" class="pc-btn pc-btn-plain" data-resume="${s.id}">${s.done ? 'Look again' : 'Continue'}</button><button type="button" class="pc-btn pc-btn-alert pz-forget" data-forget="${s.id}" aria-label="Remove ${escapeHtml(s.title)} from your list" title="Remove from your list">${TRASH_ICON}</button></li>`;
       }
       html += '</ul><h3>Or start a new one</h3>';
     }
@@ -437,7 +439,7 @@ export class JigsawTable implements View {
 
   /**
    * Take a puzzle off your "Continue" list. Only yours: friends who worked on it keep it (and
-   * the save is deleted for good after 90 days untouched).
+   * the save is deleted for good once nobody has played it for 30 days).
    */
   private forgetSave(id: string) {
     const s = this.saves.find((x) => x.id === id);

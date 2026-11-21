@@ -203,6 +203,13 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 - **Invite links name who sent them, and optionally who they're for.** The server keeps those
   names, and the link only carries a random token, so a link can't claim to be from someone it
   isn't.
+- **Privacy and House rules** (user, 2026-11-20) are plain reading pages at /privacy and /rules,
+  linked under every way-in page and under the menu's Close. Keep the privacy page true to the
+  code: change it in the same commit as anything it describes (what's kept, for how long, who
+  else is involved), and update its date. Today: logs 30 days, puzzles 30, no cookies, fonts
+  and voice set-up from our own servers only. **Before every push, read both pages against
+  what's being pushed** (user, 2026-11-20); `packages/server/test/privacy.test.ts` catches the
+  numbers and outside servers, the rest needs reading.
 
 ## The games
 

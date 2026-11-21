@@ -115,7 +115,8 @@ matched to your swatch sheet (`scripts/felt-textures.cjs`).
       end of the line (not tucked beside the last tile). A line never turns at a double or
       right after one: it runs on a little past the edge, so no double looks like a spinner.
 - [ ] Jigsaw, "Continue a puzzle": each saved puzzle is on white felt (easy to read), with a red
-      bin button instead of "Remove". On a phone the buttons sit on their own line under the name.
+      bin button instead of "Remove". Each is one row, even on a phone: picture, name, Continue and
+      the bin (the details wrap under the name; on the narrowest phones the little picture goes).
       The bin still asks first if the puzzle is part done.
 - [ ] **iPhone home screen icon, turning the phone** (your bug: after turning sideways and back,
       taps landed a status bar's height below your finger, and one finger zoomed the puzzle).
@@ -477,6 +478,20 @@ is saved with the sender's name so it can be looked at later.
       and who sent them.
 - [ ] The admin page's chat numbers (messages sent, blocked, reported) still count up.
 
+## Privacy, House rules, fonts and logs (new)
+
+- [ ] Under home, Start a table and an invite page: "Chat messages are erased with the table.
+      Privacy · House rules". Each link opens its page (gamesdrawer.com/privacy, /rules) with
+      Back to home at the bottom. Read both: anything wrong or missing?
+- [ ] At a table, the Menu has Privacy and House rules under Close; they open in a new tab, so
+      you stay at the table.
+- [ ] The site looks the same as before (same letters): the fonts now come from the site
+      itself, not Google.
+- [ ] After a deploy, the admin page offers Today, 7 days and 30 days (no 90).
+- [ ] **People are counted by device now:** after a deploy, open a few tabs on the computer and
+      join tables; Today's "people who played" goes up by one for the computer, not one per tab.
+      (Days before the deploy still read high.)
+
 ## The way in keeps still (new)
 
 - [ ] On the iPad (either way up), the phone and the computer: tap **Start a table** on home. The
@@ -538,7 +553,7 @@ Tank sounds are confirmed good. Left to try:
       isn't stored anywhere.) A wrong password says so; five wrong in a row locks sign-in for 15
       minutes.
 - [ ] Play a game at a table for a few minutes with two tabs, chat a bit, Switch game, then reload /admin (numbers refresh each minute): the game shows person-hours, time
-      with 2+ people, and chat per person-hour. Today / 7 / 30 / 90 days switch the range.
+      with 2+ people, and chat per person-hour. Today / 7 / 30 days switch the range.
 - [ ] Sign out works, and the page stays signed in for a week otherwise.
 - [ ] **Voice** (new): after two people talk at a table (mic on, two devices), the admin page's
       Voice section shows people who talked, the share of voice links that went through the

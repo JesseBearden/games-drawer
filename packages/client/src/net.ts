@@ -1,6 +1,25 @@
 import { isSlot, PROTOCOL_VERSION, slotOfCode, type ClientMessage, type Device, type RoomRequest, type ServerMessage, type Slot } from '@tank/shared';
 
 const SESSION_KEY = 'tank.session';
+const DEVICE_KEY = 'gd.device';
+
+/**
+ * A random number this browser keeps for good (unlike the session, which is per tab), so the admin
+ * page can count devices rather than tabs. It's sent when joining and logged only scrambled; it
+ * says nothing about who you are (the privacy page explains it). Null if storage is off.
+ */
+function getDeviceId(): string | null {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id || !/^[0-9a-f]{32}$/.test(id)) {
+      id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The session credential lets a player reclaim their tank after a disconnect. It lives in
@@ -76,7 +95,8 @@ export class Net {
     const ws = new WebSocket(`${proto}://${location.host}/ws${slot ? `?slot=${slot}` : ''}`);
     this.ws = ws;
     ws.onopen = () => {
-      this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device });
+      const deviceId = getDeviceId();
+      this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device, ...(deviceId && { deviceId }) });
     };
     ws.onmessage = (ev) => {
       let msg: ServerMessage;

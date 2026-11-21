@@ -35,7 +35,8 @@ const pic = (id: string, title: string, width: number, height: number, credit: s
 });
 
 /**
- * Pictures anyone can pick: ours, public domain or CC0 only (sources in CREDITS.md). Each is
+ * Pictures anyone can pick: ours, shared with us by the photographer, or public domain or CC0
+ * only (sources in CREDITS.md). Each is
  * 2400 px wide (the user's own photos are smaller), so even 1000-piece pieces have detail. A
  * picture's id is saved with each puzzle, so don't change an id or remove a picture people may
  * be in the middle of (titles can change).
@@ -44,6 +45,8 @@ export const PUZZLE_IMAGES: PuzzleImage[] = [
   pic('dog', 'Penny Pickles', 1600, 1067, 'Photo by Jesse Bearden'),
   pic('sailboat', 'Sailboat', 1073, 1430, 'Photo by Jesse Bearden'),
   pic('judy', 'Judy Jalapeño', 2016, 1512, 'Photo by Jesse Bearden'),
+  pic('milli', 'Milli', 1024, 1536, 'Photo by James Montemagno'),
+  pic('sucia', 'Sucia', 2400, 1800, 'Photo by Samantha DeLuna'),
   pic('fruit-market', 'Fruit market', 2400, 1840, 'Photo: Carol M. Highsmith, Library of Congress'),
   pic('spice-stall', 'Spice stall', 2400, 1600, 'Photo: Wilfredor (CC0)'),
   pic('tulips', 'Tulip garden', 2400, 1601, 'Photo: Carol M. Highsmith, Library of Congress'),

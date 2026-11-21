@@ -294,7 +294,7 @@ describe('jigsaw in a room', () => {
       expect(again.pieces[30]).toEqual(spot);
     }));
 
-  it('sweeps away saves nobody has touched in 90 days', () =>
+  it('sweeps away saves nobody has played in 30 days', () =>
     withDir((dir) => {
       const store = new PuzzleStore(dir);
       const { s, send, pw, mgr, clock } = started({ puzzles: store });
@@ -303,7 +303,10 @@ describe('jigsaw in a room', () => {
       run(mgr, clock, 5_000);
       const file = path.join(dir, `${s.id}.json`);
       expect(store.sweep(Date.now())).toBe(0);
-      const old = new Date(Date.now() - 91 * 86_400_000);
+      const recent = new Date(Date.now() - 29 * 86_400_000);
+      fs.utimesSync(file, recent, recent);
+      expect(store.sweep(Date.now())).toBe(0);
+      const old = new Date(Date.now() - 31 * 86_400_000);
       fs.utimesSync(file, old, old);
       expect(store.sweep(Date.now())).toBe(1);
       expect(fs.existsSync(file)).toBe(false);

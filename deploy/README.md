@@ -127,7 +127,7 @@ Then:
 sudo games-drawer-deploy <commit> status       # what this box runs
 journalctl -u 'games-drawer@*' -f              # server output
 cat /etc/caddy/games-drawer-routes.caddy       # where this box sends requests
-ls /mnt/games-drawer/logs/                     # JSONL game logs, a folder per box (kept after the box goes)
+ls /mnt/games-drawer/logs/                     # JSONL game logs, a folder per box (all deleted after 30 days)
 ```
 
 ## Admin page

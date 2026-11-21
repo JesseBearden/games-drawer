@@ -1,3 +1,8 @@
+// The fonts are served from the site itself (not Google Fonts), so visitors' addresses go to no
+// one else. Both are under the SIL Open Font License (public/licenses/, CREDITS.md).
+import '@fontsource/atkinson-hyperlegible-next/400.css';
+import '@fontsource/atkinson-hyperlegible-next/800.css';
+import '@fontsource/lilita-one/400.css';
 import './styles.css';
 import './room.css';
 import './paper.css';
@@ -65,7 +70,7 @@ function store(key: string, value: string) {
 // ------------------------------------------------------------------ the pages
 
 /** Which page an address is: home, starting a table (maybe with a game picked), or joining one. */
-type Page = { kind: 'home' } | { kind: 'start'; game: GameId | null } | { kind: 'join'; code: string; token: string | null };
+type Page = { kind: 'home' } | { kind: 'start'; game: GameId | null } | { kind: 'join'; code: string; token: string | null } | { kind: 'privacy' } | { kind: 'rules' };
 
 function pageFor(): Page {
   const path = location.pathname;
@@ -77,6 +82,9 @@ function pageFor(): Page {
     const token = params.get('i');
     if (isRoomCode(code)) return { kind: 'join', code, token: isInviteToken(token) ? token : null };
   }
+  // What the site keeps, and the house rules (plain pages, linked under every way-in page).
+  if (path === '/privacy') return { kind: 'privacy' };
+  if (path === '/rules') return { kind: 'rules' };
   if (path === '/start') {
     const g = params.get('game');
     return { kind: 'start', game: isGameId(g) && canPlayPrivately(g) ? g : null };
@@ -101,6 +109,8 @@ function showPage() {
   $('page-home').hidden = page.kind !== 'home';
   $('page-start').hidden = page.kind !== 'start';
   $('page-join').hidden = page.kind !== 'join';
+  $('page-privacy').hidden = page.kind !== 'privacy';
+  $('page-rules').hidden = page.kind !== 'rules';
   showError(null);
   nameEditing = false;
   if (page.kind === 'home') {
@@ -109,6 +119,10 @@ function showPage() {
     document.title = page.game ? `${gameInfo(page.game).name} · Games Drawer` : 'Start a table · Games Drawer';
     renderStartDetail(page.game);
     renderName('start');
+  } else if (page.kind === 'privacy') {
+    document.title = 'Privacy · Games Drawer';
+  } else if (page.kind === 'rules') {
+    document.title = 'House rules · Games Drawer';
   } else {
     document.title = 'Join a table · Games Drawer';
     void loadJoin(page);
