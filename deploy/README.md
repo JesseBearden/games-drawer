@@ -24,7 +24,11 @@ players ──HTTPS──▶ CloudFront ──HTTP──▶ origin.<domain> = th
 - **Every box can answer any request.** Caddy on each box sends a table's requests to that
   table's box over the private network, staging to the newest box, and new tables wherever the
   fleet map says ([fleetMap.ts](fleetMap.ts)). So CloudFront can point at any one box, and
-  moving it to a new box never cuts off a game on an old one.
+  moving it to a new box never cuts off a game on an old one. A box that's gone (a retired one
+  powers itself off, but the others keep its route until the next deploy writes the map) gets
+  2 seconds to answer; then the box asked answers itself, so the page hears "this table has
+  closed" instead of waiting on nothing. Route changes reload Caddy without dropping anyone's
+  open connection (`stream_close_delay`).
 
 ## The front door: CloudFront, or the boxes themselves for now
 
@@ -190,17 +194,20 @@ first deploy that has it:
    infra/README.md). Until then, every photo is refused with "couldn't be checked just now"
    (never let through unchecked).
 2. **Opt out of AI training.** By default AWS may keep pictures sent to Rekognition to improve
-   its services; the privacy page says we've told it not to. This is set by an AWS
-   Organizations policy, from the organization's **management account**. The site's account is a
-   member of an organization (as of 2026-11-21), so it can't set this itself: sign in to the
-   management account. (An account in no organization creates one, free, and is its own
-   management account.) In the console: **AWS Organizations** → **Policies** → **AI services
-   opt-out policies** → enable them → create a policy with this content, and attach it to the
-   root (every account) or to the site's account:
+   its services; the privacy page says we've told it not to. The site's account is an **AWS
+   project** (AWS's simpler sign-up, 2026): each project is its own account inside an
+   organization the Projects console manages, so the project's owner sets the opt-out in AWS
+   Settings: https://settings.aws.com → **Project** → **Overview** → **Actions** → **Opt out of
+   data use by AWS AI services** → **Opt out**. It covers every AI service and every project,
+   by attaching an AI services opt-out policy to the organization. To check it from the repo,
+   `aws organizations describe-effective-policy --policy-type AISERVICES_OPT_OUT_POLICY
+   --profile games-drawer` shows the policy (it errors until it's on). Both steps are done for
+   the site's account (2026-11-21).
 
-   ```json
-   { "services": { "default": { "opt_out_policy": { "@@assign": "optOut" } } } }
-   ```
+   (An ordinary AWS account does the same from its organization's management account:
+   **AWS Organizations** → **Policies** → **AI services opt-out policies** → enable them →
+   create a policy with this content and attach it to the root:
+   `{ "services": { "default": { "opt_out_policy": { "@@assign": "optOut" } } } }`.)
 
 To turn uploads off, set `PHOTO_CHECK=off` in setup.sh (`pretend` lets every photo through:
 only for your own computer and tests). The admin logs show `photo_added`, `photo_refused` (with

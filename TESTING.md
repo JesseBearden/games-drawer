@@ -30,6 +30,9 @@ _Last updated: 2026-11-21_
       pictures. Tanks still looks right (felt ground, tanks, helicopters).
 - [ ] **Next deploy**: stay at a table (with voice on) through the whole deploy. Nobody should get
       knocked off or have to reconnect.
+- [ ] **An old invite link after a deploy**: once the old box has shut down (about 15 minutes
+      after the deploy, if nobody was playing on it), open an invite link to a table from before
+      the deploy. Within about 2 seconds it says the table has closed.
 
 ## Security pass (new)
 
@@ -458,11 +461,8 @@ The real check (Amazon Rekognition) only runs on the site. For the phone, use `n
       Menu: it asks first and says it can't be continued later, and it isn't under "Continue a
       puzzle".
 - [ ] Everyone leaves the table and it closes (a minute later): the photo is gone with it.
-- [ ] **Before the first deploy with this, staging included** (see deploy/README.md, "Your own
-      photos"): run the stack deploy so the boxes may call Rekognition, and turn on the AWS AI
-      services opt-out policy from the organization's management account (the privacy page says
-      Amazon doesn't keep the photos). Then on staging: an everyday family photo passes, and so
-      does a beach photo.
+- [ ] **On staging** (the AWS set-up is done, November 21: the boxes may call Rekognition, and
+      the AI opt-out is on): an everyday family photo passes, and so does a beach photo.
 - [ ] Read the new **Privacy** section "Your own photos" and the new **House rules** line ("Only
       add photos you're allowed to share"). Both pages are dated November 21.
 

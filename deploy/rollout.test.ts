@@ -106,7 +106,7 @@ describe('the rollout tool on a box', () => {
     const routes = m.files.get(ROUTES_FILE)!;
     // Tables on box a stay here; new tables go to box b.
     expect(routes).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801 \{\n\t\tstream_close_delay 4h\n\t\}\n\}/);
-    expect(routes).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:8080 \{/);
+    expect(routes).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:8080 127\.0\.0\.1:8801 \{/);
     expect(m.commands).toContain('systemctl reload caddy');
     // A map that leaves this box out is refused.
     expect(() => r.route({ boxes: { b: '10.0.0.22' }, newTables: [['b', 100]], staging: 'b' })).toThrow(/doesn't include this box/);
@@ -185,12 +185,15 @@ describe('routes from the fleet map', () => {
     const r = routesSnippet(canary, 'a', 'games.example');
     expect(r).toContain('redir https://games.example{uri} permanent');
     expect(r).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801 \{\n\t\tstream_close_delay 4h\n\t\}\n\}/);
-    expect(r).toMatch(/handle @slot_b \{\n\treverse_proxy 10\.0\.0\.22:8080 \{\n\t\theader_up X-Gd-Hop 1\n\t\tstream_close_delay 4h\n\t\}\n\}/);
+    // The canary's tables go there; if that box is gone, this one answers (the table has closed).
+    expect(r).toMatch(/handle @slot_b \{\n\treverse_proxy 10\.0\.0\.22:8080 127\.0\.0\.1:8801 \{\n\t\tlb_policy first\n\t\tlb_try_duration 4s\n\t\tfail_duration 30s\n\t\ttransport http \{\n\t\t\tdial_timeout 2s\n\t\t\}\n\t\theader_up X-Gd-Hop 1\n\t\tstream_close_delay 4h\n\t\}\n\}/);
     expect(r).toContain('reverse_proxy 127.0.0.1:8801 10.0.0.22:8080 {\n\t\tlb_policy weighted_round_robin 90 10');
     // A reload (every route change) never drops anyone: every proxy keeps its open connections.
-    const proxies = r.match(/reverse_proxy [^\n]*\{[^}]*\}/g)!;
-    expect(proxies).toHaveLength(r.split('reverse_proxy').length - 1);
+    const proxies = r.split('reverse_proxy ').slice(1);
+    expect(proxies.length).toBeGreaterThan(3);
     for (const p of proxies) expect(p).toContain('stream_close_delay 4h');
+    // Every route to another box gives up on it after 2 s if it's gone.
+    for (const p of r.split('reverse_proxy ').slice(1).filter((x) => x.includes(':8080'))) expect(p).toMatch(/lb_try_duration 4s[\s\S]*dial_timeout 2s/);
     // Staging is the newest box.
     expect(r).toMatch(/@staging host staging\.games\.example\nhandle @staging \{\n\treverse_proxy 10\.0\.0\.22:8080/);
   });
@@ -209,7 +212,8 @@ describe('routes from the fleet map', () => {
   it('on a retiring box: its own tables still here, everything new goes to the current box', () => {
     const r = routesSnippet(two, 'a', 'games.example');
     expect(r).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801/);
-    expect(r).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:8080 \{\n\t\theader_up X-Gd-Hop 1/);
+    expect(r).toMatch(/handle \{\n\treverse_proxy 10\.0\.0\.22:8080 127\.0\.0\.1:8801 \{\n\t\tlb_policy first/);
+    expect(r).toMatch(/handle \{\n\treverse_proxy [^\n]*\{[\s\S]*?header_up X-Gd-Hop 1/);
     expect(r).not.toContain('weighted');
   });
 

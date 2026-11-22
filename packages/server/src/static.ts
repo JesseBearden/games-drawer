@@ -42,6 +42,7 @@ const TYPES: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
+  '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2',
   '.wav': 'audio/wav',
   '.mp3': 'audio/mpeg',

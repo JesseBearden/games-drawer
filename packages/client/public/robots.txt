@@ -1,0 +1,7 @@
+# Games Drawer. Search engines may list the home page and the game pages. Tables are private:
+# their links (/r/…) and the table lookup behind them stay out of search, as does the admin page.
+User-agent: *
+Disallow: /r/
+Disallow: /api/
+Disallow: /admin
+Disallow: /ws

@@ -407,6 +407,8 @@ describe('live server: HTTP in production mode', () => {
     fs.mkdirSync(path.join(dist, 'sfx'), { recursive: true });
     fs.writeFileSync(path.join(dist, 'sfx', 'boom.wav'), 'RIFF');
     fs.writeFileSync(path.join(tmp, 'secret.txt'), 'TOP SECRET');
+    // The site's real robots.txt.
+    fs.copyFileSync(path.join(__dirname, '..', '..', 'client', 'public', 'robots.txt'), path.join(dist, 'robots.txt'));
     s = await startGameServer(baseOptions({ production: true, clientDist: dist, statsToken: 'stats-token' }));
     base = `http://127.0.0.1:${s.port}`;
   });
@@ -438,6 +440,15 @@ describe('live server: HTTP in production mode', () => {
     expect(alias).toContain('<title>Tank You For Being A Friend · Games Drawer</title>');
     expect(await (await fetch(`${base}/`)).text()).toContain('<title>game</title>');
     expect(await (await fetch(`${base}/no-such-game`)).text()).toContain('<title>game</title>');
+  });
+
+  it('tells search engines to leave tables, the table lookup and the admin page alone', async () => {
+    const res = await fetch(`${base}/robots.txt`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    const text = await res.text();
+    for (const p of ['/r/', '/api/', '/admin']) expect(text).toContain(`Disallow: ${p}`);
+    expect(text).not.toMatch(/^Disallow: \/$/m);
   });
 
   it('serves sounds as audio, cached for a day', async () => {

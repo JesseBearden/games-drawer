@@ -48,10 +48,31 @@ export function isFleetMap(v: unknown): v is FleetMap {
  */
 export const KEEP_STREAMS = 'stream_close_delay 4h';
 
-/** Caddy lines that send a request to one box: this box's own server, or another box (marked as passed on). */
+const indent = (lines: string[]) => lines.map((l) => `\t${l}`);
+
+/**
+ * When another box doesn't answer. A retired box powers itself off, but the other boxes keep its
+ * route until the fleet tool next writes the map (the next deploy), so a late invite link or a
+ * phone waking up would wait on a box that's gone and get only an error, retrying forever. Give
+ * up on a box after 2 s (marking it gone for 30 s) and try the next address instead.
+ */
+const WHEN_GONE = ['lb_try_duration 4s', 'fail_duration 30s', 'transport http {', '\tdial_timeout 2s', '}'];
+
+/**
+ * Caddy lines that send a request to one box: this box's own server, or another box (marked as
+ * passed on). If that box is gone, this box answers instead: it doesn't have the table, so it
+ * says the table has closed, which the page shows right away.
+ */
 function proxyTo(slot: Slot, map: FleetMap, self: Slot): string[] {
   if (slot === self) return [`reverse_proxy 127.0.0.1:${GAME_PORT} {`, `\t${KEEP_STREAMS}`, '}'];
-  return [`reverse_proxy ${map.boxes[slot]}:${HOP_PORT} {`, `\theader_up ${HOP_HEADER} 1`, `\t${KEEP_STREAMS}`, '}'];
+  return [
+    `reverse_proxy ${map.boxes[slot]}:${HOP_PORT} 127.0.0.1:${GAME_PORT} {`,
+    '\tlb_policy first',
+    ...indent(WHEN_GONE),
+    `\theader_up ${HOP_HEADER} 1`,
+    `\t${KEEP_STREAMS}`,
+    '}',
+  ];
 }
 
 /** Caddy lines that spread new tables over the boxes taking them. */
@@ -61,14 +82,14 @@ function proxyNewTables(map: FleetMap, self: Slot): string[] {
   return [
     `reverse_proxy ${map.newTables.map(([s]) => target(s)).join(' ')} {`,
     `\tlb_policy weighted_round_robin ${map.newTables.map(([, w]) => w).join(' ')}`,
+    // A box that's gone is skipped: its share of new tables goes to the others.
+    ...indent(WHEN_GONE),
     // Only another box reads it (as "serve this yourself"); this box's own server ignores it.
     `\theader_up ${HOP_HEADER} 1`,
     `\t${KEEP_STREAMS}`,
     '}',
   ];
 }
-
-const indent = (lines: string[]) => lines.map((l) => `\t${l}`);
 
 /**
  * The routes for one box (/etc/caddy/games-drawer-routes.caddy, imported inside its site block).
