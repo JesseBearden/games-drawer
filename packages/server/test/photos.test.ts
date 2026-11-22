@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
-import { photoIdOf, PHOTOS_PER_TABLE, Rng, type GameId, type ServerMessage } from '@tank/shared';
+import { photoIdOf, PHOTOS_PER_TABLE, photoUrl, Rng, type GameId, type ServerMessage } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import type { JigsawGame } from '../src/games/jigsaw';
@@ -219,7 +219,7 @@ describe('your own photos at a table', () => {
     expect(r.body.ok).toBe(true);
     const id = photoIdOf(r.body.image!)!;
     const listed = pz(t.b.conn, 'pz-photos').at(-1)!.photos;
-    expect(listed).toEqual([{ image: r.body.image, url: `/api/photo/${t.room.code}/${id}.jpg`, title: 'aaaa’s photo', width: 900, height: 600 }]);
+    expect(listed).toEqual([{ image: r.body.image, url: photoUrl(t.room.code, id), title: 'aaaa’s photo', width: 900, height: 600 }]);
     expect(chats(t.b.conn).at(-1)).toBe('aaaa added a photo for a puzzle.');
     const got = await fetch(t.base + listed[0].url);
     expect(got.status).toBe(200);
@@ -274,7 +274,7 @@ describe('your own photos at a table', () => {
       const { image } = (await t.upload(await photo(900, 600))).body;
       t.send('b', { t: 'pz-new', image, pieces: 20 });
       const s = t.game.state!;
-      expect(s).toMatchObject({ image, imageFile: `/api/photo/${t.room.code}/${photoIdOf(image!)}.jpg`, title: 'aaaa’s photo', width: 900, height: 600 });
+      expect(s).toMatchObject({ image, imageFile: photoUrl(t.room.code, photoIdOf(image!)!), title: 'aaaa’s photo', width: 900, height: 600 });
       // Place a piece, wait past the save delay: nothing on disk.
       const pw = s.width / s.cols;
       t.send('b', { t: 'pz-grab', piece: 1 });
@@ -311,7 +311,7 @@ describe('your own photos at a table', () => {
   it('is deleted when the table closes', async () => {
     const t = await table();
     const { image } = (await t.upload(await photo(600, 400))).body;
-    const url = `/api/photo/${t.room.code}/${photoIdOf(image!)}.jpg`;
+    const url = photoUrl(t.room.code, photoIdOf(image!)!);
     expect((await fetch(t.base + url)).status).toBe(200);
     t.room.close('empty');
     expect(t.room.photos.size).toBe(0);

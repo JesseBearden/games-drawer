@@ -385,4 +385,3 @@ export function photoIdOf(image: string): string | null {
   const id = image.startsWith('photo-') ? image.slice(6) : '';
   return isPhotoId(id) ? id : null;
 }
-export const photoUrl = (table: string, id: string) => `/api/photo/${table}/${id}.jpg`;

@@ -16,3 +16,4 @@ export * from './chatFilter';
 export * from './dominoes';
 export * from './threeThirteen';
 export * from './puzzle';
+export * from './photoUrls';

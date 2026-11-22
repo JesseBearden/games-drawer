@@ -15,6 +15,8 @@ import { pseudonym, type Room } from './room';
  *
  *   POST /api/photo?table=CODE   body: the JPEG; header x-gd-session: your session
  *   GET  /api/photo/CODE/ID.jpg  the photo
+ *
+ * Both also carry ?slot=, for the web server to route by (photoUrls.ts in shared).
  */
 
 /** A photo in a table's memory. */

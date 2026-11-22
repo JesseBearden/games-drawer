@@ -4,6 +4,7 @@ import {
   gridFor,
   maxPieces,
   photoIdOf,
+  photoUploadUrl,
   PHOTO_MAX_BYTES,
   PHOTO_MAX_SIDE,
   PHOTO_MIN_SIDE,
@@ -1544,7 +1545,7 @@ export class JigsawTable implements View {
     let reason = 'unavailable';
     try {
       const jpeg = await shrinkPhoto(file);
-      const res = await fetch(`/api/photo?table=${encodeURIComponent(this.shell.roomCode)}`, {
+      const res = await fetch(photoUploadUrl(this.shell.roomCode), {
         method: 'POST',
         headers: { 'content-type': 'image/jpeg', 'x-gd-session': getSession() ?? '' },
         body: jpeg,

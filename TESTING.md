@@ -33,6 +33,8 @@ _Last updated: 2026-11-21_
 - [ ] **An old invite link after a deploy**: once the old box has shut down (about 15 minutes
       after the deploy, if nobody was playing on it), open an invite link to a table from before
       the deploy. Within about 2 seconds it says the table has closed.
+- [ ] **Your own photo during a deploy**: start a Jigsaw table before a deploy, and once the deploy
+      finishes add a photo there. It goes in and the others see it (the table is still on the old box).
 
 ## Security pass (new)
 
