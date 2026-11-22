@@ -273,9 +273,13 @@ describe('live server: abuse limits', () => {
       const { c } = await joined(s.port);
       let closed = false;
       void c.closed.then(() => (closed = true));
-      // About 400 a second for up to 3 seconds: never more than a handful dropped in a row.
-      for (let i = 0; i < 300 && !closed; i++) {
-        for (let k = 0; k < 4 && c.ws.readyState === c.ws.OPEN; k++) c.send({ t: 'ping', at: i });
+      // About 400 a second for up to 5 seconds: never more than a handful dropped in a row. By
+      // the clock, as timers on a busy computer come late and would send too slowly to be a flood.
+      const from = performance.now();
+      let sent = 0;
+      while (!closed && performance.now() - from < 5000) {
+        const due = ((performance.now() - from) / 1000) * 400;
+        for (; sent < due && c.ws.readyState === c.ws.OPEN; sent++) c.send({ t: 'ping', at: sent });
         await new Promise((r) => setTimeout(r, 10));
       }
       expect(closed).toBe(true);
@@ -283,7 +287,7 @@ describe('live server: abuse limits', () => {
     } finally {
       await s.close();
     }
-  });
+  }, 10_000);
 
   it('leaves someone alone who just sends a little faster than the limit now and then', async () => {
     const s = await startWith({ messageRate: 50, messageBurst: 10, maxStrikes: 60 });
