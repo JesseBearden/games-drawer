@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseClientMessage, type ClientMessage, type VoiceSettings } from '@tank/shared';
-import { speechBitrate, Voice } from '../src/voice';
+import { micUnsupportedText, speechBitrate, Voice } from '../src/voice';
 import { answerWaitMs, enoughStep, readAttempt, relayEnds, RETRY_MS, serversFor, STEP_WAIT_MS, withAttempt } from '../src/voiceRelay';
 
 // The real Voice, over a pretend network and relay: who can reach whom, and how many relay slots
@@ -157,6 +157,7 @@ function table(devices: Partial<Device>[], onWire: (w: Wire) => boolean = () => 
         setTimeout(() => deliver(p.id, m), 20);
       },
       toast: (t) => p.toasts.push(t),
+      micHelp: () => {},
       changed: () => {},
       speaking: () => {},
     });
@@ -501,5 +502,213 @@ describe('the pieces', () => {
     expect(relayEnds(stats({ selected: true }, 'relay'))).toBe('there'); // Firefox
     expect(relayEnds(stats({ nominated: true, state: 'succeeded' }, 'host'))).toBe('neither');
     expect(relayEnds(stats({}, 'relay'))).toBe(null);
+  });
+});
+
+describe('the mic itself', () => {
+  class Track {
+    enabled = true;
+    readyState = 'live';
+    onended: (() => void) | null = null;
+    stop() {
+      this.readyState = 'ended';
+    }
+    /** The browser ends it: unplugged, or taken. */
+    end() {
+      this.readyState = 'ended';
+      this.onended?.();
+    }
+  }
+  class Stream {
+    track = new Track();
+    getTracks() {
+      return [this.track];
+    }
+    getAudioTracks() {
+      return [this.track];
+    }
+  }
+  const node = () => ({ connect: (x: unknown) => x, disconnect() {}, fftSize: 512, getFloatTimeDomainData() {}, gain: { value: 0, setTargetAtTime() {} } });
+  let asked: Stream[];
+  let refuse: boolean;
+  let resumeHangs: boolean;
+  let out: Stream;
+  let doc: { visibilityState: string; onVisibility?: () => void };
+
+  beforeEach(() => {
+    asked = [];
+    refuse = false;
+    resumeHangs = false;
+    doc = { visibilityState: 'visible' };
+    class Ctx {
+      state = 'running';
+      currentTime = 0;
+      resume = () => (resumeHangs ? new Promise<void>(() => {}) : Promise.resolve());
+      close = async () => void (this.state = 'closed');
+      createMediaStreamSource = node;
+      createAnalyser = node;
+      createGain = node;
+      createMediaStreamDestination = () => ({ stream: (out = new Stream()) });
+    }
+    vi.stubGlobal('window', { isSecureContext: true, AudioContext: Ctx, setTimeout: (f: () => void, ms: number) => setTimeout(f, ms), setInterval: (f: () => void, ms: number) => setInterval(f, ms) });
+    vi.stubGlobal('location', { search: '' });
+    vi.stubGlobal('document', {
+      get visibilityState() {
+        return doc.visibilityState;
+      },
+      addEventListener: (type: string, f: () => void) => void (type === 'visibilitychange' && (doc.onVisibility = f)),
+      removeEventListener: () => {},
+    });
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getUserMedia: async () => {
+          if (refuse) throw Object.assign(new Error('no'), { name: 'NotAllowedError' });
+          const s = new Stream();
+          asked.push(s);
+          return s;
+        },
+      },
+    });
+  });
+
+  function make() {
+    const toasts: string[] = [];
+    const sent: ClientMessage[] = [];
+    let help = 0;
+    const v = new Voice('me', { enabled: true, iceServers: [] }, { send: (m) => sent.push(m), toast: (t) => toasts.push(t), micHelp: () => help++, changed: () => {}, speaking: () => {} });
+    return { v, toasts, sent, helpShown: () => help };
+  }
+  const pending = () => {
+    let allow!: (s: Stream) => void;
+    const stream = new Promise<Stream>((r) => (allow = r)) as unknown as Promise<MediaStream>;
+    return { stream, allow };
+  };
+
+  it('comes back muted after a reload, and a tap on Turn on mic is never muted', async () => {
+    const { v } = make();
+    await v.join({ auto: true, muted: true });
+    expect([v.inVoice, v.selfMuted, out.track.enabled]).toEqual([true, true, false]);
+    v.leave();
+    expect(v.micOn).toBe(false);
+    await v.join();
+    expect([v.selfMuted, out.track.enabled]).toEqual([false, true]);
+    v.teardown();
+  });
+
+  it('counts as on while the browser is still asking, muted or not as it was', async () => {
+    const { v } = make();
+    const { stream, allow } = pending();
+    const joining = v.join({ stream, muted: true });
+    expect([v.micOn, v.selfMuted]).toEqual([true, true]);
+    allow(new Stream());
+    await joining;
+    v.teardown();
+  });
+
+  it('leaving while the browser is still asking lets go of the mic when Allow comes', async () => {
+    const { v, toasts, sent } = make();
+    const { stream, allow } = pending();
+    const joining = v.join({ stream });
+    v.teardown();
+    const mic = new Stream();
+    allow(mic);
+    await joining;
+    expect([v.inVoice, v.micOn, mic.track.readyState]).toEqual([false, false, 'ended']);
+    expect([toasts, sent]).toEqual([[], []]);
+  });
+
+  it('leaving while a stopped mic is being opened again lets go of the new one', async () => {
+    const { v, toasts } = make();
+    await v.join();
+    const { stream, allow } = pending();
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: () => stream } });
+    asked[0].track.end();
+    v.teardown();
+    const late = new Stream();
+    allow(late);
+    await wait(1);
+    expect(late.track.readyState).toBe('ended');
+    expect(toasts).toEqual(['Your mic is on.']);
+  });
+
+  it('a mic that stops is opened again by itself', async () => {
+    const { v } = make();
+    await v.join();
+    asked[0].track.end();
+    await wait(1);
+    expect(asked).toHaveLength(2);
+    expect([asked[1].track.readyState, v.selfMuted, out.track.enabled]).toEqual(['live', false, true]);
+    v.teardown();
+  });
+
+  it('a mic that can’t be opened again shows as muted, and one tap on Unmute mic tries again', async () => {
+    const { v, toasts } = make();
+    await v.join();
+    refuse = true;
+    asked[0].track.end();
+    await wait(1);
+    expect([v.selfMuted, out.track.enabled]).toEqual([true, false]);
+    expect(toasts.at(-1)).toContain('tap Unmute mic');
+    refuse = false;
+    v.setSelfMuted(false);
+    await wait(1);
+    expect(asked).toHaveLength(2);
+    expect([v.selfMuted, out.track.enabled]).toEqual([false, true]);
+    v.teardown();
+  });
+
+  it('a mic that keeps stopping isn’t opened over and over', async () => {
+    const { v } = make();
+    await v.join();
+    asked[0].track.end();
+    await wait(1);
+    asked[1].track.end();
+    await wait(1);
+    expect([asked.length, v.selfMuted]).toEqual([2, true]);
+    v.teardown();
+  });
+
+  it('one that stops while the page is hidden waits until it’s back, and stays muted if it was', async () => {
+    const { v } = make();
+    await v.join();
+    v.setSelfMuted(true);
+    doc.visibilityState = 'hidden';
+    doc.onVisibility!();
+    asked[0].track.end();
+    await wait(1);
+    expect(asked).toHaveLength(1);
+    doc.visibilityState = 'visible';
+    doc.onVisibility!();
+    await wait(1);
+    expect(asked).toHaveLength(2);
+    expect([v.selfMuted, out.track.enabled]).toEqual([true, false]);
+    v.teardown();
+  });
+
+  it('sound that won’t start until a tap doesn’t leave Turn on mic dead', async () => {
+    resumeHangs = true;
+    const { v } = make();
+    void v.join();
+    await wait(1100);
+    expect(v.inVoice).toBe(true);
+    v.teardown();
+  });
+
+  it('Turn on mic with the mic blocked shows how to allow it, every time', async () => {
+    const { v, helpShown } = make();
+    refuse = true;
+    v.turnOn();
+    await wait(1);
+    expect([v.micProblem, helpShown()]).toEqual(['blocked', 0]);
+    v.turnOn();
+    v.turnOn();
+    expect(helpShown()).toBe(2);
+  });
+
+  it('says what to do in words for players, never developer steps', () => {
+    expect(micUnsupportedText()).toContain('Safari or Chrome');
+    vi.stubGlobal('window', { isSecureContext: false });
+    expect(micUnsupportedText()).toContain('https');
+    expect(micUnsupportedText()).not.toMatch(/npm|dev:/);
   });
 });

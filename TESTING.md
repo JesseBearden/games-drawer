@@ -13,6 +13,20 @@ _Last updated: 2026-11-22_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## The rest of the second code review (new)
+
+The fixes have automatic tests. The items below still need a real phone, tablet or computer.
+
+- [ ] **A muted mic stays muted through a reload**: mute, reload the page: it says Unmute mic and
+      nobody hears you. Turn my mic off, reload: still off. Someone you muted just for you stays
+      muted too.
+- [ ] **Unplug a headset mid-call** (or let Bluetooth ones switch off): the mic carries on by
+      itself on the device's own, or the button turns to Unmute mic and one tap brings it back.
+      Try it on an iPhone with AirPods too.
+- [ ] **Leave while the browser is asking for the mic**, then tap Allow: the recording light
+      doesn't stay on.
+- [ ] **A blocked mic**: the table's big Turn on mic and the Menu's both open the steps to allow it.
+
 ## Your decisions from the review (new)
 
 - [ ] **Back in a new tab, same seat**: in a Spades or Hearts game with someone else, close your

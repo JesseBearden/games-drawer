@@ -36,7 +36,7 @@ import type { Device } from './views';
 import { Sfx } from './audio';
 import { Gamepads, moveFocus, watchPadMode } from './gamepad';
 import { reloadForUpdate } from './reload';
-import { resumesTable } from './resume';
+import { readActive, resumesTable, type Active, type AsItWas } from './resume';
 import { Net } from './net';
 import { escapeHtml } from './html';
 import { MIC_CONSTRAINTS, voiceSupported } from './voice';
@@ -429,14 +429,11 @@ let app: RoomApp | null = null;
 let net: Net | null = null;
 
 /**
- * The table this tab is at, and whether the mic was on. If the page reloads (or a phone discards
- * the tab while you switch apps) we go straight back in and reclaim your place.
+ * The table this tab is at, and how you had it (the mic, who you muted). If the page reloads (or
+ * a phone discards the tab while you switch apps) we go straight back in and reclaim your place,
+ * never with a live mic you had muted or turned off.
  */
 const ACTIVE_KEY = 'tank.active';
-interface Active {
-  room: RoomRequest;
-  mic: boolean;
-}
 function setActive(a: Active | null) {
   try {
     if (a) sessionStorage.setItem(ACTIVE_KEY, JSON.stringify(a));
@@ -447,11 +444,7 @@ function setActive(a: Active | null) {
 }
 function getActive(): Active | null {
   try {
-    const raw = sessionStorage.getItem(ACTIVE_KEY);
-    const a = raw ? (JSON.parse(raw) as Active | RoomRequest) : null;
-    if (!a) return null;
-    // Older tabs stored just the room.
-    return 'kind' in a ? { room: a, mic: false } : a;
+    return readActive(sessionStorage.getItem(ACTIVE_KEY));
   } catch {
     return null;
   }
@@ -479,11 +472,18 @@ function tapAudioContext(): AudioContext | null {
 }
 
 /** Join or open a table. `from` is what was tapped: if it doesn't work out, the reason shows there. */
-async function start(room: RoomRequest, opts: { mic: boolean; name: string; resumed?: boolean }, from?: HTMLElement) {
+async function start(room: RoomRequest, opts: Partial<AsItWas> & { mic: boolean; name: string; resumed?: boolean }, from?: HTMLElement) {
   // Called from a button tap, so sound is allowed to start (required on iPhone).
   sfx.unlock();
+  let table: RoomRequest | null = null;
   const entry: EntryChoice = {
     mic: opts.mic,
+    muted: !!opts.muted,
+    mutedPeople: opts.mutedPeople ?? [],
+    // (Not once you've left: that has already forgotten the table.)
+    keep: (now) => {
+      if (table && getActive()) setActive({ room: table, ...now });
+    },
     resumed: !!opts.resumed,
     micStream: opts.mic && !opts.resumed ? requestMic() : null,
     audioCtx: opts.mic ? tapAudioContext() : null,
@@ -496,7 +496,8 @@ async function start(room: RoomRequest, opts: { mic: boolean; name: string; resu
   const thisNet = new Net(room, () => stored(NAME_KEY) || opts.name, device.touch ? 'phone' : 'desktop', {
     onMessage: (msg: ServerMessage) => {
       if (msg.t === 'welcome' && !app) {
-        setActive({ room: { kind: 'private', code: msg.room.code }, mic: opts.mic });
+        table = { kind: 'private', code: msg.room.code };
+        setActive({ room: table, mic: entry.mic, muted: entry.muted, mutedPeople: entry.mutedPeople });
         enterGame();
         app = new RoomApp(msg, thisNet, sfx, device, leave, pads, entry);
         if (import.meta.env.DEV) (window as unknown as { __tank: RoomApp }).__tank = app;
@@ -594,7 +595,7 @@ window.visualViewport?.addEventListener('resize', unscrollSoon);
 showPage();
 const resume = getActive();
 if (resume && resume.room.kind === 'private') {
-  if (resumesTable(page, resume.room.code)) start(resume.room, { mic: resume.mic, name: stored(NAME_KEY) || randomName(), resumed: true });
+  if (resumesTable(page, resume.room.code)) start(resume.room, { ...resume, name: stored(NAME_KEY) || randomName(), resumed: true });
   else setActive(null);
 }
 

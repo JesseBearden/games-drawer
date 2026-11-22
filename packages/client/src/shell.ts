@@ -6,8 +6,9 @@ import type { Net } from './net';
 import { patchHtml } from './dom';
 import { colorCss, escapeHtml } from './html';
 import { reloadForUpdate } from './reload';
+import type { AsItWas } from './resume';
 import type { Device, ShellApi, View } from './views';
-import { Voice } from './voice';
+import { micUnsupportedText, Voice } from './voice';
 import { moveFocus, type Gamepads, type PadButton, type PadPress } from './gamepad';
 
 type Welcome = Extract<ServerMessage, { t: 'welcome' }>;
@@ -16,8 +17,9 @@ type Welcome = Extract<ServerMessage, { t: 'welcome' }>;
  * How you came in: with the mic on or off. With it on, the mic was already asked for during the
  * tap on "with mic on" (and an audio context made in that tap), so iPhones and iPads allow both.
  */
-export interface EntryChoice {
-  mic: boolean;
+export interface EntryChoice extends AsItWas {
+  /** Called whenever the mic, or who you muted, changes: main.ts keeps it for a reload. */
+  keep(now: AsItWas): void;
   /** Back after a reload: the mic is asked for again without a tap. */
   resumed: boolean;
   micStream: Promise<MediaStream> | null;
@@ -81,8 +83,8 @@ export class RoomApp {
     private sfx: Sfx,
     private device: Device,
     private onLeave: () => void,
-    private pads: Gamepads | null = null,
-    entry: EntryChoice = { mic: false, resumed: false, micStream: null, audioCtx: null },
+    private pads: Gamepads | null,
+    private entry: EntryChoice,
   ) {
     const gameEl = $('game');
     gameEl.classList.toggle('phone', device.small);
@@ -94,6 +96,7 @@ export class RoomApp {
     this.membersList = welcome.members;
     this.tableState = welcome.table;
     this.chatFilter = welcome.chatFilter;
+    for (const [alias, name] of entry.mutedPeople) this.mutedPlayers.set(alias, name);
     this.voice = this.makeVoice(welcome);
     this.micAtStart = entry.mic && this.voice.available && this.voice.supported;
     this.chatOpen = this.chatStartsOpen(null);
@@ -107,7 +110,7 @@ export class RoomApp {
     this.showGame(welcome.game);
     this.pingTimer = window.setInterval(() => this.net.send({ t: 'ping', at: performance.now() }), 2000);
     // "With mic on": the mic was asked for in that tap; join with it now.
-    if (entry.mic && this.voice.available && this.voice.supported) void this.voice.join({ auto: true, stream: entry.micStream, ctx: entry.audioCtx });
+    if (entry.mic && this.voice.available && this.voice.supported) void this.voice.join({ auto: true, stream: entry.micStream, ctx: entry.audioCtx, muted: entry.muted });
     else {
       void entry.micStream?.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
       void entry.audioCtx?.close().catch(() => {});
@@ -150,7 +153,7 @@ export class RoomApp {
         get micProblem() {
           return shell.voice.micProblem;
         },
-        join: () => void shell.voice.join(),
+        join: () => shell.voice.turnOn(),
       },
       pads: this.pads,
       get chatFilter() {
@@ -342,7 +345,11 @@ export class RoomApp {
     const v = new Voice(w.alias, w.voice, {
       send: (m) => this.net.send(m),
       toast: (t) => this.toast(t),
-      changed: () => this.renderMic(),
+      micHelp: () => this.openSheet('mic-help'),
+      changed: () => {
+        this.renderMic();
+        this.keepForReload();
+      },
       speaking: (aliases) => {
         this.speaking = aliases;
         if (aliases.has(this.alias)) this.markActive();
@@ -352,6 +359,11 @@ export class RoomApp {
     });
     for (const alias of this.mutedPlayers.keys()) v.setPeerMuted(alias, true);
     return v;
+  }
+
+  private keepForReload() {
+    const { micOn, selfMuted } = this.voice;
+    this.entry.keep({ mic: micOn, muted: micOn && selfMuted, mutedPeople: [...this.mutedPlayers] });
   }
 
   /**
@@ -379,7 +391,7 @@ export class RoomApp {
     const others = v.peers.filter((p) => p.id !== v.alias);
     let html = '<h3 class="pc-h3">Mic</h3>';
     if (!v.supported) {
-      html += '<p>The mic needs a secure (https) page. It works on the hosted site; for local testing use <b>npm run dev:https</b>.</p>';
+      html += `<p>${micUnsupportedText()}</p>`;
     } else if (!v.inVoice) {
       if (v.micProblem === 'blocked') html += '<p>Your browser is blocking the mic. <button class="pc-link" type="button" data-v="help">Show me how to allow it</button></p>';
       else if (v.micProblem === 'missing') html += '<p>No microphone found. Plug one in (or use headphones with a mic), then tap Turn on mic.</p>';
@@ -410,7 +422,7 @@ export class RoomApp {
     const v = this.voice;
     if (!el) return;
     const action = el.dataset.v;
-    if (action === 'join') void v.join();
+    if (action === 'join') v.turnOn();
     else if (action === 'leave') v.leave();
     else if (action === 'help') this.openSheet('mic-help');
     else if (action === 'mute') {
@@ -424,8 +436,7 @@ export class RoomApp {
   private onMicButton = () => {
     const v = this.voice;
     if (v.inVoice) v.setSelfMuted(!v.selfMuted);
-    else if (v.micProblem === 'blocked') this.openSheet('mic-help');
-    else void v.join();
+    else v.turnOn();
     this.renderMic();
   };
 
@@ -582,6 +593,7 @@ export class RoomApp {
       this.toast(`Unmuted ${name}`);
     }
     this.voice.setPeerMuted(alias, muted);
+    this.keepForReload();
     this.renderMutedList();
     this.renderMic();
   }

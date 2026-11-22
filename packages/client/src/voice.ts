@@ -40,6 +40,8 @@ import {
 export interface VoiceHooks {
   send(msg: ClientMessage): void;
   toast(text: string): void;
+  /** The browser is blocking the mic: show how to allow it. */
+  micHelp(): void;
   /** Membership, mute or connection state changed: redraw the voice UI. */
   changed(): void;
   /** Aliases of whoever is talking right now (including you). */
@@ -92,9 +94,20 @@ function forceRelay(): boolean {
 const GATE_OPEN = 0.012;
 const GATE_HOLD_MS = 450;
 const SPEAKING_LEVEL = 0.02;
+/** Sound can refuse to start until a tap, and then says nothing: carry on after this long. */
+const RESUME_WAIT_MS = 1000;
+/** A mic that stops again this soon after being opened again isn't opened a third time. */
+const MIC_STOPS_AGAIN_MS = 3000;
 
 export function voiceSupported(): boolean {
   return typeof RTCPeerConnection !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && window.isSecureContext;
+}
+
+/** Why this page can't use the mic at all, in words for whoever is playing. */
+export function micUnsupportedText(): string {
+  return window.isSecureContext
+    ? 'This browser can’t use the mic. Open the link in Safari or Chrome.'
+    : 'The mic only works at an address that starts with https.';
 }
 
 /** What we ask the browser for: its own echo cancellation, noise suppression and level control. */
@@ -140,6 +153,11 @@ export class Voice {
   private timer: number | undefined;
   private lastSpeaking = '';
   private joining = false;
+  /** Counts teardowns, so an answer that comes after one (Allow, tapped late) is thrown away. */
+  private teardowns = 0;
+  /** The mic is being opened again after it stopped. */
+  private reopening: Promise<void> | null = null;
+  private reopenedAt = -Infinity;
 
   readonly relayOnly = forceRelay();
 
@@ -155,6 +173,17 @@ export class Voice {
 
   get supported() {
     return voiceSupported();
+  }
+
+  /** The mic is on, or the browser is being asked for it: what a reload should come back to. */
+  get micOn() {
+    return this.inVoice || this.joining;
+  }
+
+  /** Any "Turn on mic" button: turn it on or, if the browser is blocking it, show how to allow it. */
+  turnOn() {
+    if (this.micProblem === 'blocked') this.hooks.micHelp();
+    else void this.join();
   }
 
   isPeerMuted(alias: string) {
@@ -187,18 +216,26 @@ export class Voice {
    * Turn on the mic and join. Best from a tap (some browsers only allow sound after one).
    * The entry page's "with mic on" buttons ask for the mic during the tap itself and hand the
    * request over here (`stream`), along with an audio context made in the same tap (`ctx`), so
-   * iPhones and iPads let it play. `auto` is for joining straight from that choice.
+   * iPhones and iPads let it play. `auto` is for joining straight from that choice. `muted` is
+   * for coming back after a reload, muted as you were; a tap on Turn on mic is never muted.
    */
-  async join(opts: { auto?: boolean; stream?: Promise<MediaStream> | null; ctx?: AudioContext | null } = {}) {
+  async join(opts: { auto?: boolean; stream?: Promise<MediaStream> | null; ctx?: AudioContext | null; muted?: boolean } = {}) {
     if (this.inVoice || this.joining || !this.available) return;
     if (!this.supported) {
-      this.hooks.toast('The mic needs a secure (https) page. Use the hosted site or npm run dev:https.');
+      this.hooks.toast(micUnsupportedText());
       return;
     }
+    const teardowns = this.teardowns;
     this.joining = true;
+    this.selfMuted = !!opts.muted;
+    let mic: MediaStream;
     try {
-      this.mic = await (opts.stream ?? navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS));
+      mic = await (opts.stream ?? navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS));
     } catch (err) {
+      if (teardowns !== this.teardowns) {
+        opts.ctx?.close().catch(() => {});
+        return;
+      }
       this.joining = false;
       const name = (err as { name?: string } | null)?.name;
       this.micProblem = name === 'NotFoundError' || name === 'OverconstrainedError' ? 'missing' : 'blocked';
@@ -207,10 +244,18 @@ export class Voice {
       this.hooks.changed();
       return;
     }
+    // Left the table while the browser was still asking: whatever the answer, the mic isn't kept.
+    if (teardowns !== this.teardowns) {
+      mic.getTracks().forEach((t) => t.stop());
+      opts.ctx?.close().catch(() => {});
+      return;
+    }
+    this.mic = mic;
     this.micProblem = null;
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     this.ctx = opts.ctx && opts.ctx.state !== 'closed' ? opts.ctx : new Ctor();
-    await this.ctx.resume().catch(() => {});
+    await this.wakeSound();
+    if (teardowns !== this.teardowns) return; // (teardown let go of the mic and the sound)
     // mic -> analyser (level) and -> gate (gain 0/1) -> stream we actually send
     this.micSource = this.ctx.createMediaStreamSource(this.mic);
     this.micAnalyser = this.ctx.createAnalyser();
@@ -221,14 +266,16 @@ export class Voice {
     this.micSource.connect(this.micAnalyser);
     this.micSource.connect(this.gate).connect(out);
     this.sendTrack = out.stream.getAudioTracks()[0];
+    this.sendTrack.enabled = !this.selfMuted;
     this.inVoice = true;
     this.joining = false;
     this.timer = window.setInterval(() => this.tick(), 60);
     document.addEventListener('visibilitychange', this.onVisibility);
     this.hooks.send({ t: 'voice', join: true });
-    this.hooks.toast('Your mic is on.');
+    this.hooks.toast(this.selfMuted ? 'Your mic is muted, as you left it.' : 'Your mic is on.');
     this.hooks.changed();
     this.connectPeers();
+    this.watchMic(mic);
     // Browsers may hold back sound until the page has been tapped; resume on the next tap.
     if (this.ctx && this.ctx.state !== 'running') this.resumeOnTap();
   }
@@ -263,27 +310,77 @@ export class Voice {
   }
 
   private async backInFront() {
-    await this.ctx?.resume().catch(() => {});
+    await this.wakeSound();
     // The system can end the mic while the page is away (another app took it): open it again.
-    if (this.mic?.getAudioTracks()[0]?.readyState === 'ended') await this.reopenMic();
+    if (this.micEnded()) await this.reopenMic();
+    if (!this.inVoice || document.visibilityState === 'hidden') return; // left, or away again
     this.sendRawMic(false);
     for (const link of this.links.values()) if (link.audio.srcObject && link.audio.paused) void link.audio.play().catch(() => {});
   }
 
-  private async reopenMic() {
+  private async wakeSound() {
+    const resumed = this.ctx?.resume().catch(() => {});
+    if (resumed) await Promise.race([resumed, new Promise<void>((done) => window.setTimeout(done, RESUME_WAIT_MS))]);
+  }
+
+  // ---------------------------------------------------------------- a mic that stops
+
+  private micEnded() {
+    return this.mic?.getAudioTracks()[0]?.readyState === 'ended';
+  }
+
+  /**
+   * A mic can stop by itself: a headset unplugged or out of battery, or the system took it. Open
+   * it again (the browser picks whichever mic is there now). While the page is hidden that waits
+   * until it's back in front, as browsers don't give a hidden page the mic.
+   */
+  private watchMic(stream: MediaStream) {
+    const track = stream.getAudioTracks()[0];
+    if (!track) return;
+    const stopped = () => {
+      if (this.mic !== stream || !this.inVoice || document.visibilityState === 'hidden') return;
+      if (Date.now() - this.reopenedAt < MIC_STOPS_AGAIN_MS) this.micStopped();
+      else void this.reopenMic();
+    };
+    track.onended = stopped;
+    if (track.readyState === 'ended') stopped();
+  }
+
+  /** It couldn't be opened again: show it as muted (which it is), so one tap tries again. */
+  private micStopped() {
+    this.setSelfMuted(true);
+    this.hooks.toast('Your mic stopped. Check it’s plugged in, then tap Unmute mic.');
+  }
+
+  private reopenMic() {
+    return (this.reopening ??= this.openMicAgain().finally(() => (this.reopening = null)));
+  }
+
+  private async openMicAgain() {
+    const teardowns = this.teardowns;
+    let fresh: MediaStream;
     try {
-      const fresh = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
-      this.mic?.getTracks().forEach((t) => t.stop());
-      this.mic = fresh;
-      this.micSource?.disconnect();
-      if (this.ctx && this.micAnalyser && this.gate) {
-        this.micSource = this.ctx.createMediaStreamSource(fresh);
-        this.micSource.connect(this.micAnalyser);
-        this.micSource.connect(this.gate);
-      }
+      fresh = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
     } catch {
-      this.hooks.toast('Your mic stopped while the page was in the background. Tap Mute mic twice to turn it back on.');
+      if (teardowns === this.teardowns) this.micStopped();
+      return;
     }
+    if (teardowns !== this.teardowns) {
+      fresh.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    this.mic?.getTracks().forEach((t) => t.stop());
+    this.mic = fresh;
+    this.reopenedAt = Date.now();
+    this.micSource?.disconnect();
+    if (this.ctx && this.micAnalyser && this.gate) {
+      this.micSource = this.ctx.createMediaStreamSource(fresh);
+      this.micSource.connect(this.micAnalyser);
+      this.micSource.connect(this.gate);
+    }
+    // If the plain mic is what's being sent (the page is hidden), it's the new one now, muted or not.
+    if (this.rawMic) this.sendRawMic(true);
+    this.watchMic(fresh);
   }
 
   private resumeOnTap() {
@@ -306,6 +403,8 @@ export class Voice {
 
   /** Close everything without telling the server (it already knows, e.g. on reconnect). */
   teardown() {
+    this.teardowns++;
+    this.joining = false;
     this.inVoice = false;
     this.rawMic = false;
     document.removeEventListener('visibilitychange', this.onVisibility);
@@ -323,6 +422,11 @@ export class Voice {
   setSelfMuted(muted: boolean) {
     this.selfMuted = muted;
     if (this.sendTrack) this.sendTrack.enabled = !muted;
+    // Unmuting a mic that has stopped opens it again (this is the tap browsers want for that).
+    if (!muted && this.inVoice && this.micEnded()) {
+      void this.wakeSound();
+      void this.reopenMic();
+    }
     // In the background the plain mic is what's sent, so mute that too.
     if (this.rawMic) {
       const micTrack = this.mic?.getAudioTracks()[0];

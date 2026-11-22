@@ -50,6 +50,24 @@ test('"with mic off" leaves it off, with an easy way to turn it on', async ({ pa
   await expect(page.locator('.lobby-view .pc-alert')).toHaveCount(0);
 });
 
+test('a reload comes back muted if you were muted, and off if you turned the mic off', async ({ page }) => {
+  await createRoom(page, 'Remy', 'jigsaw', 'on');
+  const btn = page.locator('#btn-mic');
+  await expect(btn).toHaveText('Mute mic');
+  await btn.click();
+  await expect(btn).toHaveText('Unmute mic');
+  await page.reload();
+  await expect(page.locator('#game')).toBeVisible();
+  await expect(page.locator('.toasts')).toContainText('muted');
+  await expect(btn).toHaveText('Unmute mic');
+  await tapBar(page, '#btn-menu');
+  await page.locator('#menu-mic [data-v="leave"]').click();
+  await expect(btn).toHaveText('Turn on mic');
+  await page.reload();
+  await expect(page.locator('#game')).toBeVisible();
+  await expect(btn).toHaveText('Turn on mic');
+});
+
 test('a microphone the browser blocks explains how to allow it', async ({ page }) => {
   // The browser says no to the mic (as if you'd tapped Don't Allow).
   await page.addInitScript(() => {
@@ -62,6 +80,16 @@ test('a microphone the browser blocks explains how to allow it', async ({ page }
   const help = page.locator('#mic-help');
   await expect(help).toBeVisible();
   await expect(help).toContainText('Your mic is blocked');
+  await page.locator('#mic-help-close').click();
+  // The table's own big button says the same, however often it's tapped.
+  await toLobby(page);
+  for (let i = 0; i < 2; i++) {
+    await page.locator('.lobby-view [data-act="voice"]').click();
+    await expect(help).toBeVisible();
+    await page.locator('#mic-help-close').click();
+  }
+  await btn.click();
+  await expect(help).toBeVisible();
   // Allowed now: Try again turns it on.
   await page.evaluate(() => {
     navigator.mediaDevices.getUserMedia = (c) => MediaDevices.prototype.getUserMedia.call(navigator.mediaDevices, c);
