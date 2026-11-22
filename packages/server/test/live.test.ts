@@ -2,6 +2,7 @@
  * End-to-end attack tests against a real server on a random port, using real WebSockets
  * and HTTP requests.
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -597,6 +598,28 @@ describe('live server: HTTP in production mode', () => {
     const now = (await fetch(url)).headers.get('etag');
     expect(now).toBeTruthy();
     expect(now).not.toBe(old);
+  });
+
+  it('a picture asked for again the moment it arrives has its fingerprint, even with the server busy', async () => {
+    // File reads wait their turn on Node's thread pool, so the read that finds a file's end can
+    // come after the browser already has every byte and asks again.
+    let busy = true;
+    const churn = () => {
+      if (busy) crypto.pbkdf2('x', 'y', 20_000, 32, 'sha1', churn);
+    };
+    for (let i = 0; i < 8; i++) churn();
+    try {
+      const missing: number[] = [];
+      for (let i = 0; i < 20; i++) {
+        fs.writeFileSync(path.join(dist, 'art', 'felt', `busy-${i}.webp`), `felt ${i} `.repeat(1 + (i % 5)));
+        const url = `${base}/art/felt/busy-${i}.webp`;
+        await (await fetch(url)).text();
+        if (!(await fetch(url)).headers.get('etag')) missing.push(i);
+      }
+      expect(missing).toEqual([]);
+    } finally {
+      busy = false;
+    }
   });
 
   it('never tells a browser to keep the page itself, or a build file for less than forever', async () => {

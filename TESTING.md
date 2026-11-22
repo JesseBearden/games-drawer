@@ -117,12 +117,15 @@ Each has a unit test; none has been tried in a real browser or on a phone.
 - [ ] **Adding a photo for a puzzle** still works, one after another. (Limits are now counted
       the moment an upload starts, and a table can have two in the air at once.)
 
-## The pipeline (new; needs the AWS update and a push)
+## The pipeline (new; on since November 22)
 
-- [ ] **A push goes to staging by itself:** in CodePipeline (`games-drawer`), Source, Test and
+- [x] **A push goes to staging by itself:** in CodePipeline (`games-drawer`), Source, Test and
       Staging go green, staging shows the push, and the site hasn't changed.
+      (Checked November 22 with e6908a2: about 15 minutes from push to staging, the live box
+      untouched.)
 - [ ] **Approve** is waiting in Production and names that commit. You can open and press it from
-      your phone.
+      your phone. (Checked November 22 that it waits and names the commit: only the phone part is
+      left.)
 - [ ] **A second push before approving:** the first request closes ("staging is moving on"), and
       once the new push is on staging a new request names it.
 - [ ] **Approve it:** about 20 minutes later the site runs that commit, and the old box shuts
@@ -189,8 +192,8 @@ slow connection the one to try: a phone on one bar.
 - [ ] **On the new box** (or ask Claude): `sudo nft list table inet gd_relay` lists its rules,
       `systemctl show coturn -p MemoryMax` says 367001600, and
       `sudo journalctl --namespace gd-relay -u coturn` shows the relay's log.
-- [ ] **After `cdk deploy`**: the next deploy still finishes (boxes may now only create the shared
-      secrets, never replace them).
+- [x] **After `cdk deploy`**: the next deploy still finishes (boxes may now only create the shared
+      secrets, never replace them). (Checked November 22: e6908a2's staging box started with them.)
 
 ## Voice asks for the relay only when it needs it (new)
 

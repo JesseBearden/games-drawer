@@ -217,14 +217,28 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
   }
   const stream = fs.createReadStream(file);
   if (!etag) {
+    // Noted as the last bytes are read, before they're sent (this listener runs before
+    // pipeline's): a browser that asks again the moment the file arrives gets its fingerprint.
     const hash = crypto.createHash('sha1');
     let read = 0;
+    let done = false;
     stream.on('data', (chunk) => {
-      hash.update(chunk);
+      if (done) return;
       read += chunk.length;
+      // Longer than when it was looked at: it's changing, so no fingerprint this time.
+      if (read > stat.size) {
+        done = true;
+        return;
+      }
+      hash.update(chunk);
+      if (read === stat.size) {
+        done = true;
+        fingerprints.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, etag: tagOf(hash) });
+      }
     });
+    // An empty file has no bytes to read.
     stream.on('end', () => {
-      if (read === stat.size) fingerprints.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, etag: tagOf(hash) });
+      if (!done && read === stat.size) fingerprints.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, etag: tagOf(hash) });
     });
   }
   // A file that can't be read after all ends this one response, not the server. And pipeline,
