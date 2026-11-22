@@ -144,7 +144,8 @@ export function uniqueName(name: string, taken: Iterable<string>): string {
   if (!set.has(nameKey(name))) return name;
   for (let i = 2; i < 100; i++) {
     const suffix = ` ${i}`;
-    const candidate = name.slice(0, MAX_NAME_LENGTH - suffix.length) + suffix;
+    // (Cut in whole characters, so an emoji is never cut in half.)
+    const candidate = [...name].slice(0, MAX_NAME_LENGTH - suffix.length).join('') + suffix;
     if (!set.has(nameKey(candidate))) return candidate;
   }
   return name;

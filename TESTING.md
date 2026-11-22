@@ -43,6 +43,8 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
 - [ ] **Score sheets on a narrow phone** (or iPhone Display Zoom, Larger Text): you can read
       everyone's name, the columns are just numbers, and Ready for round N is in sight without
       scrolling (try 4 players, all four card and domino games).
+- [ ] **Scores during a Hearts or Spades hand**: the sheet covers all your cards (the last three
+      used to lie on top of it), and Close works wherever you tap it.
 - [ ] **Reduce motion** (the phone's accessibility setting): cards and sheets don't slide and the
       Tanks nuke doesn't shake. Talking still shows beside names.
 - [ ] **A two-word name** stays on one line in 'takes the trick', 'wins!' and 'Waiting for'.
@@ -55,8 +57,9 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
       for the tiles left.
 - [ ] **The admin page still signs in** on your phone and computer (the form now only works from
       the page itself; only Chrome has been tried).
-- [ ] **Odd names**: a name of only dots asks for a letter (emoji are fine), 'Admin' gets a made-up name, and a
-      name that looks like someone's already there gets a 2. Names with accents still work.
+- [ ] **Odd names**: a name of only dots asks for a letter (emoji are fine), 'Admin' gets a
+      made-up name, and a name that looks like someone's already there gets a 2. Names with
+      accents still work.
 - [ ] **The chat filter** still lets ordinary messages through (tell Claude any harmless one it
       stops: it now looks inside words with punctuation or accents).
 - [ ] **The privacy page**'s Logs line has one new sentence, about the address a table was

@@ -12,7 +12,7 @@ const ALPHABETS = [
   ['АВЕЅІЈКМНОРСТУХԚԜ', 'ABESIJKMHOPCTYXQW'], // Cyrillic capitals
   ['аеѕіјорсухһԁԛԝ', 'aesijopcyxhdqw'], // Cyrillic
   ['ΑΒΕΖΗΙΚΜΝΟΡΤΥΧ', 'ABEZHIKMNOPTYX'], // Greek capitals
-  ['αικνορυχ', 'aiknopux'], // Greek
+  ['αικνορυχ', 'aikvopux'], // Greek
   ['ıɪɑɡ', 'iiag'], // Latin's own
 ] as const;
 

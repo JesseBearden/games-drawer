@@ -37,6 +37,37 @@ test('a round’s end on a small phone: names have room, and Ready is in sight',
   expect(last.y + last.height).toBeLessThanOrEqual((await ready.boundingBox())!.y + 1);
 });
 
+test('three buttons on a small phone leave everyone’s score in sight', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await createRoom(page, 'Dot', 'dominoes');
+  const view = page.locator('#dominoes-view');
+  await view.locator('.ht-scores-btn').click();
+  const panel = view.locator('.ht-panel');
+  await panel.locator('.actions').evaluate((el) => {
+    el.innerHTML = ['New game', 'See the board', 'Switch game'].map((t) => `<button class="pc-btn pc-btn-plain" type="button">${t}</button>`).join('');
+  });
+  const [first, second, third] = await Promise.all([0, 1, 2].map(async (i) => (await panel.locator('.actions button').nth(i).boundingBox())!));
+  expect(first.y + first.height).toBeLessThanOrEqual(second.y);
+  expect(Math.abs(second.y - third.y)).toBeLessThan(2);
+  const last = (await panel.locator('tbody tr').last().boundingBox())!;
+  expect(last.y + last.height).toBeLessThanOrEqual(first.y + 1);
+});
+
+test('the score sheet covers the whole hand', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await createRoom(page, 'Dee', 'hearts');
+  const last = page.locator('.ht-hand .card').last();
+  await expect(page.locator('.ht-hand .card')).toHaveCount(13);
+  await page.locator('#hearts-view .ht-scores-btn').click();
+  await expect(page.locator('#hearts-view .ht-panel')).toBeVisible();
+  // What a finger on the last card would touch is the sheet's, not the card.
+  const under = await last.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return !!document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.ht-overlay');
+  });
+  expect(under).toBe(true);
+});
+
 test('Reduce motion holds at the table', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await createRoom(page, 'Cal', 'hearts');

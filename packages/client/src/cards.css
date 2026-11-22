@@ -300,6 +300,8 @@ body.pad-mode #game .card.pad-cursor {
    Ready is always in sight. The row keeps the sheet to the screen's height, so it can scroll. */
 #game .ht-overlay {
   grid-template-rows: minmax(0, 1fr);
+  /* Over the whole hand: its cards are stacked 1 to 14, and the last few lay on top of the sheet. */
+  z-index: 20;
 }
 #game .ht-panel {
   padding-bottom: 0;
@@ -317,6 +319,22 @@ body.pad-mode #game .card.pad-cursor {
   position: static;
   margin-top: 0;
   padding-top: 0;
+}
+/* Small phones: three buttons would hide half the scores, so the second and third share a row. */
+@media (max-width: 600px) and (max-height: 640px) {
+  #game .ht-panel .actions {
+    flex-direction: row;
+  }
+  #game .ht-panel .actions > .pc-btn:first-child {
+    flex: 1 1 100%;
+  }
+  #game .ht-panel .actions > .pc-btn:not(:first-child):not(:only-child) {
+    flex: 1 1 40%;
+    width: auto;
+    min-width: 0;
+    padding-inline: 6px;
+    font-size: 0.9375rem;
+  }
 }
 /* A name too long for a whole line of a heading ends in "…" (it never wraps). */
 #game .ht-panel h2 .pc-nw {

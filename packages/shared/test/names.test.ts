@@ -41,6 +41,15 @@ describe('player names', () => {
     expect(uniqueName('Вова', ['Вера'])).toBe('Вова');
   });
 
+  it('the Greek letter that looks like a v counts as a v', () => {
+    expect(uniqueName('Li\u03BD', ['Liv'])).toBe('Li\u03BD 2');
+  });
+
+  it('making room for the number never cuts an emoji in half', () => {
+    const long = '🙂'.repeat(MAX_NAME_LENGTH);
+    expect(uniqueName(long, [long])).toBe(`${'🙂'.repeat(MAX_NAME_LENGTH - 2)} 2`);
+  });
+
   it('nobody can be called the site', () => {
     for (const n of ['Games Drawer', 'ADMIN', '\u0410dmin', 'moderator']) expect(isReservedName(n), n).toBe(true);
     for (const n of ['Adam', 'Drew', 'Captain Pancake']) expect(isReservedName(n), n).toBe(false);
