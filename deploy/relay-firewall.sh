@@ -18,7 +18,12 @@
 #   - everyone else may ask for the same two things, in a smaller lane. A busy one can't slow
 #     the players' lane, or anyone with a slot.
 #   - anything else is dropped before coturn sees it, so it keeps nothing and logs nothing.
-#   - TCP (for networks that block UDP): new connections and bytes are limited for each address.
+#   - TCP (for networks that block UDP): new connections and bytes are limited for each address,
+#     and players' connections don't share the limit on everyone's.
+#   - nothing bigger than one internet packet (voice never is), in or out, and no pieces of one
+#     out: only a packet's first piece says its port, so the rules below can't count the others.
+# Someone who gives their slot up stops being a member within seconds, so the list of members
+# holds about as many as there are slots.
 # From the relay's ports to this box: only other relayed links' audio ports (both ends of a call
 # can be relayed).
 # On the way out, the turnserver user only, behind coturn's own lists: nothing to private
@@ -40,6 +45,8 @@ fi
 # These must match turnserver.conf (relay.test.ts checks).
 port=3478
 audio=49152-49352
+# A whole internet packet (1500), less the IP header.
+largest=1480
 
 devices=
 for link in /sys/class/net/*; do
@@ -65,7 +72,7 @@ table inet gd_relay {
     type ipv4_addr . inet_service
     flags dynamic,timeout
     timeout 20m
-    size 4096
+    size 65536
   }
   set players {
     type ipv4_addr
@@ -77,8 +84,8 @@ table inet gd_relay {
   set member_asks {
     type ipv4_addr . inet_service
     flags dynamic,timeout
-    timeout 1m
-    size 4096
+    timeout 10s
+    size 65536
   }
   set player_asks {
     type ipv4_addr
@@ -95,8 +102,8 @@ table inet gd_relay {
   set member_bytes {
     type ipv4_addr . inet_service
     flags dynamic,timeout
-    timeout 1m
-    size 4096
+    timeout 10s
+    size 65536
   }
   set peer_bytes {
     type ipv4_addr . inet_service
@@ -120,6 +127,7 @@ table inet gd_relay {
   chain incoming {
     type filter hook input priority -5; policy accept;
     iifname "lo" ip daddr $private_ip udp sport $audio udp dport != $audio counter drop comment "relay to this box"
+    iifname != "lo" udp dport $audio udp length > $largest counter drop comment "too big for voice"
     iifname != "lo" udp dport $audio meta nfproto ipv4 update @peer_bytes { ip saddr . udp dport limit rate over 32 kbytes/second burst 96 kbytes } counter drop comment "one sender to a slot"
     udp dport $port jump relay_udp
     tcp dport $port jump relay_tcp
@@ -129,6 +137,7 @@ table inet gd_relay {
     meta nfproto != ipv4 drop
     ip saddr @private counter drop
     udp sport 0 drop
+    udp length > $largest counter drop comment "too big for voice"
     ip saddr . udp sport @members jump member
 
     # Everyone without a slot: a STUN Binding or Allocate request, and nothing else.
@@ -156,7 +165,7 @@ table inet gd_relay {
     meta nfproto != ipv4 drop
     ip saddr @private counter drop
     tcp flags & (fin|syn|rst|ack) == syn update @tcp_connects { ip saddr limit rate over 3/second burst 40 packets } counter drop comment "one address"
-    tcp flags & (fin|syn|rst|ack) == syn limit rate over 50/second burst 300 packets counter drop comment "all connections"
+    tcp flags & (fin|syn|rst|ack) == syn ip saddr != @players limit rate over 50/second burst 300 packets counter drop comment "all connections"
     update @tcp_bytes { ip saddr limit rate over 200 kbytes/second burst 256 kbytes } counter drop comment "one address"
     accept
   }
@@ -173,6 +182,7 @@ table inet gd_relay {
     ip daddr $private_ip udp sport $audio accept
     ip daddr @private counter reject
     tcp flags & (fin|syn|rst|ack) == syn counter reject
+    udp sport $port @th,96,32 0x2112a442 @th,64,16 0x0104 @th,224,32 0x000d0004 @th,256,32 0 update @members { ip daddr . udp dport timeout 5s } accept comment "gave the slot up"
     udp sport $port @th,96,32 0x2112a442 @th,64,16 { 0x0103, 0x0104, 0x0108, 0x0109 } update @members { ip daddr . udp dport }
   }
 }
@@ -199,6 +209,9 @@ table netdev gd_relay_bill {
 
   chain billed {
     type filter hook egress devices = { $devices } priority 0; policy accept;
+    # (Before any rule that reads a port. Nothing else on the box sends UDP in pieces.)
+    meta protocol ip ip protocol udp ip frag-off & 0x3fff != 0 counter drop comment "in pieces"
+    meta protocol ip udp sport { $port, $audio } udp length > $largest counter drop comment "too big for voice"
     # (coturn's answers aren't audio, and the lanes on the way in already limit them.)
     meta protocol ip udp sport $port @th,64,16 & 0xc100 == 0x0100 accept
     meta protocol ip udp sport $audio update @to_peers { udp sport limit rate over 14 kbytes/second burst 64 kbytes } counter drop comment "one slot, to the other end"
