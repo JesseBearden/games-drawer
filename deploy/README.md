@@ -185,13 +185,18 @@ Rekognition with their own role, so two things have to be set up in AWS once, **
 first deploy that has it:
 
 1. **Permission:** the boxes' role may call `rekognition:DetectModerationLabels`
-   (infra/lib/stack.ts). Apply it with `npm run infra -- deploy`. Until then, every photo is
-   refused with "couldn't be checked just now" (never let through unchecked).
+   (infra/lib/stack.ts). Apply it with
+   `ALERT_EMAIL=… npm run infra -- deploy GamesDrawer --profile games-drawer` (see
+   infra/README.md). Until then, every photo is refused with "couldn't be checked just now"
+   (never let through unchecked).
 2. **Opt out of AI training.** By default AWS may keep pictures sent to Rekognition to improve
-   its services; the privacy page says we've told it not to. In the AWS console: **AWS
-   Organizations** (create an organization if the account isn't in one; it's free) → **Policies**
-   → **AI services opt-out policies** → enable them → create a policy with this content, and
-   attach it to the root:
+   its services; the privacy page says we've told it not to. This is set by an AWS
+   Organizations policy, from the organization's **management account**. The site's account is a
+   member of an organization (as of 2026-11-21), so it can't set this itself: sign in to the
+   management account. (An account in no organization creates one, free, and is its own
+   management account.) In the console: **AWS Organizations** → **Policies** → **AI services
+   opt-out policies** → enable them → create a policy with this content, and attach it to the
+   root (every account) or to the site's account:
 
    ```json
    { "services": { "default": { "opt_out_policy": { "@@assign": "optOut" } } } }

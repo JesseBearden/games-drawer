@@ -458,10 +458,11 @@ The real check (Amazon Rekognition) only runs on the site. For the phone, use `n
       Menu: it asks first and says it can't be continued later, and it isn't under "Continue a
       puzzle".
 - [ ] Everyone leaves the table and it closes (a minute later): the photo is gone with it.
-- [ ] **Before the first push with this** (see deploy/README.md, "Your own photos"): run
-      `npm run infra -- deploy` so the boxes may call Rekognition, and turn on the AWS AI
-      services opt-out policy (the privacy page says Amazon doesn't keep the photos). Then on
-      the site: an everyday family photo passes, and so does a beach photo.
+- [ ] **Before the first deploy with this, staging included** (see deploy/README.md, "Your own
+      photos"): run the stack deploy so the boxes may call Rekognition, and turn on the AWS AI
+      services opt-out policy from the organization's management account (the privacy page says
+      Amazon doesn't keep the photos). Then on staging: an everyday family photo passes, and so
+      does a beach photo.
 - [ ] Read the new **Privacy** section "Your own photos" and the new **House rules** line ("Only
       add photos you're allowed to share"). Both pages are dated November 21.
 
