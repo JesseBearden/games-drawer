@@ -322,6 +322,31 @@ describe('jigsaw in a room', () => {
     expect(game.phase).toBe('playing');
   });
 
+  it('Tidy tapped over and over tidies once every few seconds, for the whole table', () => {
+    const { a, b, send, clock } = started();
+    const said = (c: FakeConn) => c.of('chat').filter((m) => m.msg.text.includes('tidied up')).length;
+    const moved = () => pz(b.conn, 'pz-moved').length;
+    for (let i = 0; i < 30; i++) send('a', { t: 'pz-tidy' });
+    expect([said(a.conn), said(b.conn), moved()]).toEqual([1, 1, 1]);
+    // It's the table's, so taking turns doesn't get round it.
+    clock.now += 2900;
+    send('b', { t: 'pz-tidy' });
+    expect([said(b.conn), moved()]).toEqual([1, 1]);
+    clock.now += 100;
+    send('b', { t: 'pz-tidy' });
+    expect([said(b.conn), moved()]).toEqual([2, 2]);
+  });
+
+  it('a Tidy with nothing loose doesn’t hold up the next one', () => {
+    const { a, send, s } = started();
+    const was = s.pieces.map((p) => p.g);
+    for (const p of s.pieces) p.g = 0;
+    send('a', { t: 'pz-tidy' });
+    s.pieces.forEach((p, i) => (p.g = was[i]));
+    send('a', { t: 'pz-tidy' });
+    expect(lastChat(a.conn)).toContain('tidied up');
+  });
+
   it('finishes when every piece is in one group', () => {
     const { a, b, send, s, pw, ph, game } = started();
     for (let i = 0; i < s.pieces.length; i++) {

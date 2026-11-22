@@ -36,6 +36,11 @@ const SAVES_ASK_GAP_MS = 3000;
 const SAVES_ASK_MAX = 30;
 /** A save that hasn't come back from the disk in this long isn't waited for. */
 const LOAD_MAX_MS = 10_000;
+/**
+ * A table tidies at most this often. Each Tidy sends every loose piece to everyone and posts a
+ * line in Messages, and tapped again straight away it has nothing new to do.
+ */
+const TIDY_GAP_MS = 3000;
 /** After "Continue" found nothing, the next one waits this long (each is a file read). */
 const MISS_GAP_MS = 1000;
 
@@ -78,6 +83,7 @@ export class JigsawGame implements ServerGame {
   /** A saved puzzle is being read from the disk: since when, and for whom. */
   private loading: { at: number; name: string } | null = null;
   private missedAt = -Infinity;
+  private tidiedAt = -Infinity;
   private disposed = false;
 
   constructor(
@@ -516,11 +522,14 @@ export class JigsawGame implements ServerGame {
   private tidy(m: Member) {
     const s = this.state;
     if (!s || this.phase !== 'playing') return;
+    const now = this.host.now();
+    if (now - this.tidiedAt < TIDY_GAP_MS) return;
     const sizes = new Map<number, number>();
     for (const p of s.pieces) sizes.set(p.g, (sizes.get(p.g) ?? 0) + 1);
     // Loose single pieces nobody is holding go back around the edges.
     const loose = s.pieces.flatMap((p, i) => (sizes.get(p.g) === 1 && !this.held.has(p.g) && !s.locked.includes(p.g) ? [i] : []));
     if (!loose.length) return;
+    this.tidiedAt = now;
     this.scatter(loose);
     this.changed();
     this.host.broadcast({ t: 'pz-moved', pieces: loose.map((i) => [i, s.pieces[i].x, s.pieces[i].y, s.pieces[i].g]), locked: [...s.locked], by: m.alias, snapped: false });

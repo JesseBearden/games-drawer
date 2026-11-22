@@ -77,6 +77,8 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
       now download once you're at the table).
 - [ ] **A dead connection** still reconnects within about 15 seconds (the page checks in every 5
       seconds now instead of 2).
+- [ ] **Jigsaw Tidy tapped a few times quickly**: the pieces spread out once, with one line in
+      Messages. After 3 seconds it works again, for whoever taps it.
 
 ## Your decisions from the review (new)
 
