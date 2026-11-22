@@ -127,17 +127,24 @@ describe('Games Drawer AWS stack (the boxes)', () => {
       BranchName: 'main',
     });
     expect(from[0].Configuration.DetectChanges ?? true).toBe(true);
+    // CodePipeline refuses a variables namespace named like an output artifact, which only shows
+    // when the stack deploys.
+    const actions = p.Stages.flatMap((s: any) => s.Actions);
+    const artifacts = actions.flatMap((a: any) => (a.OutputArtifacts ?? []).map((o: any) => o.Name));
+    const namespaces = actions.map((a: any) => a.Namespace).filter(Boolean);
+    expect(namespaces).toEqual(['SourceVariables']);
+    expect(namespaces.filter((n: string) => artifacts.includes(n))).toEqual([]);
     expect(test[0].OutputArtifacts).toEqual([{ Name: 'Release' }]);
     expect(staging).toHaveLength(1);
     const [approve, goLive] = [...production].sort((a: any, b: any) => a.RunOrder - b.RunOrder);
     expect(approve).toMatchObject({ Name: PIPELINE.approve, RunOrder: 1, ActionTypeId: { Category: 'Approval', Provider: 'Manual' }, TimeoutInMinutes: 30 * 24 * 60 });
     expect(approve.Configuration.ExternalEntityLink).toBe('https://staging.games.example.com');
-    expect(approve.Configuration.CustomData).toContain('#{Source.CommitId}');
+    expect(approve.Configuration.CustomData).toContain('#{SourceVariables.CommitId}');
     expect(approve.Configuration.CustomData.length).toBeLessThan(900);
     expect(goLive).toMatchObject({ Name: 'GoLive', RunOrder: 2 });
     for (const deploy of [staging[0], goLive]) {
       expect(deploy.InputArtifacts).toEqual([{ Name: 'Source' }, { Name: 'Release' }]);
-      expect(deploy.Configuration.EnvironmentVariables).toContain('#{Source.CommitId}');
+      expect(deploy.Configuration.EnvironmentVariables).toContain('#{SourceVariables.CommitId}');
     }
 
     // A project for each step. None builds on a push by itself, and none has a limit on builds at

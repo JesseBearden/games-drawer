@@ -229,7 +229,8 @@ export class GamesDrawerStack extends cdk.Stack {
     const tested = new codepipeline.Artifact('Release');
     const fromGitHub = new actions.CodeStarConnectionsSourceAction({
       actionName: 'GitHub',
-      variablesNamespace: 'Source',
+      // Not "Source": CodePipeline refuses a namespace named like an output artifact.
+      variablesNamespace: 'SourceVariables',
       connectionArn: props.githubConnectionArn,
       owner,
       repo,
