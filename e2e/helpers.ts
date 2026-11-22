@@ -38,7 +38,7 @@ export async function createTable(page: Page, name: string, game: GameId | null 
   await page.getByRole('button', { name: `Start with mic ${mic}` }).click();
   await expect(page.locator('#game')).toHaveAttribute('data-view', 'lobby');
   await expect(page).toHaveURL(/\/r\/[A-Z]{6}/);
-  return new URL(page.url()).pathname.slice(3, 8);
+  return new URL(page.url()).pathname.slice('/r/'.length);
 }
 
 /** Say you're ready at the table. */
