@@ -34,11 +34,15 @@ async function press(page: Page, name: keyof typeof BUTTON) {
       },
       [BUTTON[name], down],
     );
-  // About as long as a person holds a button (the page checks the controller once a frame).
+  // About as long as a person holds a button, and never less than two frames: the page checks the
+  // controller once a frame, and on a busy machine a frame can take longer than that.
+  const frames = () => page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
   await set(true);
   await page.waitForTimeout(90);
+  await frames();
   await set(false);
   await page.waitForTimeout(60);
+  await frames();
 }
 
 /** Press a direction until the highlighted element matches. */
