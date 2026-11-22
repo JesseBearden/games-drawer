@@ -30,11 +30,6 @@ const SAVE_DELAY_MS = 4000;
 /** How close (as a fraction of a piece's short side) two pieces must be to snap together. */
 const SNAP = 0.22;
 const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
-/**
- * Puzzles one table may start or bring back per hour. Plenty for people; a wall for a script
- * starting puzzle after puzzle, since each one can become a save file on the shared disk.
- */
-const STARTS_PER_HOUR = 20;
 /** One person may ask "which of my saves are still there?" this often (each save is a file read). */
 const SAVES_ASK_GAP_MS = 3000;
 /** The browser remembers at most 30 saves; never look up more than that at once. */
@@ -79,8 +74,6 @@ export class JigsawGame implements ServerGame {
   private cursors = new Map<string, PuzzleServerMessage>();
   private drags = new Map<string, PuzzleServerMessage>();
   private liveSentAt = -Infinity;
-  /** When this table started or brought back a puzzle, over the last hour. */
-  private starts: number[] = [];
   private savesAskedAt = new Map<string, number>();
   /** A saved puzzle is being read from the disk: since when, and for whom. */
   private loading: { at: number; name: string } | null = null;
@@ -281,7 +274,7 @@ export class JigsawGame implements ServerGame {
     const image = photo ? { id: photo.image, file: photo.url, title: photo.title, width: photo.width, height: photo.height } : puzzleImage(imageId);
     if (!image || !(PIECE_COUNTS as readonly number[]).includes(count)) return;
     if (!this.mayStart(m)) return;
-    this.countStart();
+    this.host.puzzleStarted(m);
     if (this.state) this.saveNow();
     // A small picture offers fewer pieces (each keeps MIN_PIECE_PX of it across): asking for
     // more gets its most. (The picker greys out the sizes it can't do.)
@@ -349,7 +342,7 @@ export class JigsawGame implements ServerGame {
       this.host.send(m, { t: 'pz-saves', saves: [], gone: [id] });
       return;
     }
-    this.countStart();
+    this.host.puzzleStarted(m);
     if (this.state) this.saveNow();
     this.state = s;
     this.reset(s.doneAt !== null ? 'done' : 'playing');
@@ -360,18 +353,9 @@ export class JigsawGame implements ServerGame {
 
   /** Room for one more puzzle this hour? (If not, the person who asked is told.) */
   private mayStart(m: Member): boolean {
-    const now = this.host.now();
-    this.starts = this.starts.filter((t) => now - t < 3_600_000);
-    if (this.starts.length >= STARTS_PER_HOUR) {
-      this.host.systemChat(`That's a lot of puzzles for one hour, ${m.name}. Try again in a few minutes.`);
-      return false;
-    }
-    return true;
-  }
-
-  /** A puzzle really did start or come back (one that couldn't be opened doesn't count). */
-  private countStart() {
-    this.starts.push(this.host.now());
+    if (this.host.mayStartPuzzle(m)) return true;
+    this.host.systemChat(`That's a lot of puzzles for one hour, ${m.name}. Try again in a few minutes.`);
+    return false;
   }
 
   private backToSetup(m: Member) {

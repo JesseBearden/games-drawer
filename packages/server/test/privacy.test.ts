@@ -34,6 +34,10 @@ describe('the privacy page and house rules match the code', () => {
     expect(privacy).toContain('All of them are erased when the table closes');
   });
 
+  it('says a table remembers where it was started from, scrambled', () => {
+    expect(privacy).toContain('remembers, scrambled the same way, the address it was started from until it closes');
+  });
+
   it('only involves our own servers: no outside fonts, and voice set-up through our relay', () => {
     expect(privacy).toContain('Only Amazon Web Services');
     // Nothing on the page itself loads from anywhere else.

@@ -9,7 +9,7 @@ import { checkChat, MAX_CHAT_LENGTH, type ChatCheck, type ChatFilterMode } from 
  */
 export { joinSpacedLetters, normalizeForFilter } from '@tank/shared';
 export { MAX_CHAT_LENGTH };
-export const RULE_VERSION = 'obscenity-en+slurs+allowlist-v2';
+export const RULE_VERSION = 'obscenity-en+slurs+allowlist-v3';
 
 export type ScreenResult = ChatCheck;
 

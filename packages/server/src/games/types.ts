@@ -79,6 +79,10 @@ export interface GameHost {
   log(type: string, fields: Record<string, unknown>): void;
   /** Uniform random integer in [0, n): crypto-strength on the server, seeded in tests. */
   randomInt(n: number): number;
+  /** Jigsaw: may they start or bring back one more puzzle? (Counted by the table and by address.) */
+  mayStartPuzzle(m: Member): boolean;
+  /** Jigsaw: one did start or come back. */
+  puzzleStarted(m: Member): void;
   /** Photos people at the table uploaded for a jigsaw (in memory until the table closes). */
   photos?(): TablePhotoInfo[];
   /** Whether people at this table may upload photos at all. */

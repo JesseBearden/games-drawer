@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { ADMIN_COOKIE, ADMIN_SESSION_MS, issueAdminSession, verifyAdminPassword, verifyAdminSession } from './adminAuth';
-import { AdminStatsCache, type AdminStats } from './adminStats';
+import { AdminStatsCache, LOG_ROWS_MAX, type AdminStats } from './adminStats';
 import type { LogSink } from './eventlog';
-import { clientIp, WindowCounter } from './guard';
+import { clientIp, originAllowed, WindowCounter } from './guard';
 
 /**
  * The admin page, gamesdrawer.com/admin: usage numbers now, moderation later. It's served by the
@@ -19,6 +19,8 @@ export interface AdminOptions {
   /** Mark the cookie Secure (production is always HTTPS). */
   secureCookie: boolean;
   log: LogSink;
+  /** Where our own pages are served from (as for the game's sockets). */
+  allowedOrigins?: string[] | null;
   now?: () => number;
 }
 
@@ -26,6 +28,11 @@ export interface AdminOptions {
 const TRIES_PER_IP = 5;
 const TRIES_TOTAL = 30;
 const TRY_WINDOW_MS = 15 * 60_000;
+/**
+ * Past the total, one try is still checked this often, so wrong tries from elsewhere can't keep
+ * the right password out (each address keeps its own few).
+ */
+const SLOW_CHECK_MS = 10_000;
 /** Logs are kept 30 days (LOG_KEEP_DAYS), so the page looks back at most that far. */
 const DAY_CHOICES = [1, 7, 30];
 
@@ -39,6 +46,7 @@ export function createAdmin(o: AdminOptions) {
   // tries sent all at once can't slip past the limits while the first ones are being checked.
   const checking = new Map<string, number>();
   let checkingTotal = 0;
+  let slowCheckAt = -Infinity;
   const stats = new AdminStatsCache(o.logDirs, now);
 
   /** Handles /admin and /admin/…; returns false for anything else. */
@@ -53,11 +61,23 @@ export function createAdmin(o: AdminOptions) {
     const signedIn = verifyAdminSession(cookie(req, ADMIN_COOKIE), hash, t);
 
     if (url.pathname === '/admin/login' && req.method === 'POST') {
+      // Only our own form signs in: another website mustn't be able to spend the owner's tries.
+      if (!fromOurPage(req, o.allowedOrigins ?? null)) {
+        page(res, 403, loginHtml('Sign in from this page.'));
+        return true;
+      }
       const ip = clientIp(req, o.trustProxy);
       failsPerIp.sweep(t);
-      if (failsPerIp.count(ip, t) + (checking.get(ip) ?? 0) >= TRIES_PER_IP || failsTotal.count('all', t) + checkingTotal >= TRIES_TOTAL) {
+      if (failsPerIp.count(ip, t) + (checking.get(ip) ?? 0) >= TRIES_PER_IP) {
         page(res, 429, loginHtml('Too many wrong tries. Wait 15 minutes, then try again.'));
         return true;
+      }
+      if (failsTotal.count('all', t) + checkingTotal >= TRIES_TOTAL) {
+        if (t - slowCheckAt < SLOW_CHECK_MS) {
+          page(res, 429, loginHtml('Too many wrong tries. Wait a few seconds, then try again.'));
+          return true;
+        }
+        slowCheckAt = t;
       }
       checking.set(ip, (checking.get(ip) ?? 0) + 1);
       checkingTotal++;
@@ -101,6 +121,16 @@ export function createAdmin(o: AdminOptions) {
     page(res, 200, statsHtml(await stats.get(days)));
     return true;
   };
+}
+
+/**
+ * A form posted by our own page. Browsers say where a post came from (Sec-Fetch-Site, or Origin
+ * on older ones); something that isn't a browser says neither, and could say anything.
+ */
+function fromOurPage(req: IncomingMessage, allowed: string[] | null): boolean {
+  const site = req.headers['sec-fetch-site'];
+  if (site !== undefined) return site === 'same-origin' || site === 'none';
+  return originAllowed(req, allowed);
 }
 
 function cookie(req: IncomingMessage, name: string): string | undefined {
@@ -152,7 +182,8 @@ function page(res: ServerResponse, status: number, html: string) {
       'cache-control': 'no-store',
       'x-robots-tag': 'noindex, nofollow',
       'x-content-type-options': 'nosniff',
-      'referrer-policy': 'no-referrer',
+      // Not 'no-referrer': with that a browser posts the sign-in form as from nowhere (Origin: null).
+      'referrer-policy': 'same-origin',
       'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     })
     .end(html);
@@ -207,7 +238,7 @@ function statsHtml(s: AdminStats) {
   return shell(
     'Admin · Games Drawer',
     `<header><h1>Games Drawer admin</h1><form method="post" action="/admin/logout"><button class="link" type="submit">Sign out</button></form></header>
-<p class="days">${days}</p><p class="note">${esc(s.from)} to ${esc(s.to)} (UTC). A game counts once it ends. Numbers refresh every minute.</p>
+<p class="days">${days}</p>${s.capped ? `<p class="err">The logs hold more than this page reads (${LOG_ROWS_MAX.toLocaleString('en-US')} lines of each kind), so these numbers leave some out, the oldest days first.</p>` : ''}<p class="note">${esc(s.from)} to ${esc(s.to)} (UTC). A game counts once it ends. Numbers refresh every minute.</p>
 <div class="tiles">${tile(s.players, 'people who played')}${tile(s.sessions, 'games played')}${tile(s.personHours, 'person-hours')}${tile(s.privateRooms, 'private rooms opened')}${tile(s.publicJoins, 'joins in public games')}${tile(s.chat.delivered, 'chat messages')}</div>
 <h2>Games, most played first</h2><div class="card scroll"><table><thead><tr><th>Game</th><th>Person-hours</th><th>Games</th><th>Picked</th><th>People</th><th>Avg minutes</th><th>Time with 2+</th><th>Games with 2+</th><th>Avg most at once</th><th>Most at once</th><th>Chat per person-hour</th></tr></thead><tbody>${gameRows}</tbody></table></div>
 <p class="note">Person-hours: two people for an hour is two. “Time with 2+” is the share of play time with at least two people at once. “Picked” counts private-room picks. People are counted by device: someone on a phone and a computer counts twice. Days logged before this counted every browser tab, so they read high.</p>

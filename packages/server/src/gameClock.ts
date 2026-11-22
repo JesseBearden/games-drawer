@@ -32,6 +32,8 @@ export function startGameClock(tickRate: number, hooks: ClockHooks, now: () => n
   let done = 0;
   let houseAt = startedAt + HOUSEKEEPING_MS;
   let wakeAt = Infinity;
+  /** When the timer could first have rung: lateness counts from here. */
+  let dueAt = Infinity;
   let idle = true;
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
@@ -47,6 +49,8 @@ export function startGameClock(tickRate: number, hooks: ClockHooks, now: () => n
     if (at >= wakeAt) return; // already waking in time
     wakeAt = at;
     clearTimeout(timer);
+    // A game starting mid-wait can want a tick that's already past: that's no stall.
+    dueAt = Math.max(at, now());
     let delay = Math.ceil(at - now());
     // Windows rounds timers up to its 15.6 ms clock, which would make Tanks step two at a time.
     // (Only for waits that short: the long ones can be a little late.)
@@ -56,7 +60,7 @@ export function startGameClock(tickRate: number, hooks: ClockHooks, now: () => n
 
   function run() {
     const t = now();
-    hooks.late(Math.max(0, t - wakeAt));
+    hooks.late(Math.max(0, t - dueAt));
     wakeAt = Infinity;
     try {
       const target = ticksSoFar();

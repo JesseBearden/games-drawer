@@ -5,6 +5,7 @@ import {
   DEFAULT_CONFIG,
   freshName,
   GAME_NAMES,
+  isReservedName,
   canPlayPrivately,
   CHAT_FILTER_LABELS,
   type ChatFilterMode,
@@ -35,6 +36,7 @@ import {
 } from '@tank/shared';
 import { MAX_CHAT_LENGTH, RateLimiter, RULE_VERSION, type ChatModerator } from './chat';
 import type { LogSink } from './eventlog';
+import type { WindowCounter } from './guard';
 import { HeartsGame } from './games/hearts';
 import { SpadesGame } from './games/spades';
 import { DominoesGame } from './games/dominoes';
@@ -81,6 +83,8 @@ export interface RoomDeps {
   puzzles?: PuzzleStore;
   /** People at private tables may upload their own photos for a jigsaw (photos.ts). */
   photoUploads?: boolean;
+  /** Puzzles started per scrambled address, shared by every table. */
+  puzzleStartsFrom?: WindowCounter;
 }
 
 /** Default idle time before a table closes, and the warning before it does. */
@@ -111,6 +115,12 @@ export const CHAT_PAUSE_MS = 30_000;
 export const updateWarningText = (minutes: number) =>
   `Games Drawer was updated. This table closes in ${minutes} minute${minutes === 1 ? '' : 's'}: start a new table to keep playing.`;
 export const UPDATE_CLOSED = 'This table closed for an update to Games Drawer. Start a new table to keep playing.';
+
+/**
+ * Puzzles started or brought back in an hour: at one table, and from one address at all of them.
+ * Plenty for people; a wall for a script, since each can become a save file on the shared disk.
+ */
+export const PUZZLE_STARTS = { perTable: 20, perAddress: 60 };
 
 /** Invite links a room keeps (the oldest goes first). */
 export const MAX_INVITES = 40;
@@ -207,6 +217,10 @@ export class Room {
   /** Whoever started the table (the first to join): named on the join page for a bare code. */
   private starter: string | null = null;
   private readonly inviteTimes = new Map<string, number[]>();
+  /** The scrambled address it was started from (in memory, until it closes). */
+  startedFrom: string | null = null;
+  /** When puzzles started here, over the last hour. Kept by the table, so it outlives each game. */
+  private puzzleStarts: number[] = [];
   /**
    * Between games (private tables): the game picked to play next, who picked which seat
    * (sessions; seated games only) and who is ready. It starts once everyone here is ready.
@@ -316,10 +330,26 @@ export class Room {
       systemChat: (text) => this.systemChat(text),
       log: (type, fields) => room.log(type, { game: room.game?.id, ...fields }),
       randomInt: (n) => (this.deps.randomInt ?? randomInt)(n),
+      mayStartPuzzle: (m) => this.mayStartPuzzle(m),
+      puzzleStarted: (m) => this.puzzleStarted(m),
       photos: () =>
         [...this.photos.values()].map((p) => ({ image: photoImageId(p.id), url: photoUrl(this.code, p.id), title: `${p.byName}’s photo`, width: p.width, height: p.height })),
       photoUploads: !!this.deps.photoUploads && this.kind === 'private',
     };
+  }
+
+  private mayStartPuzzle(m: Member) {
+    const now = this.deps.now();
+    this.puzzleStarts = this.puzzleStarts.filter((t) => now - t < 3_600_000);
+    if (this.puzzleStarts.length >= PUZZLE_STARTS.perTable) return false;
+    const net = m.conn?.net;
+    return !net || (this.deps.puzzleStartsFrom?.count(net, now) ?? 0) < PUZZLE_STARTS.perAddress;
+  }
+
+  private puzzleStarted(m: Member) {
+    const now = this.deps.now();
+    this.puzzleStarts.push(now);
+    if (m.conn?.net) this.deps.puzzleStartsFrom?.add(m.conn.net, now);
   }
 
   /** The tank game, when that's what the room is playing. */
@@ -449,7 +479,7 @@ export class Room {
       this.postPendingLeaves(now);
       this.removeForGood(gone, 'made_way');
     }
-    const name = uniqueName(wanted ?? old?.name ?? this.randomName(), this.takenNames());
+    const name = uniqueName(wanted ?? old?.name ?? this.randomName(), this.otherNames());
     this.accrue();
     const notices = this.goneNotices.get(session);
     this.goneNotices.delete(session);
@@ -524,7 +554,7 @@ export class Room {
   /** A cleaned name that passes the filter, or null. */
   private acceptableName(raw: string): string | null {
     const name = cleanName(raw);
-    if (!name) return null;
+    if (!name || isReservedName(name)) return null;
     try {
       // Names follow people into public games, so they're held to the strictest setting.
       return this.deps.moderator.screen(name, 'block').ok ? name : null;
@@ -669,6 +699,11 @@ export class Room {
     const s = new Set<string>();
     for (const p of this.players.values()) s.add(p.name.toLowerCase());
     return s;
+  }
+
+  /** Everyone's name as they wrote it (what looks alike depends on the capitals), but `p`'s. */
+  private otherNames(p?: Player) {
+    return [...this.players.values()].filter((o) => o !== p).map((o) => o.name);
   }
 
   private freeColor() {
@@ -1105,9 +1140,7 @@ export class Room {
       return;
     }
     p.lastRename = now;
-    const taken = this.takenNames();
-    taken.delete(p.name.toLowerCase());
-    const unique = uniqueName(name, taken);
+    const unique = uniqueName(name, this.otherNames(p));
     const old = p.name;
     p.name = unique;
     this.game?.renamed(p);

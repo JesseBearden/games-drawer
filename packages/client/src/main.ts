@@ -206,9 +206,11 @@ document.addEventListener('click', (e) => {
 /** The name to join with, or null (with the box pointed out) when there isn't one yet. */
 function chosenName(form: 'start' | 'join'): string | null {
   const input = document.getElementById(`${form}-name`) as HTMLInputElement | null;
-  const name = cleanName(input ? input.value : (suggestedName ?? ''));
+  const typed = input ? input.value : (suggestedName ?? '');
+  const name = cleanName(typed);
   if (!name) {
-    showError('Type your name first, so everyone knows who you are.', document.querySelector<HTMLElement>(`[data-name-for="${form}"]`)!);
+    const why = typed.trim() ? 'Use at least one letter or number, so everyone can read your name.' : 'Type your name first, so everyone knows who you are.';
+    showError(why, document.querySelector<HTMLElement>(`[data-name-for="${form}"]`)!);
     input?.focus();
     return null;
   }

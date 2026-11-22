@@ -57,7 +57,15 @@ export interface AdminStats {
   voice: { links: number; relayed: number; failed: number; people: number; peopleRelayed: number; peopleFailed: number };
   games: GameStats[];
   daily: DayStats[];
+  /** The logs held more than the page reads (LOG_ROWS_MAX). */
+  capped?: boolean;
 }
+
+/**
+ * The most rows of each kind (events, chat) the page holds at once. They are all in memory while
+ * they're added up, on the game server: past this, opening the page could take every table down.
+ */
+export const LOG_ROWS_MAX = 100_000;
 
 type Row = Record<string, unknown> & { type?: string; at?: string };
 
@@ -75,16 +83,23 @@ export function dayRange(to: string, days: number): string[] {
 /** Only the lines the admin page uses, to keep reading cheap. */
 const WANTED = ['"game_session"', '"game_start"', '"join"', '"room_created"', '"voice_link"'];
 
-async function readJsonl(file: string, keep: (line: string) => boolean, into: Row[]) {
-  const lines = readline.createInterface({ input: fs.createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
+/** True if `into` filled up (`max`) before the file ended. */
+async function readJsonl(file: string, keep: (line: string) => boolean, into: Row[], max: number): Promise<boolean> {
+  const input = fs.createReadStream(file, { encoding: 'utf8' });
+  const lines = readline.createInterface({ input, crlfDelay: Infinity });
   for await (const line of lines) {
     if (!line || !keep(line)) continue;
+    if (into.length >= max) {
+      input.destroy();
+      return true;
+    }
     try {
       into.push(JSON.parse(line));
     } catch {
       /* a torn line from a crash: skip it */
     }
   }
+  return false;
 }
 
 /**
@@ -106,10 +121,11 @@ export async function logFolders(dirs: string[]): Promise<string[]> {
 }
 
 /** Read the logs for these days from every folder (each box, or copy of the server, writes its own). */
-export async function readLogs(dirs: string[], days: string[]): Promise<{ events: Row[]; chats: Row[] }> {
+export async function readLogs(dirs: string[], days: string[], max = LOG_ROWS_MAX): Promise<{ events: Row[]; chats: Row[]; capped: boolean }> {
   const events: Row[] = [];
   const chats: Row[] = [];
   const wanted = new Set(days);
+  const found: { file: string; kind: string; day: string }[] = [];
   for (const dir of await logFolders(dirs)) {
     let files: string[];
     try {
@@ -120,11 +136,18 @@ export async function readLogs(dirs: string[], days: string[]): Promise<{ events
     for (const f of files.sort()) {
       const m = /^(events|chat)-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(f);
       if (!m || !wanted.has(m[2])) continue;
-      if (m[1] === 'events') await readJsonl(path.join(dir, f), (l) => WANTED.some((w) => l.includes(w)), events);
-      else await readJsonl(path.join(dir, f), () => true, chats);
+      found.push({ file: path.join(dir, f), kind: m[1], day: m[2] });
     }
   }
-  return { events, chats };
+  // Newest days first, so it's the oldest that are left out if there are too many rows.
+  found.sort((a, b) => b.day.localeCompare(a.day));
+  let eventsFull = false;
+  let chatsFull = false;
+  for (const f of found) {
+    if (f.kind === 'events' && !eventsFull) eventsFull = await readJsonl(f.file, (l) => WANTED.some((w) => l.includes(w)), events, max);
+    else if (f.kind === 'chat' && !chatsFull) chatsFull = await readJsonl(f.file, () => true, chats, max);
+  }
+  return { events, chats, capped: eventsFull || chatsFull };
 }
 
 export function summarize(events: Row[], chats: Row[], days: string[]): AdminStats {
@@ -226,8 +249,8 @@ export class AdminStatsCache {
     const hit = this.cached.get(days);
     if (hit && now - hit.at < 60_000) return hit.stats;
     const range = dayRange(new Date(now).toISOString().slice(0, 10), days);
-    const { events, chats } = await readLogs(this.dirs, range);
-    const stats = summarize(events, chats, range);
+    const { events, chats, capped } = await readLogs(this.dirs, range);
+    const stats = { ...summarize(events, chats, range), capped };
     this.cached.set(days, { at: now, stats });
     return stats;
   }

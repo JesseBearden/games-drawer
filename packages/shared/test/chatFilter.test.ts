@@ -30,6 +30,29 @@ describe('chat filter', () => {
     }
   });
 
+  it('sees through punctuation, look-alike letters, accents and blanks inside a word', () => {
+    const disguised = ['sh,it', 'sh/it', "sh'it", 'sh,itty', 's,h,i,t', 'sh\u03b9t', 'sh\u0456t', 'sh\u2800it', 'sh\u3164it', 's\u0307h\u0307i\u0307t\u0307'];
+    for (const word of disguised) {
+      expect(checkChat(`well ${word}`, 'block').ok, word).toBe(false);
+      // Hide can't star out what it can't pinpoint, so it doesn't go.
+      const hidden = checkChat(`well ${word}`, 'hide');
+      expect(!hidden.ok || hidden.censored, word).toBe(true);
+    }
+    // Slurs the same, with the filter off.
+    const slur = SLUR_WORDS.find((w) => w.length >= 6)!;
+    expect(checkChat(`${slur.slice(0, 3)},${slur.slice(3)}`, 'none')).toEqual({ ok: false, reason: 'slur' });
+  });
+
+  it('doesn’t make swearing out of ordinary punctuation', () => {
+    const fine = [
+      'push,it', 'this.hit', "who're they", "he'll be here", "she'll win", "don't do that", "it's 10:30",
+      'class/assignment', 'pass-it to me', 'grape-fruit', 'as-salaam alaikum', 'as,shown above', 'wash-it', 'brush it,then go',
+      'semi-final', 'x-ray', "rock 'n' roll", 'gamesdrawer.com/r/BCDFGH', 'e.g. hearts', 'Cum laude'.replace('Cum', 'Magna'),
+      'co-op', 'T-shirt', "o'clock", 'half-hour', 'ok...sure', 'yes,sir', 'piñata', 'café olé', 'Привет, как дела?', 'Καλημέρα σας',
+    ];
+    for (const text of fine) expect(checkChat(text, 'block').ok, text).toBe(true);
+  });
+
   it('extra blocked words apply in every room', () => {
     expect(checkChat('you are a wombat', 'none', ['wombat'])).toEqual({ ok: false, reason: 'blocked-word' });
   });

@@ -12,7 +12,15 @@ import {
   type RoomRequest,
   type Slot,
 } from '@tank/shared';
+import { WindowCounter } from './guard';
 import { Room, type RoomDeps } from './room';
+
+/**
+ * Once half the private tables are open, one address may start another only while it has fewer
+ * than this many: however many it holds open, the rest are left for everyone else. (Not before
+ * then: each deploy's smoke tests open about 16 from one address, and families share one.)
+ */
+export const TABLES_PER_ADDRESS_WHEN_BUSY = 4;
 
 export interface ManagerOptions extends Omit<RoomDeps, 'seed'> {
   maxPublicRooms: number;
@@ -21,7 +29,7 @@ export interface ManagerOptions extends Omit<RoomDeps, 'seed'> {
   slot?: Slot;
 }
 
-export type RoomLookup = { ok: true; room: Room } | { ok: false; code: 'capacity' | 'not-found' | 'room-full'; message: string };
+export type RoomLookup = { ok: true; room: Room } | { ok: false; code: 'capacity' | 'not-found' | 'room-full' | 'rate-limited'; message: string };
 
 export class RoomManager {
   readonly rooms = new Map<string, Room>();
@@ -30,7 +38,12 @@ export class RoomManager {
   /** A newer copy of the server has taken over: finish the games here, but start no new ones. */
   draining = false;
 
-  constructor(private opts: ManagerOptions) {}
+  /** Puzzles started from each (scrambled) address, over the last hour, at every table. */
+  private puzzleStarts = new WindowCounter(3_600_000);
+
+  constructor(private opts: ManagerOptions) {
+    opts.puzzleStartsFrom = this.puzzleStarts;
+  }
 
   count(kind: RoomKind) {
     let n = 0;
@@ -38,8 +51,8 @@ export class RoomManager {
     return n;
   }
 
-  /** Find the room a hello asks for, creating one when allowed. */
-  resolve(req: RoomRequest, session: string): RoomLookup {
+  /** Find the room a hello asks for, creating one when allowed. `from` is their scrambled address. */
+  resolve(req: RoomRequest, session: string, from?: string): RoomLookup {
     if (req.kind === 'private') {
       const room = this.rooms.get(normalizeRoomCode(req.code));
       if (!room || room.kind !== 'private') return { ok: false, code: 'not-found', message: 'That room has closed or the code is wrong.' };
@@ -59,16 +72,20 @@ export class RoomManager {
       return this.create('public', game);
     }
     if (req.game && !canPlayPrivately(req.game)) return { ok: false, code: 'not-found', message: 'That game isn’t available right now.' };
-    return this.create('private', req.game);
+    return this.create('private', req.game, from);
   }
 
-  create(kind: RoomKind, game?: GameId): RoomLookup {
+  create(kind: RoomKind, game?: GameId, from?: string): RoomLookup {
     if (this.draining) return { ok: false, code: 'capacity', message: 'The game was just updated. Try again.' };
     const limit = kind === 'public' ? this.opts.maxPublicRooms : this.opts.maxPrivateRooms;
     if (this.count(kind) >= limit) {
       this.rejectedAtCapacity++;
       this.opts.log.event('room_rejected_capacity', { roomKind: kind });
       return { ok: false, code: 'capacity', message: 'Try again later.' };
+    }
+    if (kind === 'private' && from && this.count(kind) >= limit / 2 && this.startedFrom(from) >= TABLES_PER_ADDRESS_WHEN_BUSY) {
+      this.opts.log.event('room_rejected_address', { roomKind: kind });
+      return { ok: false, code: 'rate-limited', message: 'There are several tables open from your internet connection. Use one of those, or try again in a minute.' };
     }
     let code = '';
     do {
@@ -77,12 +94,21 @@ export class RoomManager {
       for (let i = 0; i < ROOM_CODE_LENGTH; i++) code += ROOM_CODE_ALPHABET[randomInt(ROOM_CODE_ALPHABET.length)];
     } while (this.rooms.has(code) || (this.opts.slot && slotOfCode(code) !== this.opts.slot));
     const room = new Room(code, kind, this.opts, game);
+    room.startedFrom = from ?? null;
     this.rooms.set(code, room);
     return { ok: true, room };
   }
 
+  private startedFrom(from: string) {
+    let n = 0;
+    for (const r of this.rooms.values()) if (r.kind === 'private' && r.startedFrom === from) n++;
+    return n;
+  }
+
   /** Run per-second housekeeping: reservation expiry, and closing empty or idle rooms. */
   housekeeping() {
+    // (On a timer: nobody's address is held much past the hour, as the privacy page says.)
+    this.puzzleStarts.sweep(this.opts.now());
     for (const [code, room] of this.rooms) {
       let close: false | 'empty' | 'idle';
       try {

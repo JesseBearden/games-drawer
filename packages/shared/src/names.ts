@@ -98,6 +98,43 @@ export function freshName(taken: Set<string>, rng?: IntSource): string {
 }
 
 /**
+ * Characters that show as nothing: the invisible fillers (Hangul's, Khmer's, the joiners) and
+ * Braille's blank. (Not the two selectors that make a heart an emoji heart.)
+ */
+export const SHOWS_NOTHING = /\u2800|(?![\uFE0E\uFE0F])\p{Default_Ignorable_Code_Point}/gu;
+
+/** Letters from other alphabets that look just like an English one. */
+const LOOKS_LIKE = new Map<string, string>();
+for (const [theirs, english] of [
+  ['АВЕЅІЈКМНОРСТУХԚԜ', 'ABESIJKMHOPCTYXQW'], // Cyrillic capitals
+  ['аеѕіјорсухһԁԛԝ', 'aesijopcyxhdqw'], // Cyrillic
+  ['ΑΒΕΖΗΙΚΜΝΟΡΤΥΧ', 'ABEZHIKMNOPTYX'], // Greek capitals
+  ['αικνορυχ', 'aiknopux'], // Greek
+  ['ıɪɑɡ', 'iiag'], // Latin's own
+] as const) {
+  const to = [...english];
+  [...theirs].forEach((c, i) => LOOKS_LIKE.set(c, to[i]));
+}
+
+/** The text with each of those letters written as the English one it looks like. */
+export function asEnglishLetters(text: string): string {
+  return [...text].map((c) => LOOKS_LIKE.get(c) ?? c).join('');
+}
+
+/** What two names share when they can't be told apart at a glance. */
+export function nameKey(name: string): string {
+  const plain = name.normalize('NFKC').replace(SHOWS_NOTHING, '').replace(/[\uFE0E\uFE0F]/g, '');
+  return asEnglishLetters(plain).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Names that would pass for the site itself. */
+const RESERVED = new Set(['gamesdrawer', 'admin', 'administrator', 'moderator']);
+
+export function isReservedName(name: string): boolean {
+  return RESERVED.has(nameKey(name).replace(/[^a-z0-9]/g, ''));
+}
+
+/**
  * Make user text safe to show: NFC-normalise, turn control characters (newlines, tabs) into
  * spaces, drop other invisible characters (zero-width, bidi overrides, private use), cap
  * stacked accents at two per character, collapse whitespace and cap the length (in code
@@ -109,25 +146,29 @@ export function cleanText(raw: string, maxLength: number): string {
     .replace(/\p{Cc}/gu, ' ')
     // \p{Cf} format, \p{Co} private use, \p{Cn} unassigned, \p{Cs} lone surrogates
     .replace(/[\p{Cf}\p{Co}\p{Cn}\p{Cs}]/gu, '')
+    .replace(SHOWS_NOTHING, '')
     .replace(/(\p{M}{2})\p{M}+/gu, '$1')
     .replace(/\s+/g, ' ')
     .trim();
   return [...s].slice(0, maxLength).join('').trim();
 }
 
-/** Clean a player name. Returns '' if nothing is left. */
+/** Clean a player name. Returns '' if nothing readable is left: no letter, number or emoji. */
 export function cleanName(raw: string): string {
-  return cleanText(raw, MAX_NAME_LENGTH);
+  // (An emoji's own selector stays. No lookbehind: iPhones before 16.4 can't read one.)
+  const bare = raw.replace(/(\p{Extended_Pictographic}[\uFE0E\uFE0F])|[\uFE0E\uFE0F]/gu, (_, emoji?: string) => emoji ?? '');
+  const name = cleanText(bare, MAX_NAME_LENGTH);
+  return /[\p{L}\p{N}\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(name) ? name : '';
 }
 
-/** Append " 2", " 3"... so names are unique within a room. */
+/** Append " 2", " 3"... so no two names in a room are the same, or look it (nameKey). */
 export function uniqueName(name: string, taken: Iterable<string>): string {
-  const set = new Set([...taken].map((n) => n.toLowerCase()));
-  if (!set.has(name.toLowerCase())) return name;
+  const set = new Set([...taken].map(nameKey));
+  if (!set.has(nameKey(name))) return name;
   for (let i = 2; i < 100; i++) {
     const suffix = ` ${i}`;
     const candidate = name.slice(0, MAX_NAME_LENGTH - suffix.length) + suffix;
-    if (!set.has(candidate.toLowerCase())) return candidate;
+    if (!set.has(nameKey(candidate))) return candidate;
   }
   return name;
 }

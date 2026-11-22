@@ -57,8 +57,8 @@ describe('names', () => {
 
   it('cleans invisible characters out of names', () => {
     const { mgr } = setup();
-    const a = join(mgr, 'session-aaaa', `Ad${String.fromCodePoint(0x200b)}min${String.fromCodePoint(0x202e)}`);
-    expect(a.name).toBe('Admin');
+    const a = join(mgr, 'session-aaaa', `Ad${String.fromCodePoint(0x200b)}am${String.fromCodePoint(0x202e)}`);
+    expect(a.name).toBe('Adam');
   });
 
   it('limits renames to one per cooldown and never broadcasts the rejected ones', () => {

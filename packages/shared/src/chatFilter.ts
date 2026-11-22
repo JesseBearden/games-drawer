@@ -5,6 +5,7 @@
  * Words come from the `obscenity` library's English list, which sees through capitals,
  * leetspeak ("sh1t"), stretched letters and accents. On top of that:
  * - spaced-out spellings ("s h i t") are joined up and checked too;
+ * - so are words written with accents, look-alike letters, or punctuation inside them;
  * - slurs are blocked in every room, whatever its setting;
  * - EXTRA_BLOCKED words are blocked everywhere as well;
  * - ALLOWED_WORDS are ordinary words that happen to contain a blocked one ("cockpit").
@@ -13,6 +14,7 @@
  * 'block' doesn't send the message. Public rooms always use 'block'.
  */
 import { asteriskCensorStrategy, DataSet, englishDataset, englishRecommendedTransformers, RegExpMatcher, TextCensor } from 'obscenity';
+import { asEnglishLetters, SHOWS_NOTHING } from './names';
 
 export type ChatFilterMode = 'none' | 'hide' | 'block';
 export const CHAT_FILTER_MODES: ChatFilterMode[] = ['none', 'hide', 'block'];
@@ -91,6 +93,45 @@ export function joinSpacedLetters(text: string): string {
   return out.join(' ');
 }
 
+/**
+ * A message with disguises taken off: accents, blank characters, and (in words that are partly
+ * English) letters from other alphabets that look English. Words wholly in another alphabet are
+ * left alone, or ordinary Russian and Greek would read as English nonsense.
+ */
+function undisguise(text: string): string {
+  return text
+    .normalize('NFKD')
+    .replace(SHOWS_NOTHING, '')
+    .replace(/\p{M}/gu, '')
+    .split(' ')
+    .map((word) => (/[a-z]/i.test(word) ? asEnglishLetters(word) : word))
+    .join(' ');
+}
+
+/** "don't", "he'll": the apostrophe belongs there. */
+const CONTRACTION = /^(\p{L}+n['’]t|\p{L}+['’](re|ll|s|d|ve|m))$/iu;
+/** What can follow a caught word and still be that word. */
+const WORD_ENDING = /^(s|z|es|ed|er|ers|in|ing|y|ty|head|heads|hole|holes|face)?$/i;
+
+/**
+ * A word that's only a swear word once the punctuation inside it is taken out. The match has to
+ * be the whole word: "push,it" and "this.hit" run two ordinary words together and are fine.
+ */
+function punctuatedMatch(m: RegExpMatcher, text: string): boolean {
+  const words: string[] = [];
+  for (const token of text.split(/\s+/)) {
+    const word = token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    if (!/[^\p{L}\p{N}]/u.test(word) || CONTRACTION.test(word)) continue;
+    words.push(word.replace(/[^\p{L}\p{N}]/gu, ''));
+  }
+  if (!words.length) return false;
+  const joined = words.join(' ');
+  return m.getAllMatches(joined).some(({ startIndex, endIndex }) => {
+    if (startIndex > 0 && joined[startIndex - 1] !== ' ') return false;
+    return WORD_ENDING.test(joined.slice(endIndex + 1).split(' ')[0]);
+  });
+}
+
 function matcher(keep: (word: string) => boolean) {
   const data = new DataSet<{ originalWord: string }>().addAll(englishDataset).removePhrasesIf((p) => !keep(p.metadata?.originalWord ?? ''));
   const built = data.build();
@@ -120,7 +161,10 @@ export function checkChat(raw: string, mode: ChatFilterMode, extraBlocked: strin
   if ([...text].length > MAX_CHAT_LENGTH) return { ok: false, reason: 'too-long' };
   const { all, slurs: slurMatcher } = getMatchers();
   const spaced = joinSpacedLetters(text);
-  if (slurMatcher.hasMatch(text) || slurMatcher.hasMatch(spaced)) return { ok: false, reason: 'slur' };
+  const plain = undisguise(text);
+  /** Caught only with the disguise off, so it can't be starred out. */
+  const disguised = (m: RegExpMatcher, as: string) => (as !== text && (m.hasMatch(as) || m.hasMatch(joinSpacedLetters(as)))) || punctuatedMatch(m, as);
+  if (slurMatcher.hasMatch(text) || slurMatcher.hasMatch(spaced) || disguised(slurMatcher, plain)) return { ok: false, reason: 'slur' };
   const extra = [...EXTRA_BLOCKED, ...extraBlocked].map(normalizeForFilter).filter(Boolean);
   if (extra.length) {
     const norm = normalizeForFilter(text);
@@ -128,10 +172,10 @@ export function checkChat(raw: string, mode: ChatFilterMode, extraBlocked: strin
   }
   if (mode === 'none') return { ok: true, text, censored: false };
   const matches = all.getAllMatches(text, true);
-  if (mode === 'block') return matches.length || all.hasMatch(spaced) ? { ok: false, reason: 'swearing' } : { ok: true, text, censored: false };
+  if (mode === 'block') return matches.length || all.hasMatch(spaced) || disguised(all, plain) ? { ok: false, reason: 'swearing' } : { ok: true, text, censored: false };
   // 'hide': star out what we can pinpoint. Spaced-out tricks can't be pinpointed, so they're blocked.
   const out = matches.length ? censor.applyTo(text, matches) : text;
-  if (all.hasMatch(joinSpacedLetters(out))) return { ok: false, reason: 'swearing' };
+  if (all.hasMatch(joinSpacedLetters(out)) || disguised(all, undisguise(out))) return { ok: false, reason: 'swearing' };
   return { ok: true, text: out, censored: out !== text };
 }
 

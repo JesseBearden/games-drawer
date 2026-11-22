@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { isAdminPasswordHash } from './adminAuth';
 import { FileLog, pruneLogs } from './eventlog';
 import { pretendChecker, RekognitionChecker } from './photoCheck';
-import { startGameServer, type Limits } from './server';
+import { startGameServer } from './server';
+import { readSettings } from './settings';
 import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from '@tank/shared';
 
 /**
@@ -89,11 +90,11 @@ if (env.GAME_CONFIG) {
     process.exit(1);
   }
 }
-let limits: Partial<Limits> = {};
+let settings: ReturnType<typeof readSettings>;
 try {
-  limits = env.LIMITS ? JSON.parse(env.LIMITS) : {};
-} catch {
-  console.error('LIMITS is not valid JSON.');
+  settings = readSettings(env);
+} catch (err) {
+  console.error((err as Error).message);
   process.exit(1);
 }
 const slot = env.SLOT || undefined;
@@ -106,7 +107,7 @@ if (turnUrls.length && !env.TURN_SECRET) {
   console.error('TURN_URLS is set but TURN_SECRET is not.');
   process.exit(1);
 }
-const turn = turnUrls.length ? { urls: turnUrls, secret: env.TURN_SECRET!, ttlSeconds: Number(env.TURN_TTL_SECONDS ?? 86_400) } : undefined;
+const turn = turnUrls.length ? { urls: turnUrls, secret: env.TURN_SECRET!, ttlSeconds: settings.turnTtlSeconds } : undefined;
 if (turn) console.log(`Voice relay: ${turnUrls.join(', ')}`);
 // Your own photos for a jigsaw are checked by Amazon Rekognition on AWS. Elsewhere there's no
 // AWS, so on your own computer (and in tests) a pretend check lets them through; a production
@@ -119,7 +120,7 @@ if (!['rekognition', 'pretend', 'off'].includes(photoCheckMode)) {
 const photoCheck =
   photoCheckMode === 'rekognition' ? new RekognitionChecker({ region: env.PHOTO_CHECK_REGION || env.AWS_REGION || 'us-east-2' }) : photoCheckMode === 'pretend' ? pretendChecker : null;
 console.log(`Photo uploads: ${photoCheck ? `on (${photoCheck.name} check)` : 'off'}`);
-const port = Number(env.GAME_PORT ?? 8787);
+const { port, limits } = settings;
 const server = await startGameServer({
   port,
   host: env.HOST ?? '0.0.0.0',
@@ -127,16 +128,16 @@ const server = await startGameServer({
   clientDist: env.CLIENT_DIST ?? (bundled ? path.join(root, 'client') : path.join(root, 'packages/client/dist')),
   log,
   blocklistPath: env.BLOCKLIST_PATH ?? (bundled ? path.join(root, 'blocklist.txt') : path.join(root, 'packages/server/blocklist.txt')),
-  emptyRoomMs: Number(env.EMPTY_ROOM_MS ?? 60_000),
-  idleRoomMs: env.IDLE_ROOM_MS ? Number(env.IDLE_ROOM_MS) : undefined,
-  publicReclaimMs: Number(env.RECLAIM_MS ?? 60_000),
-  maxPublicRooms: Number(env.MAX_PUBLIC_ROOMS ?? 10),
-  maxPrivateRooms: Number(env.MAX_PRIVATE_ROOMS ?? 50),
+  emptyRoomMs: settings.emptyRoomMs,
+  idleRoomMs: settings.idleRoomMs,
+  publicReclaimMs: settings.publicReclaimMs,
+  maxPublicRooms: settings.maxPublicRooms,
+  maxPrivateRooms: settings.maxPrivateRooms,
   sessionSecret: env.SESSION_SECRET,
   allowedOrigins: env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean) : null,
   trustProxy: env.TRUST_PROXY === '1',
   statsToken: env.STATS_TOKEN,
-  iceServers: env.VOICE_ICE_SERVERS ? JSON.parse(env.VOICE_ICE_SERVERS) : undefined,
+  iceServers: settings.iceServers,
   turn,
   gameConfig,
   slot,
@@ -180,7 +181,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => void sto
 if (process.platform !== 'win32') {
   process.on('SIGUSR2', async () => {
     console.log('Draining: finishing games in progress, starting no new ones.');
-    await server.drain(Number(env.DRAIN_MAX_MS ?? 3 * 60 * 60 * 1000));
+    await server.drain(settings.drainMaxMs);
     console.log('Drained.');
     await stop();
   });

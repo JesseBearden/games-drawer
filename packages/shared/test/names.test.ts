@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { freshBotName, freshName, MAX_NAME_LENGTH, NAME_SNACKS, NAME_TITLES, randomName, Rng, ROBOT_NAMES } from '../src/index';
+import { cleanName, cleanText, freshBotName, freshName, isReservedName, MAX_NAME_LENGTH, NAME_SNACKS, NAME_TITLES, randomName, Rng, ROBOT_NAMES, uniqueName } from '../src/index';
 
 describe('player names', () => {
   it('are a title and a snack, and always fit the length limit', () => {
@@ -25,6 +25,25 @@ describe('player names', () => {
       expect(taken.has(n.toLowerCase())).toBe(false);
       taken.add(n.toLowerCase());
     }
+  });
+
+  it('a name that shows as nothing is no name', () => {
+    for (const blank of ['\u3164', '\u2800', '\uFFA0', '\u115F\u1160', '\u034F', '\uFE0F', '...']) expect(cleanName(blank), JSON.stringify(blank)).toBe('');
+    for (const padded of ['Mom\u3164', 'Mom\uFE0F', 'Mo\u034Fm', '\u2800Mom']) expect(cleanName(padded), JSON.stringify(padded)).toBe('Mom');
+    for (const real of ['Łukasz', 'Jose\u0301', 'R2-D2', '李', 'राम', '김민', 'Mike B', '\u2764\uFE0F', '🌻']) expect(cleanName(real), real).toBe(real.normalize('NFC'));
+    // An emoji in a message keeps the mark that makes it one.
+    expect(cleanText('love you \u2764\uFE0F', 50)).toBe('love you \u2764\uFE0F');
+  });
+
+  it('a name that looks like one already here gets a number', () => {
+    for (const twin of ['mom', 'M\u043Em', '\u039Com', '\uFF2D\uFF4F\uFF4D']) expect(uniqueName(twin, ['Mom']), twin).toBe(`${twin} 2`);
+    expect(uniqueName('Tom', ['Mom'])).toBe('Tom');
+    expect(uniqueName('Вова', ['Вера'])).toBe('Вова');
+  });
+
+  it('nobody can be called the site', () => {
+    for (const n of ['Games Drawer', 'ADMIN', '\u0410dmin', 'moderator']) expect(isReservedName(n), n).toBe(true);
+    for (const n of ['Adam', 'Drew', 'Captain Pancake']) expect(isReservedName(n), n).toBe(false);
   });
 
   it('computer players get made-up robot names, never two the same at a table', () => {

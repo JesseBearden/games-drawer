@@ -53,6 +53,14 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
       whole strip stops at the edge, and nothing jumps when you let go.
 - [ ] **Dominoes, winning by going out**: the winner's total includes the points it says they got
       for the tiles left.
+- [ ] **The admin page still signs in** on your phone and computer (the form now only works from
+      the page itself; only Chrome has been tried).
+- [ ] **Odd names**: a name of only dots asks for a letter (emoji are fine), 'Admin' gets a made-up name, and a
+      name that looks like someone's already there gets a 2. Names with accents still work.
+- [ ] **The chat filter** still lets ordinary messages through (tell Claude any harmless one it
+      stops: it now looks inside words with punctuation or accents).
+- [ ] **The privacy page**'s Logs line has one new sentence, about the address a table was
+      started from. Read it and see that you're happy with it.
 
 ## Your decisions from the review (new)
 

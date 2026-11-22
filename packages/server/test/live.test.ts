@@ -304,6 +304,24 @@ describe('live server: abuse limits', () => {
     }
   });
 
+  it('a replaced connection that never answers gives its place back in a few seconds', async () => {
+    const s = await startWith({ maxConnectionsPerIp: 2 });
+    try {
+      const old = await joined(s.port, { kind: 'create-private' });
+      // The phone changed networks: that socket hears nothing more, and answers nothing.
+      (old.c.ws as unknown as { _socket: { pause(): void } })._socket.pause();
+      const back = await joined(s.port, { kind: 'private', code: old.w.room.code }, old.w.session);
+      await new Promise((r) => setTimeout(r, 2500));
+      const next = connect(s.port);
+      await next.opened;
+      next.ws.close();
+      back.c.ws.close();
+      old.c.ws.terminate();
+    } finally {
+      await s.close();
+    }
+  }, 10_000);
+
   it('closes on oversized frames', async () => {
     const s = await startWith();
     try {

@@ -62,6 +62,12 @@ export const DEFAULT_LIMITS: Limits = {
   heartbeatMs: 15_000,
 };
 
+/**
+ * A connection the server closes has this long to answer before it's simply dropped. A phone that
+ * changed networks never answers, and held one of its household's places for half a minute.
+ */
+const CLOSE_WAIT_MS = 2000;
+
 /** Closing waits this long at most for the last puzzle saves to reach the shared disk. */
 const SAVES_FINISH_MS = 5000;
 
@@ -175,6 +181,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     logDirs: o.adminLogDirs ?? [],
     trustProxy: o.trustProxy,
     secureCookie: o.production,
+    allowedOrigins: o.allowedOrigins,
     log: o.log,
   });
 
@@ -327,16 +334,17 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       // Once the server closes a connection (a newer tab replaced it, the table closed), nothing
       // more from it counts: after "replaced", the old tab's messages would act as the new tab
       // (same session), and its "leave" would take the new tab off the table.
-      close: (code, reason) => {
-        closing = true;
-        ws.close(code, reason);
-      },
+      close: (code, reason) => hangUp(code, reason),
+    };
+    const hangUp = (code?: number, reason?: string) => {
+      closing = true;
+      ws.close(code, reason);
+      setTimeout(() => ws.terminate(), CLOSE_WAIT_MS).unref();
     };
     const fail = (code: ErrorCode, message: string) => {
       if (closing) return;
-      closing = true;
       conn.send(JSON.stringify({ t: 'error', code, message } satisfies ServerMessage));
-      ws.close(4004, code);
+      hangUp(4004, code);
     };
     const helloTimer = setTimeout(() => {
       if (!room) conn.close(4002, 'no hello');
@@ -395,7 +403,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
               return fail('rate-limited', "You've made a lot of rooms. Try again in a few minutes.");
             }
           }
-          const lookup = manager.resolve(req, session);
+          const lookup = manager.resolve(req, session, conn.net);
           if (!lookup.ok) return fail(lookup.code, lookup.message);
           if (req.kind === 'create-private') privateCreates.add(ip, now);
           conn.batches = msg.batch === true;
