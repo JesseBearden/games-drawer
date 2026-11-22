@@ -216,7 +216,10 @@ One Fargate task: ARM, **0.5 vCPU and 1 GB**, platform 1.4 or later, with a publ
   - Runs as uid 1500, the owner of the EFS files.
   - Serves HTTPS itself on 8443. No Caddy.
   - Bundled server, start to healthy: 133–145 ms on the development PC (checked).
-- **`coturn` container:** today's `turnserver.conf`. It waits for the game container to write
+- **`coturn` container:** today's `turnserver.conf`. That isn't safe by itself: on the boxes the
+  relay also has a host firewall and limits ([relay-firewall.sh](../deploy/relay-firewall.sh),
+  setup.sh), and Fargate allows no host firewall, so that needs its own answer, tested, before
+  any task runs a relay. It waits for the game container to write
   the task's public IP, which the controller returns on "ready". The stock image's own IP
   detection asks an outside service, which the privacy page rules out.
 - **Firewall:** 8443 only from CloudFront's origin-facing prefix list, 3478 and the relay's port
@@ -450,13 +453,17 @@ One relayed stream is 7.4 KB/s on the wire and 51 packets a second. The three-pe
 column is worked out from that. The other figures are measured.
 
 **The cap counts reservations, not audio.** coturn 4.6.1 sets aside `max-bps` from `bps-capacity`
-for each slot as it opens (checked in its source). At 16,000 and 300,000 that is **19 slots in
-all**. A slot is only given back when its connection closes: restarting ICE doesn't do it.
+for each slot as it opens (checked in its source). At 16,000 and 300,000 that was 19 slots. The
+boxes have dropped both settings since (2026-11-21): `total-quota` makes it **40 slots in all**,
+and the firewall caps each slot's bytes. A slot is only given back when its connection closes:
+restarting ICE doesn't do it.
 
 A server taking 150 tables would need about 180 slots with 20% of links relayed and 900 with all
 of them, each with a port. So, before phase 5:
 
-1. Size `bps-capacity`, `total-quota` and the port range in slots, from the admission limit.
+1. Size `total-quota` and the port range in slots, from the admission limit. (Not `bps-capacity`:
+   the boxes stopped using coturn's speed caps on 2026-11-21, which drop long calls, and cap each
+   slot in the firewall instead. Fargate needs another way.)
 2. Admit tables by free slots as well as CPU.
 3. Cap money by relayed bytes in the controller, since a slot limit that large is no cost ceiling.
 

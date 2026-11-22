@@ -72,6 +72,13 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     expect(rules.some((r) => r.FromPort === 22 || r.FromPort === 443)).toBe(false);
   });
 
+  it('lets a box make the shared secrets, never replace them', () => {
+    const statements = Object.values(t.findResources('AWS::IAM::Policy')).flatMap((p) => p.Properties.PolicyDocument.Statement);
+    const puts = statements.filter((s) => JSON.stringify(s.Action).includes('ssm:PutParameter'));
+    expect(puts).toHaveLength(1);
+    expect(puts[0].Condition).toEqual({ StringEquals: { 'ssm:Overwrite': 'false' } });
+  });
+
   it('keeps release bundles private', () => {
     t.hasResourceProperties('AWS::S3::Bucket', {
       PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true },

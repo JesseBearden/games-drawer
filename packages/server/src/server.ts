@@ -310,6 +310,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     const bucket = new TokenBucket(limits.messageRate, limits.messageBurst, Date.now());
 
     const conn: Conn = {
+      net: hashIp(ip).slice(0, 8),
       send: (data) => {
         if (ws.readyState !== ws.OPEN) return;
         if (ws.bufferedAmount > limits.maxBufferedBytes) {

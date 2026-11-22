@@ -138,7 +138,8 @@ npx tsx deploy/fleet.ts promote <commit>
   CloudFront and our other boxes can reach it. The routes (`/etc/caddy/games-drawer-routes.caddy`)
   come from the fleet map.
 - **coturn** ([turnserver.conf](turnserver.conf)), the voice relay for players whose networks
-  block direct voice connections. Each box runs its own, on its own address.
+  block direct voice connections. Each box runs its own, on its own address. It starts only once
+  its config is written, and behind its own firewall ([relay-firewall.sh](relay-firewall.sh)).
 - **The game server**, as a systemd service ([games-drawer@.service](games-drawer@.service))
   running as the unprivileged `games` user (the same user id on every box, since they share the
   disk), locked down to writing only the shared disk.
@@ -228,11 +229,43 @@ to come up and a direct one holds no room on the relay.
 link through the relay. They should hear each other, and the admin page's Voice section counts
 those links as through the relay.
 
+**Firewall:** [relay-firewall.sh](relay-firewall.sh) (nftables, tables `inet gd_relay` and
+`netdev gd_relay_bill`) runs before
+every start of coturn (setup, reboots, package updates); if it fails, coturn stays off and setup
+fails. Three kinds of sender reach the relay, each with limits of its own:
+
+- **members**, who coturn gave a slot, so calls already up don't share a limit with anyone;
+- **players**, whose address has a real connection to this box's web server, in their own lane;
+- **everyone else**, in a smaller lane, only to ask for their address or a slot.
+
+Out of the relay: only other relayed links' audio ports on this box, nothing to private addresses
+or over IPv6, and no new TCP connections. Three rules for changing it: limits stay on the way in
+(a blocked send makes coturn end that player's call); don't load it while the relay runs (that
+forgets who has a slot, so restart coturn instead); and don't take the private half out of
+`external-ip` (two relayed ends on one box meet through it).
+
+**Boxed in:** setup.sh also gives coturn a memory limit (it restarts by itself if it gets there),
+less CPU than the game when both want it, no privileges, nowhere to write but its database, and a
+journal of its own capped at 50 MB and 30 days.
+
+```bash
+sudo nft list table inet gd_relay                          # the rules, with what each has dropped
+sudo nft list table netdev gd_relay_bill                   # the spending cap
+sudo journalctl --namespace gd-relay -u coturn             # the relay's log
+systemctl show coturn -p MemoryCurrent -p MemoryPeak -p NRestarts
+```
+
 **Limits:** the relay refuses to forward to private and internal addresses (including the AWS
-metadata service), allows 16 KB/s per slot (`max-bps`) and 300 KB/s in total per box
-(`bps-capacity`). coturn sets the 16 KB/s aside as each slot opens, used or not, so that is **19
-slots per box**: 19 relayed links, or about three tables of four where every link needs the
-relay. A link takes two slots if UDP is blocked at the answering end. Both numbers are in
-[turnserver.conf](turnserver.conf); change them there and deploy (setup.sh re-renders the file
-and restarts coturn). The admin page's Voice section shows how often voice needs the relay.
-Networks that only allow port 443 aren't covered; that would need a second address for the relay.
+metadata service). It has **40 slots per box** (`total-quota`): 40 relayed links, or six tables of
+four where every link needs the relay (a lot more where only some do). A link takes two slots if
+Firefox makes it, or if UDP is blocked at the answering end. One household holds at most 18
+(`user-quota`). Counted where it leaves the box (the firewall), each slot sends at most 14 KB/s
+each way and all of them 620 KB/s, so flat out all month is about 1.6 TB (about $140; the kill
+switch stops the boxes at $65). **Don't use coturn's `max-bps` or `bps-capacity` for that:** with
+them on it stops answering a long call's renewals, and the call drops. The voice code asks every
+browser for mono at 32 kbit/s, which those numbers allow for (voice.ts `speechBitrate`).
+When all are taken, further links retry each minute and
+the games carry on. More slots means a higher spending ceiling: change the numbers in
+[turnserver.conf](turnserver.conf) and deploy. The admin page's Voice section shows how often
+voice needs the relay. Public games have no voice, so they get no relay credentials. Networks
+that only allow port 443 aren't covered; that would need a second address for the relay.

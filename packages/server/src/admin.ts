@@ -33,6 +33,8 @@ export function createAdmin(o: AdminOptions) {
   const now = o.now ?? Date.now;
   const failsPerIp = new WindowCounter(TRY_WINDOW_MS);
   const failsTotal = new WindowCounter(TRY_WINDOW_MS);
+  // Nobody’s address is held much past its window (the privacy page says so).
+  setInterval(() => failsPerIp.sweep(now()), TRY_WINDOW_MS).unref();
   // Tries still being checked count as wrong until they're known to be right, so a burst of
   // tries sent all at once can't slip past the limits while the first ones are being checked.
   const checking = new Map<string, number>();

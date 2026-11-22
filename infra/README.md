@@ -54,8 +54,8 @@ for the first 100 GB a month across AWS, then $0.09/GB.)
 - **No surprise CPU bills:** boxes use "standard" CPU credits, which can't bill extra.
 - **Bandwidth caps in the software:** at most 10 public and 50 private rooms of 4 at once per box
   (`MAX_PUBLIC_ROOMS` and `MAX_PRIVATE_ROOMS` in [deploy/setup.sh](../deploy/setup.sh)), and
-  the voice relay is capped at 300 KB/s per box (`bps-capacity` in
-  [deploy/turnserver.conf](../deploy/turnserver.conf)). A table closes a minute after its last
+  the voice relay is capped at 40 slots and 620 KB/s out per box ([deploy/turnserver.conf](../deploy/turnserver.conf),
+  [deploy/relay-firewall.sh](../deploy/relay-firewall.sh)). A table closes a minute after its last
   person leaves, and after 10 minutes with nobody playing or talking (`IDLE_ROOM_MS`), with a
   minute's warning.
 - Change the amounts in [config.json](config.json).

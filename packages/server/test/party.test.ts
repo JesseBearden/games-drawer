@@ -955,6 +955,33 @@ describe('voice relay credentials', () => {
     expect(JSON.stringify(a.conn.sent)).not.toContain('shh');
   });
 
+  it('one household shares one name for the relay’s slot limit, however often it joins', () => {
+    const { mgr } = setup({ turn: { urls: ['turn:turn.example.com:3478'], secret: 'shh', ttlSeconds: 600 } });
+    const pass = (session: string, net: string) => {
+      const lookup = mgr.resolve({ kind: 'create-private' }, session);
+      if (!lookup.ok) throw new Error(lookup.code);
+      const conn = Object.assign(new FakeConn(), { net });
+      const joined = lookup.room.join(conn, session, session.slice(8), 'desktop');
+      if (!joined.ok) throw new Error(joined.code);
+      lookup.room.sendWelcome(session, joined);
+      return conn.of('welcome')[0].voice.iceServers.at(-1)!.username!.split(':')[1];
+    };
+    expect(pass('session-aaaa', '0a1b2c3d')).toBe('0a1b2c3d');
+    expect(pass('session-bbbb', '0a1b2c3d')).toBe('0a1b2c3d');
+    expect(pass('session-cccc', 'ffffffff')).toBe('ffffffff');
+  });
+
+  it('a public game has no voice, so no servers and no pass', () => {
+    const { mgr } = setup({ iceServers: [{ urls: 'stun:stun.example.com:3478' }], turn: { urls: ['turn:turn.example.com:3478'], secret: 'shh', ttlSeconds: 600 } });
+    const lookup = mgr.resolve({ kind: 'public' }, 'session-aaaa');
+    if (!lookup.ok) throw new Error(lookup.code);
+    const conn = new FakeConn();
+    const joined = lookup.room.join(conn, 'session-aaaa', 'Liz', 'phone');
+    if (!joined.ok) throw new Error(joined.code);
+    lookup.room.sendWelcome('session-aaaa', joined);
+    expect(conn.of('welcome')[0].voice).toEqual({ enabled: false, iceServers: [] });
+  });
+
   it('logs a browser’s device number only scrambled, so the admin page can count devices', () => {
     const { mgr, log } = setup();
     const lookup = mgr.resolve({ kind: 'create-private' }, 'session-aaaa');

@@ -145,7 +145,8 @@ export class GamesDrawerStack extends cdk.Stack {
     // can't create encrypted parameters, and the hash must stay out of the public repo), and the
     // boxes' shared secrets, which the first box makes.
     role.addToPolicy(new iam.PolicyStatement({ actions: ['ssm:GetParameter'], resources: [param('admin-password-hash'), param('secrets')] }));
-    role.addToPolicy(new iam.PolicyStatement({ actions: ['ssm:PutParameter'], resources: [param('secrets')] }));
+    // Making the secrets, never replacing them.
+    role.addToPolicy(new iam.PolicyStatement({ actions: ['ssm:PutParameter'], resources: [param('secrets')], conditions: { StringEquals: { 'ssm:Overwrite': 'false' } } }));
     // The automatic check for photos people add to a jigsaw (Rekognition's moderation labels; the
     // photo goes in the request, nothing is stored in S3). The action has no resource to name.
     role.addToPolicy(new iam.PolicyStatement({ actions: ['rekognition:DetectModerationLabels'], resources: ['*'] }));

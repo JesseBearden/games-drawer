@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseClientMessage, type ClientMessage, type VoiceSettings } from '@tank/shared';
-import { Voice } from '../src/voice';
+import { speechBitrate, Voice } from '../src/voice';
 import { answerWaitMs, enoughStep, readAttempt, relayEnds, RETRY_MS, serversFor, STEP_WAIT_MS, withAttempt } from '../src/voiceRelay';
 
 // The real Voice, over a pretend network and relay: who can reach whom, and how many relay slots
@@ -477,6 +477,18 @@ describe('the pieces', () => {
     expect(passed.data).toEqual({ sdp: { type: 'offer', sdp } });
     expect(readAttempt(sdp)).toEqual({ attempt: { id: 'k3j9', step: 'relay' }, sdp: plain });
     expect(readAttempt(plain)).toEqual({ attempt: null, sdp: plain });
+  });
+
+  it('asks the other end’s codec for mono at 32 kbit/s, however the browser lists it', () => {
+    const sdp = (fmtp: string) => `v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 109 0\r\na=rtpmap:109 opus/48000/2\r\n${fmtp}a=rtcp-mux\r\n`;
+    const asked = 'maxaveragebitrate=32000;stereo=0';
+    const firefox = speechBitrate(sdp('a=fmtp:109 maxplaybackrate=48000;stereo=1;useinbandfec=1\r\n'));
+    expect(firefox).toBe(sdp(`a=fmtp:109 maxplaybackrate=48000;useinbandfec=1;${asked}\r\n`));
+    expect(speechBitrate(firefox)).toBe(firefox);
+    expect(speechBitrate(sdp('a=fmtp:109 minptime=10;useinbandfec=1\r\n'))).toBe(sdp(`a=fmtp:109 minptime=10;useinbandfec=1;${asked}\r\n`));
+    expect(speechBitrate(sdp(''))).toBe(sdp(`a=fmtp:109 ${asked}\r\n`));
+    const other = 'v=0\r\na=rtpmap:0 PCMU/8000\r\n';
+    expect(speechBitrate(other)).toBe(other);
   });
 
   it('reads the route however the browser reports it', () => {

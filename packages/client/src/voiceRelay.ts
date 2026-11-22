@@ -12,6 +12,9 @@ import type { VoiceSettings } from '@tank/shared';
  *           can't get out. The other side asks only if UDP can't get out for it.
  *   any     every relay route at both ends, for what's left
  *
+ * Firefox takes two slots rather than one when it makes the offer (measured in 160: it opens a
+ * second for the audio's reports, whatever it's asked). turnserver.conf allows for that.
+ *
  * Each attempt is a new RTCPeerConnection: restarting ICE on the old one doesn't give its slots
  * back, closing it does.
  */

@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-21_
+_Last updated: 2026-11-22_
 
 ## Getting set up
 
@@ -36,6 +36,30 @@ been tested).
       cellular.
 - [ ] **A controller** (if you have one handy): it wakes up on the first button press or the
       second, including after being unplugged and plugged back in.
+
+## Voice relay setup (new; needs a deploy)
+
+The relay's setup was tested on throwaway boxes (setup, reboot, attacks, and browser calls on
+the box itself), never as part of a real deploy, over the internet, or on a phone. So check these
+on the next deploy. The relay now waits only 5 seconds for a slot to be asked for, which makes a
+slow connection the one to try: a phone on one bar.
+
+- [ ] **The deploy finishes.** Setup now stops if the relay or its firewall doesn't start.
+- [ ] **Through the relay**: a table link with `?relay=1` on two phones on cell data, one of them
+      an iPhone. They hear each other, and still do after 11 minutes (the relay's slots renew
+      about every 10).
+- [ ] **Through the relay, three or more** on the same home Wi-Fi, also with `?relay=1`: everyone
+      connects, all joining at once (the relay's limits count per home: 18 slots, and how fast
+      one address may ask).
+- [ ] **Firefox and Safari voice** still sound clear (every browser now sends mono at 32 kbit/s,
+      as Chrome already did).
+- [ ] **A public Tanks game** still starts and plays as before (it has no voice, and gets no relay
+      credentials now).
+- [ ] **On the new box** (or ask Claude): `sudo nft list table inet gd_relay` lists its rules,
+      `systemctl show coturn -p MemoryMax` says 367001600, and
+      `sudo journalctl --namespace gd-relay -u coturn` shows the relay's log.
+- [ ] **After `cdk deploy`**: the next deploy still finishes (boxes may now only create the shared
+      secrets, never replace them).
 
 ## Voice asks for the relay only when it needs it (new)
 

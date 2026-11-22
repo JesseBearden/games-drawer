@@ -103,6 +103,23 @@ export const MIC_CONSTRAINTS: MediaStreamConstraints = {
   video: false,
 };
 
+/**
+ * A description as the other end sent it, asking us for mono at 32 kbit/s. That's what Chrome
+ * sends of a voice anyway. Firefox would send stereo at more than twice that, which is wasted on
+ * one mic and crowds the relay's cap on each slot (deploy/relay-firewall.sh).
+ */
+export function speechBitrate(sdp: string): string {
+  const opus = /^a=rtpmap:(\d+) opus\//im.exec(sdp)?.[1];
+  if (!opus) return sdp;
+  const ask = ['maxaveragebitrate=32000', 'stereo=0'];
+  const params = new RegExp(`^a=fmtp:${opus} ([^\\r\\n]*)`, 'm');
+  if (!params.test(sdp)) return sdp.replace(new RegExp(`^(a=rtpmap:${opus} [^\\r\\n]*)`, 'm'), `$1\r\na=fmtp:${opus} ${ask.join(';')}`);
+  return sdp.replace(params, (_, all: string) => {
+    const kept = all.split(';').map((p) => p.trim()).filter((p) => p && !/^(maxaveragebitrate|stereo)=/i.test(p));
+    return `a=fmtp:${opus} ${[...kept, ...ask].join(';')}`;
+  });
+}
+
 export class Voice {
   inVoice = false;
   selfMuted = false;
@@ -348,7 +365,7 @@ export class Voice {
       else if (!link.attempt || (attempt && attempt.id !== link.attempt.id)) return;
 
       const pc = link.pc;
-      await pc.setRemoteDescription({ type, sdp });
+      await pc.setRemoteDescription({ type, sdp: speechBitrate(sdp) });
       if (link.pc !== pc) return;
       for (const c of link.pending.splice(0)) await pc.addIceCandidate(c).catch(() => {});
       if (type !== 'offer') return;

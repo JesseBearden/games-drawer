@@ -901,10 +901,14 @@ export class Room {
    * the page can't be used to relay traffic for long.
    */
   voiceSettings(p: Member): VoiceSettings {
+    // No voice, so no servers for it, and no pass to our relay.
+    if (this.kind !== 'private') return { enabled: false, iceServers: [] };
     const iceServers = [...(this.deps.iceServers ?? [])];
     const turn = this.deps.turn;
-    if (turn && turn.urls.length) iceServers.push(turnCredentials(turn, p.alias, this.deps.now()));
-    return { enabled: this.kind === 'private', iceServers };
+    // coturn's user-quota counts by the name in the pass: the household's, so that joining again
+    // doesn't bring more slots.
+    if (turn && turn.urls.length) iceServers.push(turnCredentials(turn, p.conn?.net ?? p.alias, this.deps.now()));
+    return { enabled: true, iceServers };
   }
 
   /**

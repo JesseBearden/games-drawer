@@ -5,6 +5,8 @@ export interface Conn {
   send(data: string): void;
   /** The page asked for batches (see `hello`). */
   batches?: boolean;
+  /** Which network they came from, scrambled (the relay counts slots by it). */
+  net?: string;
   close(code?: number, reason?: string): void;
 }
 

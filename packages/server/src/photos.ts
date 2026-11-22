@@ -120,7 +120,12 @@ export function photoRoutes(o: PhotoRoutesOptions) {
   const perIp = new WindowCounter(3_600_000);
   const perTable = new WindowCounter(3_600_000);
   const perServer = new WindowCounter(86_400_000);
-  let swept = 0;
+  // Forget old counts, so memory stays bounded and nobody’s address is held much past the hour
+  // (the privacy page says so).
+  setInterval(() => {
+    const t = now();
+    for (const counts of [perIp, perTable, perServer]) counts.sweep(t);
+  }, 600_000).unref();
 
   const json = (res: ServerResponse, status: number, body: object) =>
     res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...(status === 413 && { connection: 'close' }) }).end(JSON.stringify(body));
@@ -151,13 +156,6 @@ export function photoRoutes(o: PhotoRoutesOptions) {
     if (!room || room.closed || room.kind !== 'private' || !session || !room.hasSession(session)) return refuse(res, 403, 'not-at-table');
     if (!/^image\/jpeg\b/.test(String(req.headers['content-type'] ?? ''))) return refuse(res, 415, 'not-image');
     const t = now();
-    // Forget old counts now and then, so memory stays bounded.
-    if (t - swept > 600_000) {
-      swept = t;
-      perIp.sweep(t);
-      perTable.sweep(t);
-      perServer.sweep(t);
-    }
     if (perIp.count(ip, t) >= PHOTO_LIMITS.perIpPerHour || perTable.count(code, t) >= PHOTO_LIMITS.perTablePerHour || perServer.count('all', t) >= PHOTO_LIMITS.perServerPerDay) {
       return refuse(res, 429, 'busy');
     }
