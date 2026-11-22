@@ -42,6 +42,8 @@ function table(game: GameId, batches: boolean[]) {
     maxPrivateRooms: 10,
     chatHistorySize: 10,
     randomInt: (n) => rng.int(0, n - 1),
+    // The battlefield too: on about a quarter of random ones nothing ever comes to rest.
+    ...{ seed: 7 }, // (a room option the manager passes through, though its type leaves it out)
   });
   const people = batches.map((b, i) => ({ session: `session-${i}${i}${i}${i}`, conn: new FakeConn(b) }));
   let code = '';

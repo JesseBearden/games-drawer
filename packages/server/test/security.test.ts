@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
-import { Rng, type ClientMessage, type ServerMessage } from '@tank/shared';
+import { MAX_NAME_LENGTH, Rng, TANK_BOT_NAMES, type ClientMessage, type ServerMessage } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import { clientIp, SessionSigner, TokenBucket, WindowCounter } from '../src/guard';
@@ -84,6 +84,10 @@ describe('names', () => {
     expect(b.name).toBe(botName);
     const names = [...a.room.tanks!.world.tanks.values()].map((t) => t.name.toLowerCase());
     expect(names.filter((n) => n === botName.toLowerCase())).toHaveLength(1);
+  });
+
+  it('every bot name is one a person could type', () => {
+    for (const name of TANK_BOT_NAMES) expect(name.length, name).toBeLessThanOrEqual(MAX_NAME_LENGTH);
   });
 
   it('cannot take another player name exactly', () => {
