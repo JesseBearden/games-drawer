@@ -139,9 +139,19 @@ export class Fleet {
     await this.cloud.pointAt(this.frontNames(), current.publicIp);
   }
 
-  /** Tell every live box the map. */
+  /**
+   * Tell every live box the map. A retiring box that has shut down or won't answer is noted and
+   * passed over: it's on its way out, and mustn't stop a deploy or a rollback.
+   */
   private async route(boxes: Box[], map: FleetMap) {
-    for (const b of boxes) this.cloud.log((await this.cloud.run(b, `games-drawer-deploy ${b.release} route ${encode(map)}`)).trim());
+    for (const b of boxes) {
+      try {
+        this.cloud.log((await this.cloud.run(b, `games-drawer-deploy ${b.release} route ${encode(map)}`)).trim());
+      } catch (err) {
+        if (b.role !== 'retiring') throw err;
+        this.cloud.log(`Couldn't give retiring box ${b.slot} the new routes (${err instanceof Error ? err.message : err}); carrying on.`);
+      }
+    }
   }
 
   async launch(release: string): Promise<Box> {
@@ -169,7 +179,9 @@ export class Fleet {
     // command) has finished: wait for it.
     await this.cloud.run(box, 'cloud-init status --wait >/dev/null 2>&1 || true; test -x /usr/local/bin/games-drawer-deploy');
     this.cloud.log((await this.cloud.run(box, `games-drawer-deploy ${release} start ${slot} ${current?.release ?? 'none'}`)).trim());
-    const all = [...boxes, box];
+    // Booting takes minutes, and a retiring box may have finished and shut itself down meanwhile.
+    const live = new Set(this.cloud.boxes().map((b) => b.id));
+    const all = [...boxes.filter((b) => b.role !== 'retiring' || live.has(b.id)), box];
     // Staging's own name (direct) points here, and with no box taking players, so does the front
     // door (otherwise not even staging could be reached). Before the routes, so the reload they
     // cause finds the names in place when Caddy asks for certificates (direct).
@@ -226,15 +238,20 @@ export class Fleet {
     const candidate = boxes.find((b) => b.role === 'candidate' && b.release === release);
     const rest = boxes.filter((b) => b !== candidate);
     const current = currentBox(rest);
-    if (current) {
-      await this.route(rest, fleetMap(rest, [[current.slot, 100]], current.slot));
-      if (this.stagingNames().length) await this.cloud.pointAt(this.stagingNames(), current.publicIp);
+    try {
+      if (current) {
+        await this.route(rest, fleetMap(rest, [[current.slot, 100]], current.slot));
+        if (this.stagingNames().length) await this.cloud.pointAt(this.stagingNames(), current.publicIp);
+      }
+    } finally {
+      // Whatever else failed, the new box goes (never while the site's names still point at it:
+      // if that can't be checked or moved, this throws before removing it).
+      if (candidate) {
+        await this.keepFrontDoorOff([candidate], current);
+        this.cloud.terminate(candidate);
+        this.cloud.log(`Rolled back: box ${candidate.slot} (${release.slice(0, 7)}) removed${current ? `; box ${current.slot} keeps everything` : ''}.`);
+      } else this.cloud.log('No new box to roll back.');
     }
-    if (candidate) await this.keepFrontDoorOff([candidate], current);
-    if (candidate) {
-      this.cloud.terminate(candidate);
-      this.cloud.log(`Rolled back: box ${candidate.slot} (${release.slice(0, 7)}) removed${current ? `; box ${current.slot} keeps everything` : ''}.`);
-    } else this.cloud.log('No new box to roll back.');
   }
 
   status() {

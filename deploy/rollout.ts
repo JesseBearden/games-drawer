@@ -68,19 +68,28 @@ export function serverProblems(s: ServerStats): string[] {
   return problems;
 }
 
-/** Copy build assets each release lacks from the other, so a page from either release can load. */
+/**
+ * Copy the client files each release lacks from the other (build files, art, sounds, puzzle
+ * pictures), so a page from either release can load: while both serve, its requests for them
+ * reach either box. A file both have is left alone, and each keeps its own page.
+ */
 export function shareAssets(dirA: string, dirB: string) {
-  const a = path.join(dirA, 'client', 'assets');
-  const b = path.join(dirB, 'client', 'assets');
-  for (const [from, to] of [
-    [a, b],
-    [b, a],
-  ]) {
-    if (!fs.existsSync(from) || !fs.existsSync(to)) continue;
-    for (const f of fs.readdirSync(from)) {
-      const dest = path.join(to, f);
-      if (!fs.existsSync(dest)) fs.copyFileSync(path.join(from, f), dest);
-    }
+  const a = path.join(dirA, 'client');
+  const b = path.join(dirB, 'client');
+  if (!fs.existsSync(a) || !fs.existsSync(b)) return;
+  copyMissing(a, b);
+  copyMissing(b, a);
+}
+
+function copyMissing(from: string, to: string) {
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    if (entry.name === 'index.html') continue;
+    const src = path.join(from, entry.name);
+    const dest = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      fs.mkdirSync(dest, { recursive: true });
+      copyMissing(src, dest);
+    } else if (entry.isFile() && !fs.existsSync(dest)) fs.copyFileSync(src, dest);
   }
 }
 

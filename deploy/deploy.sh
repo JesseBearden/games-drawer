@@ -10,7 +10,8 @@
 #   3. check    every minute for CANARY_MINUTES: any crash or error fails the deploy.
 #   4. promote  it takes every new table and the front door; the old box finishes its games and
 #               shuts itself down.
-# If anything fails, the new box is removed and the current one keeps everything.
+# If anything fails, or the deploy is stopped (Ctrl+C, Stop build), the new box is removed and the
+# current one keeps everything.
 #
 # STAGING_ONLY=1 stops after step 1: the new box stays up on staging.<domain> to try by hand,
 # and nobody on the site itself is sent to it. Afterwards, deploy the same release without it to
@@ -33,11 +34,23 @@ roll_back() {
   fleet rollback "$rel" || echo "Rollback didn't finish; check with: npx tsx deploy/fleet.ts status"
 }
 trap roll_back ERR
+# Stopped by hand or by a time limit: the same, and the clean-up itself isn't interrupted.
+stopped() {
+  trap - ERR
+  trap '' INT TERM
+  echo "The deploy was stopped."
+  roll_back
+  exit "$1"
+}
+trap 'stopped 130' INT
+trap 'stopped 143' TERM
 
 echo "== Launching a box with ${rel:0:7}"
-out="$(fleet launch "$rel")"
-echo "$out"
-slot="$(printf '%s\n' "$out" | sed -n 's/^CANARY_SLOT=//p' | tail -1)"
+# Shown as it happens (it takes minutes), and still there to read if the launch fails.
+launch_log="$(mktemp)"
+trap 'rm -f "$launch_log"' EXIT
+fleet launch "$rel" | tee "$launch_log"
+slot="$(sed -n 's/^CANARY_SLOT=//p' "$launch_log" | tail -1)"
 test -n "$slot"
 
 if [ -z "${SKIP_BROWSER_INSTALL:-}" ]; then npx playwright install --with-deps chromium; fi
@@ -46,7 +59,7 @@ echo "== Smoke tests against staging (box $slot)"
 E2E_BASE_URL="https://staging.$SITE_DOMAIN" npx playwright test --grep @smoke
 
 if [ -n "$staging_only" ]; then
-  trap - ERR
+  trap - ERR INT TERM
   echo "${rel:0:7} is on https://staging.$SITE_DOMAIN (box $slot). The site itself is unchanged."
   echo "To go live, deploy ${rel:0:7} again without STAGING_ONLY. To take it down: npx tsx deploy/fleet.ts rollback $rel"
   exit 0
@@ -64,5 +77,5 @@ done
 
 echo "== Promoting box $slot"
 fleet promote "$rel"
-trap - ERR
+trap - ERR INT TERM
 echo "Deployed ${rel:0:7}."

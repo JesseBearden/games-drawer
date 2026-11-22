@@ -61,6 +61,9 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
       stops: it now looks inside words with punctuation or accents).
 - [ ] **The privacy page**'s Logs line has one new sentence, about the address a table was
       started from. Read it and see that you're happy with it.
+- [ ] **The next deploy** (these fixes were only tested with a pretend AWS): the launch's lines
+      show as they happen, and it finishes even if the previous box shuts down meanwhile. If a
+      hand deploy is stopped with Ctrl+C, `fleet.ts status` then shows no new box.
 
 ## Your decisions from the review (new)
 

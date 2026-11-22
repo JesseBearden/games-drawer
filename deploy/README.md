@@ -77,7 +77,7 @@ the fleet tool ([fleet.ts](fleet.ts)):
    it. (A table can hold a box for at most `DRAIN_MAX_MS`, 3 hours. Tables still there 10 minutes
    before then are told to start a new table, and at the cutoff they close with that reason,
    their puzzles saved.)
-5. If anything fails, **rollback** removes the new box and puts everything back on the current one.
+5. If anything fails, or the deploy is stopped, **rollback** removes the new box and puts everything back on the current one.
 
 The very first deploy (or one after every box is gone) has no current box: the new box takes
 the front door straight away.

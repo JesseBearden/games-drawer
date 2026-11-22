@@ -3,7 +3,7 @@ import { chooseSlot, Fleet, fleetMap, RETIRE_GRACE_MINUTES, siteSettings, type B
 import type { FleetMap, Slot } from './fleetMap';
 
 /** A pretend AWS: boxes, the commands run on them, and where the front door points. */
-function fakeCloud(opts: { failOn?: RegExp } = {}) {
+function fakeCloud(opts: { failOn?: RegExp; runFails?: (box: Box, command: string) => boolean; whileBooting?: () => void } = {}) {
   let boxes: Box[] = [];
   const records: Record<string, string> = {};
   const waited: string[] = [];
@@ -16,10 +16,14 @@ function fakeCloud(opts: { failOn?: RegExp } = {}) {
       n++;
       const box: Box = { id: `i-${n}`, slot, release, role: 'candidate', privateIp: `10.0.0.${n}`, publicIp: `3.0.0.${n}`, launchedAt: `2026-11-20T10:0${n}:00Z` };
       boxes.push(box);
+      opts.whileBooting?.();
       return { ...box };
     },
     async run(box, command) {
       ran.push({ slot: box.slot, command });
+      // As Systems Manager does for a box that has shut down.
+      if (!boxes.some((b) => b.id === box.id)) throw new Error('InvalidInstanceId');
+      if (opts.runFails?.(box, command)) throw new Error('timed out');
       if (opts.failOn?.test(command)) throw new Error('failed');
       return `ran ${command.split(' ')[2]}`;
     },
@@ -134,6 +138,79 @@ describe('the fleet tool', () => {
     expect(f.boxes().map((b) => `${b.slot}:${b.role}`)).toEqual(['a:retiring', 'b:retiring', 'c:current']);
     // Every box can reach every other box's tables.
     expect(Object.keys(f.lastMap('a')!.boxes).sort()).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('a box that has gone, or won’t answer', () => {
+  /** a is retiring, b is current. */
+  async function twoBoxes(opts: Parameters<typeof fakeCloud>[0]) {
+    const f = fakeCloud(opts);
+    const fleet = fleetOf(f, 'direct');
+    for (const rel of ['aaaaaaa1', 'bbbbbbb2']) {
+      await fleet.launch(rel);
+      await fleet.promote(rel);
+    }
+    return { f, fleet };
+  }
+
+  it('a retiring box that shuts down while the new one boots is left out of the routes', async () => {
+    let booting = () => {};
+    const { f, fleet } = await twoBoxes({ whileBooting: () => booting() });
+    booting = () => f.cloud.terminate(f.boxes().find((b) => b.role === 'retiring')!);
+    const before = f.ran.length;
+    await fleet.launch('ccccccc3');
+    expect(f.ran.slice(before).filter((r) => r.slot === 'a')).toEqual([]);
+    expect(Object.keys(f.lastMap('b')!.boxes).sort()).toEqual(['b', 'c']);
+    expect(f.logs).toContain('CANARY_SLOT=c');
+  });
+
+  it('a retiring box that won’t answer doesn’t stop a deploy', async () => {
+    let wedged = false;
+    const { f, fleet } = await twoBoxes({ runFails: (box) => wedged && box.slot === 'a' });
+    wedged = true;
+    await fleet.launch('ccccccc3');
+    await fleet.canary('ccccccc3', 10);
+    expect(f.lastMap('b')!.newTables).toEqual([['b', 90], ['c', 10]]);
+    await fleet.promote('ccccccc3');
+    expect(f.origin()).toBe('3.0.0.3');
+  });
+
+  it('…or a rollback', async () => {
+    let wedged = false;
+    const { f, fleet } = await twoBoxes({ runFails: (box) => wedged && box.slot === 'a' });
+    await fleet.launch('ccccccc3');
+    wedged = true;
+    await fleet.rollback('ccccccc3');
+    expect(f.boxes().map((b) => b.slot)).toEqual(['a', 'b']);
+    expect(f.lastMap('b')!.newTables).toEqual([['b', 100]]);
+  });
+
+  it('the current box not answering still fails a deploy', async () => {
+    let wedged = false;
+    const { f, fleet } = await twoBoxes({ runFails: (box) => wedged && box.slot === 'b' });
+    await fleet.launch('ccccccc3');
+    wedged = true;
+    await expect(fleet.canary('ccccccc3', 10)).rejects.toThrow('timed out');
+    expect(f.origin()).toBe('3.0.0.2');
+  });
+
+  it('a rollback that can’t route still removes the new box, and says it failed', async () => {
+    let wedged = false;
+    const { f, fleet } = await twoBoxes({ runFails: (box) => wedged && box.slot === 'b' });
+    await fleet.launch('ccccccc3');
+    wedged = true;
+    await expect(fleet.rollback('ccccccc3')).rejects.toThrow('timed out');
+    expect(f.boxes().map((b) => b.slot)).toEqual(['a', 'b']);
+  });
+
+  it('but never a box the site may still point at', async () => {
+    const { f, fleet } = await twoBoxes({});
+    await fleet.launch('ccccccc3');
+    f.cloud.pointsTo = () => {
+      throw new Error('lookup failed');
+    };
+    await expect(fleet.rollback('ccccccc3')).rejects.toThrow('lookup failed');
+    expect(f.boxes().map((b) => b.slot)).toContain('c');
   });
 });
 

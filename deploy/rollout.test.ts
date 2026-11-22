@@ -195,6 +195,28 @@ describe('rollout pieces', () => {
     shareAssets(a, b);
     for (const dir of [a, b]) expect(fs.readdirSync(path.join(dir, 'client', 'assets')).sort()).toEqual(['index-NEW.js', 'index-OLD.js']);
   });
+
+  it('shares new art, sounds and pictures too, without overwriting what both have or either page', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-share-'));
+    const [older, newer] = ['older', 'newer'].map((d) => path.join(base, d));
+    const write = (dir: string, files: string[]) => {
+      for (const f of files) {
+        fs.mkdirSync(path.dirname(path.join(dir, 'client', f)), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'client', f), `${path.basename(dir)} ${f}`);
+      }
+    };
+    write(older, ['index.html', 'art/felt/white.webp', 'assets/a.js']);
+    write(newer, ['index.html', 'art/felt/white.webp', 'art/games/new.webp', 'sfx/new.wav', 'puzzles/thumbs/new.jpg', 'new.txt', 'assets/b.js']);
+    shareAssets(newer, older);
+    const read = (dir: string, f: string) => fs.readFileSync(path.join(dir, 'client', f), 'utf8');
+    for (const f of ['art/games/new.webp', 'sfx/new.wav', 'puzzles/thumbs/new.jpg', 'new.txt', 'assets/b.js']) expect(read(older, f)).toBe(`newer ${f}`);
+    expect(read(newer, 'assets/a.js')).toBe('older assets/a.js');
+    for (const f of ['index.html', 'art/felt/white.webp']) {
+      expect(read(older, f)).toBe(`older ${f}`);
+      expect(read(newer, f)).toBe(`newer ${f}`);
+    }
+    fs.rmSync(base, { recursive: true, force: true });
+  });
 });
 
 describe('routes from the fleet map', () => {
