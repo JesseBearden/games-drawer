@@ -1,6 +1,6 @@
 /** Tanks on a page that takes batches: a still battlefield sends few states, and nothing may look different. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIG, generateTerrain, PHASES, STILL_STATE_TICKS, type TankDyn, type TankInfo } from '@tank/shared';
+import { DEFAULT_CONFIG, generateTerrain, PHASES, STILL_STATE_TICKS, type GameEvent, type TankDyn, type TankInfo } from '@tank/shared';
 
 // (The ground's picture needs a real canvas.)
 vi.mock('../src/terrainRenderer', () => ({ TerrainRenderer: class { reset() {} redraw() {} } }));
@@ -37,9 +37,23 @@ function battle() {
       match: { state: 'playing' },
     },
   } as unknown as TankInit;
-  const state = new GameState(init, { feed() {}, toast() {}, banner() {}, resync() {}, infoChanged() {}, sound() {} } as never);
+  const shown = { sounds: [] as string[], feed: 0, toasts: 0, banners: [] as (string | null)[], resyncs: 0, paints: 0 };
+  const state = new GameState(init, {
+    feed: () => shown.feed++,
+    toast: () => shown.toasts++,
+    banner: (b: string | null) => shown.banners.push(b),
+    resync: () => shown.resyncs++,
+    infoChanged() {},
+    sound: (name: string) => shown.sounds.push(name),
+  } as never);
+  const paint = () => void shown.paints++;
+  state.terrainView = { redraw: paint, reset: paint } as never;
   return {
     state,
+    shown,
+    events(events: object[]) {
+      state.onMessage({ t: 'events', events: events as GameEvent[] });
+    },
     get me() {
       return state.me!;
     },
@@ -58,6 +72,53 @@ function battle() {
     },
   };
 }
+
+describe('after a gap in frames', () => {
+  const explosion = (tick: number, rev: number) => ({ type: 'explode', tick, rev, shell: rev, x: 100 + rev * 20, y: 520, r: 30, shielded: false, hitTank: null });
+
+  it('what was missed changes the ground without all going off at once', () => {
+    const b = battle();
+    const missed: object[] = [];
+    for (let i = 1; i <= 40; i++) missed.push(explosion(i * 20, i)); // ticks 20 to 800
+    missed.push({ type: 'death', tick: 805, tank: 1, killer: null, x: 100, y: 500, cause: 'blast', reset: false, fallDistance: 0 });
+    for (let i = 0; i < 46; i++) missed.push({ type: 'drop', tick: 810 + i, tank: 1, x: 100, y: 100 });
+    missed.push(explosion(990, 41)); // this one only just happened
+    b.events(missed);
+    b.server(1000, 100);
+    now = 1000 * TICK_MS;
+    b.state.update(now);
+
+    expect([b.state.terrainRev, b.shown.resyncs]).toEqual([41, 0]);
+    expect(b.shown.sounds).toEqual(['explosion']);
+    expect([b.shown.feed, b.shown.toasts]).toEqual([0, 0]);
+    expect(b.state.effects.filter((e) => e.kind === 'explosion')).toHaveLength(1);
+    expect(b.shown.paints).toBeLessThanOrEqual(2);
+  });
+
+  it('a win and a new battlefield that were missed still leave the match right', () => {
+    const b = battle();
+    b.events([
+      { type: 'win', tick: 100, tank: 1, name: 'Liz', nukeAt: 300 },
+      { type: 'nuke', tick: 300, rev: 1, seed: 9, wind: 12 },
+    ]);
+    b.server(1000, 100);
+    now = 1000 * TICK_MS;
+    b.state.update(now);
+    expect(b.state.match).toEqual({ state: 'playing' });
+    expect([b.state.terrainRev, b.state.wind]).toEqual([1, 12]);
+    expect(b.shown.banners.at(-1)).toBeNull();
+    expect([b.shown.sounds, b.state.effects, b.shown.paints]).toEqual([[], [], 1]);
+  });
+
+  it('in ordinary play everything is seen and heard', () => {
+    const b = battle();
+    b.events([explosion(10, 1)]);
+    b.server(20, 100);
+    b.playTo(30);
+    expect(b.shown.sounds).toEqual(['explosion']);
+    expect(b.state.effects.length).toBeGreaterThan(0);
+  });
+});
 
 describe('a still battlefield', () => {
   it('time keeps running between its few states', () => {

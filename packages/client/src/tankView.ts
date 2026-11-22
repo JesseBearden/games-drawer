@@ -44,6 +44,7 @@ export class TankView implements View {
   private hud = { hearts: '', level: '', angle: '', power: '', wind: '', status: '', spread: '', move: false, fire: '' };
   private scoresOpen = false;
   private disposed = false;
+  private artTimer: number | undefined;
   private bannerTimer: number | undefined;
   private speaking = new Set<string>();
   private lastTick = { angle: NaN, power: NaN };
@@ -54,6 +55,7 @@ export class TankView implements View {
     $('tank-view').hidden = false;
     // The control strip shows on every device (a computer can use it with the mouse, or the keys).
     $('touch').hidden = false;
+    this.resetHud();
     this.input = new Input(
       {
         gameplayPress: () => this.tryDrop(),
@@ -124,6 +126,7 @@ export class TankView implements View {
    * can't be fetched, say so and try again shortly instead of leaving a blank field.
    */
   private loadArt(init: TankInit, tries = 0) {
+    if (this.disposed) return;
     const ready = tankSpritesNow();
     if (ready) {
       this.useArt(ready, init);
@@ -140,7 +143,7 @@ export class TankView implements View {
       () => {
         if (this.disposed) return;
         if (tries === 0) this.shell.toast('Still loading the battlefield…');
-        window.setTimeout(() => this.loadArt(init, tries + 1), Math.min(10_000, 1000 * 2 ** tries));
+        this.artTimer = window.setTimeout(() => this.loadArt(init, tries + 1), Math.min(10_000, 1000 * 2 ** tries));
       },
     );
   }
@@ -306,28 +309,42 @@ export class TankView implements View {
       this.aimDirty = false;
     }
     const g = this.state;
-    if (g && this.camera && this.renderer) {
+    if (g) {
+      // The game runs, and the hearts, wind and Drop show, while the pictures are still downloading.
       g.update(now);
-      const me = g.me;
-      const target = me && me.phase !== 'dead' ? { x: me.x, y: me.y } : null;
-      let deepest = 0;
-      let highest = Infinity;
-      for (const c of g.terrain.cols) {
-        if (c[0] > deepest) deepest = c[0];
-        if (c[0] < highest) highest = c[0];
+      if (this.camera && this.renderer) {
+        const me = g.me;
+        const target = me && me.phase !== 'dead' ? { x: me.x, y: me.y } : null;
+        let deepest = 0;
+        let highest = Infinity;
+        for (const c of g.terrain.cols) {
+          if (c[0] > deepest) deepest = c[0];
+          if (c[0] < highest) highest = c[0];
+        }
+        // Riding in the helicopter (or floating down): keep it in view, to see where you'll land.
+        if (me && (me.phase === 'carried' || me.phase === 'chute')) highest = Math.min(highest, me.y);
+        // On touch screens the corner control pads cover roughly the bottom 70px.
+        this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.stripInset(), Number.isFinite(highest) ? highest : deepest, this.insetRight);
+        this.renderer.draw(g, this.camera, { angle: this.input.angle, power: this.input.power }, now);
+        this.updateAmbience();
       }
-      // Riding in the helicopter (or floating down): keep it in view, to see where you'll land.
-      if (me && (me.phase === 'carried' || me.phase === 'chute')) highest = Math.min(highest, me.y);
-      // On touch screens the corner control pads cover roughly the bottom 70px.
-      this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.stripInset(), Number.isFinite(highest) ? highest : deepest, this.insetRight);
-      this.renderer.draw(g, this.camera, { angle: this.input.angle, power: this.input.power }, now);
-      this.updateAmbience();
       this.updateHud(g);
     }
     this.raf = requestAnimationFrame(this.frame);
   };
 
   // ------------------------------------------------------------------ HUD
+
+  /** Every Tanks screen uses the same elements: start them as the empty `hud` says they are. */
+  private resetHud() {
+    $('move-row').hidden = true;
+    $('spread-badge').hidden = true;
+    $('spread-badge').textContent = '';
+    const fire = $<HTMLButtonElement>('fire-btn');
+    fire.classList.remove('spread', 'drop');
+    fire.textContent = 'Fire';
+    fire.disabled = false;
+  }
 
   private set<K extends keyof TankView['hud']>(key: K, value: TankView['hud'][K], apply: () => void) {
     if (this.hud[key] === value) return;
@@ -448,6 +465,7 @@ export class TankView implements View {
     this.cleanups = [];
     this.shell.sfx.stopAmbience();
     clearTimeout(this.bannerTimer);
+    clearTimeout(this.artTimer);
     $('scores').hidden = true;
     $('banner').hidden = true;
     $('status').hidden = true;

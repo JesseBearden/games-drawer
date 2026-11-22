@@ -24,6 +24,11 @@ export type TankInit = Extract<TankServerMessage, { t: 'init' }>;
 
 /** Render this many ticks behind the newest server state, to interpolate smoothly. */
 const INTERP_DELAY = 7;
+/**
+ * Events this far behind the moment being drawn were missed (the tab was hidden, the connection
+ * stalled): they change the battlefield, but don't explode, play or pop up all at once.
+ */
+const MISSED_TICKS = 90;
 /** The nuke effect starts this long before the new terrain arrives, and lasts this long. */
 const NUKE_LEAD_TICKS = 75;
 export const NUKE_DURATION_MS = 2800;
@@ -108,6 +113,8 @@ export class GameState {
   private offset: number;
   private tickMs: number;
   private queue: GameEvent[] = [];
+  /** While catching up on missed events: the ground they changed, painted once at the end. */
+  private groundToPaint: { x0: number; x1: number; all: boolean } | null = null;
   private snapshotTick: number;
   latencyMs = 0;
   private nukeStarted = false;
@@ -235,6 +242,7 @@ export class GameState {
     const rt = this.renderTick;
 
     this.queue.sort((a, b) => a.tick - b.tick);
+    if (this.queue.length && this.queue[0].tick < rt - MISSED_TICKS) this.catchUp(rt - MISSED_TICKS, now);
     while (this.queue.length && this.queue[0].tick <= rt) this.applyEvent(this.queue.shift()!, now);
 
     for (const sh of this.shells.values()) {
@@ -283,6 +291,21 @@ export class GameState {
 
   // ------------------------------------------------------------------ events
 
+  /** Apply what was missed before `until`: the battlefield as it now is, without the show. */
+  private catchUp(until: number, now: number) {
+    const { ui, effects } = this;
+    this.ui = { ...ui, sound() {}, feed() {}, toast() {} };
+    this.effects = [];
+    this.groundToPaint = { x0: Infinity, x1: -Infinity, all: false };
+    while (this.queue.length && this.queue[0].tick < until) this.applyEvent(this.queue.shift()!, now);
+    const ground = this.groundToPaint;
+    this.groundToPaint = null;
+    this.ui = ui;
+    this.effects = effects;
+    if (ground.all) this.terrainView.reset(this.terrain);
+    else if (ground.x0 <= ground.x1) this.terrainView.redraw(ground.x0, ground.x1);
+  }
+
   private carve(x: number, y: number, r: number, rev: number) {
     if (rev <= this.terrainRev) return;
     if (rev !== this.terrainRev + 1) {
@@ -291,7 +314,11 @@ export class GameState {
     }
     const dirty = this.terrain.carve(x, y, r, collapseOptionsFor(this.cfg));
     this.terrainRev = rev;
-    if (dirty) this.terrainView.redraw(dirty.x0, dirty.x1);
+    if (!dirty) return;
+    const later = this.groundToPaint;
+    if (!later) return this.terrainView.redraw(dirty.x0, dirty.x1);
+    later.x0 = Math.min(later.x0, dirty.x0);
+    later.x1 = Math.max(later.x1, dirty.x1);
   }
 
   private applyEvent(e: GameEvent, now: number) {
@@ -406,7 +433,8 @@ export class GameState {
         this.match = { state: 'playing' };
         this.terrain = generateTerrain(this.cfg, e.seed);
         this.terrainRev = e.rev;
-        this.terrainView.reset(this.terrain);
+        if (this.groundToPaint) this.groundToPaint.all = true;
+        else this.terrainView.reset(this.terrain);
         this.wind = e.wind;
         this.shells.clear();
         this.helis.clear();

@@ -33,6 +33,11 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
 - [ ] **Wi-Fi with no internet when a game is picked**: it keeps trying; it doesn't land on the
       browser's error page.
 - [ ] **Ctrl+F or Cmd+F at a table** only finds (no full screen).
+- [ ] **Tanks, back from another tab or app** after a minute: the battlefield is as it now is,
+      with no freeze and no pile of explosions or sounds.
+- [ ] **Tanks a second time** (get to level 4, Switch game, Tanks again): no Move buttons or
+      TRIPLE READY until you earn them. On a slow first load the hearts, wind and Drop show
+      before the battlefield does.
 
 ## Your decisions from the review (new)
 
