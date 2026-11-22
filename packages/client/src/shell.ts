@@ -5,7 +5,7 @@ import { LobbyView } from './lobby';
 import type { Net } from './net';
 import { patchHtml } from './dom';
 import { colorCss, escapeHtml } from './html';
-import { reloadForUpdate } from './reload';
+import { reloadIfSiteAnswers } from './reload';
 import type { AsItWas } from './resume';
 import type { Device, ShellApi, View } from './views';
 import { micUnsupportedText, Voice } from './voice';
@@ -60,6 +60,8 @@ export class RoomApp {
   private micAtStart = false;
   private unread = 0;
   private liveChat = false;
+  /** Every message put in Messages here, so a reconnect adds only what was missed. */
+  private chatSeen = new Set<string>();
   private pingTimer: number;
   private speaking = new Set<string>();
   /** Waiting for the server to make an invite link (resolved by its 'invite' message). */
@@ -91,6 +93,9 @@ export class RoomApp {
     // "Turn your phone sideways", or iPad, or tablet: whatever they're holding.
     $('rotate').querySelector('.overlay-card')!.textContent = `Turn your ${deviceWord(device)} sideways to play`;
     $('chat-log').innerHTML = '';
+    // Unread marks from the last table don't come along to this one.
+    $('chat-unread').hidden = true;
+    $('bar-tab').querySelector<HTMLElement>('.bar-tab-dot')!.hidden = true;
     this.alias = welcome.alias;
     this.room = welcome.room;
     this.membersList = welcome.members;
@@ -213,9 +218,10 @@ export class RoomApp {
       (ViewClass) => {
         if (screen === this.screen) this.mountView(new ViewClass(this.api));
       },
-      () => {
+      async () => {
         if (screen !== this.screen) return;
-        if (tries && navigator.onLine && reloadForUpdate()) return;
+        if (tries && (await reloadIfSiteAnswers(() => screen === this.screen))) return;
+        if (screen !== this.screen) return;
         if (tries === 1) this.toast(`${gameInfo(id).name} is taking a while to load. Check your internet connection.`);
         window.setTimeout(() => {
           if (screen === this.screen) this.fetchView(id, screen, tries + 1);
@@ -314,13 +320,12 @@ export class RoomApp {
       this.idleWarning = false;
       if (!$('idle').hidden) this.openSheet(null);
     }
-    $('chat-log').innerHTML = '';
-    this.liveChat = false;
-    for (const m of w.chat) this.addChat(m);
-    this.liveChat = true;
     this.alias = w.alias;
     this.room = w.room;
     this.membersList = w.members;
+    // What's in Messages stays: a phone reconnects at every lock and unlock, and the welcome only
+    // has the last few. Whatever came while it was away is added, as unread.
+    for (const m of w.chat) this.addChat(m, true);
     this.tableState = w.table;
     this.chatFilter = w.chatFilter;
     this.renderFilterSetting();
@@ -477,7 +482,10 @@ export class RoomApp {
     $('menu-filter-detail').textContent = `${detail[0].toUpperCase()}${detail.slice(1)}. Anyone at the table can change this.`;
   }
 
-  private addChat(m: ChatMessage) {
+  /** `missed`: it came while the connection was down, so it's unread but doesn't chime or pop up. */
+  private addChat(m: ChatMessage, missed = false) {
+    if (this.chatSeen.has(m.id)) return;
+    this.chatSeen.add(m.id);
     if (m.speaker && this.mutedPlayers.has(m.speaker)) return;
     const li = document.createElement('li');
     const time = new Date(m.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -505,17 +513,17 @@ export class RoomApp {
     log.append(li);
     while (log.children.length > 200) log.firstElementChild!.remove();
     if (atBottom) log.scrollTop = log.scrollHeight;
-    if (this.liveChat && !m.system && m.speaker !== this.alias) this.sfx.play('chat');
-    if (this.liveChat && !this.chatOpen && !m.system) {
+    if (this.liveChat && !missed && !m.system && m.speaker !== this.alias) this.sfx.play('chat');
+    if (this.liveChat && !this.chatOpen && !m.system && !(missed && m.speaker === this.alias)) {
       this.unread++;
       $('chat-unread').hidden = false;
       $('bar-tab').querySelector<HTMLElement>('.bar-tab-dot')!.hidden = false;
       // It pops up too, so it's read without opening Messages ("Sammy: I can't hear you").
-      if (m.speaker !== this.alias) this.note(m.text.length > 90 ? `${m.text.slice(0, 88).trimEnd()}…` : m.text, m.from);
+      if (!missed && m.speaker !== this.alias) this.note(m.text.length > 90 ? `${m.text.slice(0, 88).trimEnd()}…` : m.text, m.from);
     }
     // Someone arriving pops up (in Messages it's only a grey line), with the table's join sound.
     // Arrivals and leavings don't count as unread.
-    if (this.liveChat && m.notice?.kind === 'arrive' && m.notice.alias !== this.alias) {
+    if (this.liveChat && !missed && m.notice?.kind === 'arrive' && m.notice.alias !== this.alias) {
       this.note(m.text);
       this.play('lobbyJoin');
     }
@@ -833,10 +841,10 @@ export class RoomApp {
         e.preventDefault();
         if (!this.chatOpen) this.setChatOpen(true);
         $<HTMLInputElement>('chat-input').focus();
-      } else if (e.code === 'KeyM') {
+      } else if (e.code === 'KeyM' && !withModifier(e)) {
         this.sfx.toggleMute();
         this.updateSoundButton();
-      } else if (e.code === 'KeyF') {
+      } else if (e.code === 'KeyF' && !withModifier(e)) {
         this.toggleFullscreen();
       } else if (e.key === 'Escape') {
         // A game's own sheet (Scores) closes first, and never gets the Menu stacked on top of it.
@@ -1016,6 +1024,8 @@ export class RoomApp {
     this.view = null;
     this.voice.teardown();
     clearInterval(this.pingTimer);
+    // (Or this table's chat pause keeps switching off the next table's message box.)
+    clearInterval(this.pauseTimer);
     for (const c of this.cleanups) c();
     this.cleanups = [];
     for (const id of SHEETS) $(id).hidden = true;
@@ -1023,6 +1033,9 @@ export class RoomApp {
     $('game').classList.remove('landscape-only');
   }
 }
+
+/** Ctrl, Cmd or Alt held: the browser's own shortcut (Ctrl+F finds), not ours. */
+const withModifier = (e: KeyboardEvent) => e.ctrlKey || e.metaKey || e.altKey;
 
 /** What they're holding, for "Turn your … sideways": phone, iPad (which says it's a Mac), or tablet. */
 function deviceWord(device: Device): string {

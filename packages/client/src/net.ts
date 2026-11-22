@@ -66,6 +66,11 @@ export type FatalError = Extract<ServerMessage, { t: 'error' }>;
  * Generous, so a slow moment on the server doesn't turn into everyone reconnecting at once.
  */
 const SILENT_MS = 15_000;
+/**
+ * A connection still being made after this long isn't going to be (a network that swallows it;
+ * the browser's own limit can be minutes): "Joining the table…" gives up, and reconnecting tries afresh.
+ */
+const CONNECT_MS = 10_000;
 
 export interface NetHandlers {
   onMessage(msg: ServerMessage): void;
@@ -105,6 +110,7 @@ export class Net {
     const slot = slotFor(this.roomCode);
     const ws = new WebSocket(`${proto}://${location.host}/ws${slot ? `?slot=${slot}` : ''}`);
     this.ws = ws;
+    this.lastHeard = Date.now();
     // Every socket must be welcomed on its own. An error before that (the table closed while the
     // phone slept, it filled up, too many tries) is final: trying again can't fix it, and each try
     // would count as a wrong table code against everyone on the same home internet.
@@ -137,6 +143,8 @@ export class Net {
       this.h.onMessage(msg);
     };
     ws.onmessage = (ev) => {
+      // Let go of (left, cancelled, given up on): a welcome arriving late mustn't pull anyone in.
+      if (this.ws !== ws) return;
       this.lastHeard = Date.now();
       let frame: ServerMessage;
       try {
@@ -146,7 +154,7 @@ export class Net {
       }
       if (frame.t !== 'batch') return take(frame);
       // Several at once: exactly as if they'd come one after another.
-      for (const msg of frame.msgs) take(msg);
+      for (const msg of frame.msgs) if (this.ws === ws) take(msg);
     };
     ws.onclose = () => this.lost(ws);
   }
@@ -164,8 +172,9 @@ export class Net {
 
   private checkAlive = () => {
     const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN || document.visibilityState !== 'visible') return;
-    if (Date.now() - this.lastHeard > SILENT_MS) this.lost(ws);
+    if (!ws || document.visibilityState !== 'visible') return;
+    const limit = ws.readyState === WebSocket.OPEN ? SILENT_MS : CONNECT_MS;
+    if (Date.now() - this.lastHeard > limit) this.lost(ws);
   };
 
   private onVisible = () => {

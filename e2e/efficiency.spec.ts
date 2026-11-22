@@ -146,6 +146,14 @@ test('the lobby changes around a button you’re about to tap, without replacing
   await joinByInvite(friend, code, 'Max');
   await expect(page.locator('.lobby-people')).toContainText('Max');
   expect(await button.evaluate((el) => (el as HTMLElement & { same?: boolean }).same)).toBe(true);
+
+  // The "Your mic is off" strip going doesn't rebuild the games under it either.
+  const game = page.locator('.lobby-games [data-game="spades"]');
+  await game.evaluate((el) => ((el as HTMLElement & { same?: boolean }).same = true));
+  await page.locator('.lobby-view [data-act="voice"]').click();
+  await expect(page.locator('.lobby-view .pc-alert')).toHaveCount(0);
+  expect(await game.evaluate((el) => (el as HTMLElement & { same?: boolean }).same)).toBe(true);
+  expect(await button.evaluate((el) => (el as HTMLElement & { same?: boolean }).same)).toBe(true);
   await friend.context().close();
 });
 

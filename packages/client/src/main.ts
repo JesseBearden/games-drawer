@@ -131,6 +131,7 @@ function showPage() {
 }
 
 function navigate(path: string) {
+  cancelJoin();
   if (path !== location.pathname + location.search) history.pushState(null, '', path);
   showPage();
   $('landing').scrollTo(0, 0);
@@ -144,7 +145,9 @@ $('landing').addEventListener('click', (e) => {
   }
 });
 window.addEventListener('popstate', () => {
-  if (!app) showPage();
+  if (app) return;
+  cancelJoin();
+  showPage();
 });
 
 // ------------------------------------------------------------------ starting: what happens next
@@ -427,6 +430,19 @@ function setBusy(busy: boolean) {
 
 let app: RoomApp | null = null;
 let net: Net | null = null;
+/** Who we're waiting to be let in as: set from a tap on Join or Start until it works out or doesn't. */
+let waitingToJoin: EntryChoice | null = null;
+
+/** Going to another page (Back to home, the browser's Back) while joining: that cancels it. */
+function cancelJoin() {
+  if (!waitingToJoin) return;
+  net?.close();
+  net = null;
+  dropEntry(waitingToJoin);
+  waitingToJoin = null;
+  setActive(null);
+  setBusy(false);
+}
 
 /**
  * The table this tab is at, and how you had it (the mic, who you muted). If the page reloads (or
@@ -491,11 +507,13 @@ async function start(room: RoomRequest, opts: Partial<AsItWas> & { mic: boolean;
   errorAnchor = from ?? null;
   showPending(room.kind === 'private' ? 'Joining the table…' : 'Setting up your table…');
   setBusy(true);
+  waitingToJoin = entry;
   const device = detectDevice();
   net?.close();
   const thisNet = new Net(room, () => stored(NAME_KEY) || opts.name, device.touch ? 'phone' : 'desktop', {
     onMessage: (msg: ServerMessage) => {
       if (msg.t === 'welcome' && !app) {
+        waitingToJoin = null;
         table = { kind: 'private', code: msg.room.code };
         setActive({ room: table, mic: entry.mic, muted: entry.muted, mutedPeople: entry.mutedPeople });
         enterGame();
@@ -507,6 +525,7 @@ async function start(room: RoomRequest, opts: Partial<AsItWas> & { mic: boolean;
     },
     onFatal: (err) => {
       if (err.code === 'version' && reloadForUpdate()) return;
+      waitingToJoin = null;
       const wasIn = !!app;
       if (app) leave();
       dropEntry(entry);
@@ -527,6 +546,7 @@ async function start(room: RoomRequest, opts: Partial<AsItWas> & { mic: boolean;
     onReconnecting: () => {
       if (app) app.showReconnecting();
       else {
+        waitingToJoin = null;
         thisNet.close();
         dropEntry(entry);
         setBusy(false);

@@ -142,6 +142,29 @@ describe('Net (the connection to a table)', () => {
     expect(seen.messages - had).toBe(3);
   });
 
+  it('gives up on a connection that never opens, rather than joining for ever', async () => {
+    const { Net } = await import('../src/net');
+    let gaveUp = 0;
+    const net = new Net({ kind: 'private', code: 'BCDFG' }, () => 'Liz', 'phone', { onMessage: () => {}, onFatal: () => {}, onReconnecting: () => void gaveUp++ });
+    net.connect();
+    vi.advanceTimersByTime(8000);
+    expect(gaveUp).toBe(0);
+    vi.advanceTimersByTime(4000);
+    expect(gaveUp).toBe(1);
+    expect(FakeSocket.all[0].readyState).toBe(FakeSocket.CLOSED);
+    net.close();
+  });
+
+  it('once let go of, a late answer is ignored', async () => {
+    const { net, seen } = await makeNet();
+    const old = latest();
+    const had = seen.messages;
+    net.close();
+    old.receive(welcome);
+    old.receive({ t: 'batch', msgs: [welcome] });
+    expect(seen.messages).toBe(had);
+  });
+
   it('leaving a table normally says "leave"', async () => {
     const { net } = await makeNet();
     const s = latest();

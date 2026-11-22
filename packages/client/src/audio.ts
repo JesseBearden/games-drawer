@@ -428,6 +428,8 @@ const MIN_GAP_MS: Partial<Record<SoundName, number>> = {
 const VARY_PITCH = new Set<SoundName>(['fire', 'explosion', 'land', 'tick', 'cardDeal', 'cardPlay', 'cardPass', 'trickTake']);
 
 const PREFS_KEY = 'tank.sound';
+/** A sound that wouldn't download is tried again after this long. */
+const LOAD_RETRY_MS = 10_000;
 
 export interface SfxOptions {
   /** Sounds whose samples start loading as soon as audio unlocks (others load on first play). */
@@ -636,7 +638,11 @@ export class Sfx {
           this.buffers.set(file, buf);
           return buf;
         })
-        .catch(() => null);
+        .catch(() => {
+          // A blip shouldn't mean the stand-in sound for as long as the page is open.
+          setTimeout(() => this.loads.delete(file), LOAD_RETRY_MS);
+          return null;
+        });
       this.loads.set(file, p);
     }
     return p;

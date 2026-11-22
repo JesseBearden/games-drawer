@@ -26,6 +26,13 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
 - [ ] **Leave while the browser is asking for the mic**, then tap Allow: the recording light
       doesn't stay on.
 - [ ] **A blocked mic**: the table's big Turn on mic and the Menu's both open the steps to allow it.
+- [ ] **Back to home while it says Joining**: you stay home, also if the table answers late. On a
+      dead network Joining gives up in about 10 seconds and says why.
+- [ ] **Messages after locking the phone**: unlock, and everything from before is still there,
+      with what came meanwhile marked unread. A new table starts with no unread mark.
+- [ ] **Wi-Fi with no internet when a game is picked**: it keeps trying; it doesn't land on the
+      browser's error page.
+- [ ] **Ctrl+F or Cmd+F at a table** only finds (no full screen).
 
 ## Your decisions from the review (new)
 

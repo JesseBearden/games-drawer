@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from '../packages/shared/src/protocol';
 import { expect, test } from './fixtures';
 import { E2E_ADMIN_PASSWORD } from './testPassword';
 import { at, createRoom, enterName, newPlayer, openBar, tapBar, watchErrors } from './helpers';
@@ -199,4 +200,74 @@ test('the admin page asks for its password, then shows who plays what', async ({
   await expect(page).toHaveURL(/days=30/);
   await page.locator('button', { hasText: 'Sign out' }).click();
   await expect(page.locator('input[name="password"]')).toBeVisible();
+});
+
+/** A welcome as the server sends it, for tests that play the server. */
+const fakeWelcome = (chat: { id: string; text: string }[]) =>
+  JSON.stringify({
+    t: 'welcome',
+    v: PROTOCOL_VERSION,
+    session: 's',
+    name: 'Ivy',
+    reclaimed: false,
+    alias: 'me',
+    voice: { enabled: false, iceServers: [] },
+    room: { code: 'BCDFGH', kind: 'private' },
+    game: null,
+    members: [{ id: 'me', name: 'Ivy', color: 0, connected: true }],
+    chat: chat.map((m) => ({ ...m, from: 'Gus', speaker: 'gus', color: 1, at: Date.now() })),
+    chatFilter: 'hide',
+    table: { pick: null, seats: [], ready: [], players: 4 },
+  });
+
+test('Back to home while joining cancels it, even if the answer comes later', async ({ page }) => {
+  await page.route('**/api/table**', (route) => route.fulfill({ json: { ok: true, from: 'Gus', for: null, game: null, people: ['Gus'], away: [], full: false } }));
+  let answer = () => {};
+  let cancelled = false;
+  await page.routeWebSocket(/\/ws/, (ws) => {
+    ws.onClose(() => (cancelled = true));
+    ws.onMessage((m) => {
+      if (JSON.parse(String(m)).t === 'hello') answer = () => ws.send(fakeWelcome([]));
+    });
+  });
+  await page.goto(at('/r/BCDFGH'));
+  await enterName(page, 'join', 'Ivy');
+  await page.getByRole('button', { name: 'Join with mic off' }).click();
+  await expect(page.locator('#landing-error')).toHaveText('Joining the table…');
+  await page.locator('#join-home').click();
+  await expect(page.locator('#page-home')).toBeVisible();
+  await expect(page.locator('#landing-error')).toBeHidden();
+  await expect(page.locator('#code-form button')).toBeEnabled();
+  await expect.poll(() => cancelled).toBe(true);
+  answer();
+  await page.waitForTimeout(300);
+  await expect(page.locator('#page-home')).toBeVisible();
+  await expect(page.locator('#game')).toBeHidden();
+});
+
+test('a reconnect keeps Messages and adds what was missed, as unread; the next table starts read', async ({ page }) => {
+  // Narrow enough that Messages starts closed.
+  await page.setViewportSize({ width: Math.min(900, page.viewportSize()!.width), height: 700 });
+  let visits = 0;
+  await page.routeWebSocket(/\/ws/, (ws) =>
+    ws.onMessage((m) => {
+      if (JSON.parse(String(m)).t !== 'hello') return;
+      visits++;
+      const all = [{ id: 'a', text: 'first' }, { id: 'b', text: 'second' }, { id: 'c', text: 'while you were away' }];
+      ws.send(fakeWelcome(visits === 1 ? all.slice(0, 2) : all.slice(1)));
+      if (visits === 1) setTimeout(() => void ws.close(), 500);
+    }),
+  );
+  await page.goto(at('/start'));
+  await enterName(page, 'start', 'Ivy');
+  await page.getByRole('button', { name: 'Start with mic off' }).click();
+  await expect(page.locator('#chat-log .msg-text')).toHaveText(['first', 'second', 'while you were away']);
+  await expect(page.locator('#chat-unread')).toHaveJSProperty('hidden', false);
+
+  await tapBar(page, '#btn-menu');
+  await page.locator('#menu-leave').click();
+  await page.locator('#home-start').click();
+  await page.getByRole('button', { name: 'Start with mic off' }).click();
+  await expect(page.locator('#chat-log .msg-text')).toHaveCount(2);
+  await expect(page.locator('#chat-unread')).toHaveJSProperty('hidden', true);
 });

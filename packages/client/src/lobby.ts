@@ -90,7 +90,8 @@ export class LobbyView implements View {
     html += '<p>Invite people, pick a game together, and start when everyone’s ready.</p>';
 
     // Who's here, and Invite.
-    html += '<section class="tb-here"><ul class="lobby-people">';
+    // (The parts have keys, so one coming or going doesn't rebuild the buttons in the next.)
+    html += '<section class="tb-here" data-key="here"><ul class="lobby-people">';
     for (const m of this.members) {
       const isReady = t.pick && ready.has(m.id);
       const notes = [m.id === s.alias ? 'You' : '', m.connected ? '' : 'Away', isReady ? 'Ready' : ''].filter(Boolean).join(' · ');
@@ -105,12 +106,12 @@ export class LobbyView implements View {
           : s.voice.micProblem === 'missing'
             ? 'No microphone found on this device.'
             : 'Your friends won’t be able to hear you.';
-      html += `<div class="pc-alert"><span style="flex: 1">Your mic is off. ${why}</span><button class="pc-btn pc-btn-plain" data-act="voice" type="button">Turn on mic</button></div>`;
+      html += `<div class="pc-alert" data-key="mic"><span style="flex: 1">Your mic is off. ${why}</span><button class="pc-btn pc-btn-plain" data-act="voice" type="button">Turn on mic</button></div>`;
     }
 
     // The games: anyone can pick, or change the pick.
     html += `<h2 class="pc-h3">Pick a game</h2><p class="tb-sub">Anyone at the table can pick${t.pick ? ' another' : ''}.</p>`;
-    html += '<div class="pc-choices lobby-games">';
+    html += '<div class="pc-choices lobby-games" data-key="games">';
     for (const g of pickable()) {
       const picked = g.id === t.pick;
       html += `<button class="pc-choice paper-${GAME_PAPER[g.id] ?? 'sky'}${picked ? ' is-picked' : ''}" data-game="${g.id}" type="button" aria-pressed="${picked}"><img src="/art/games/${g.id}.webp" alt="" width="52" height="52" /><span>${escapeHtml(g.name)}${g.underConstruction ? '<small>Work in Progress</small>' : ''}</span></button>`;
@@ -133,7 +134,7 @@ export class LobbyView implements View {
     const t = this.table;
     const ready = new Set(t.ready);
     const away = new Set(this.members.filter((m) => !m.connected).map((m) => m.id));
-    let html = `<section class="tb-seats">`;
+    let html = `<section class="tb-seats" data-key="seats">`;
     // Games that let the table choose how many play (the server picks the seats the same way).
     const chooses = choosesPlayers(game);
     const people = Math.min(SEAT_COUNT, this.members.length);
@@ -194,7 +195,7 @@ export class LobbyView implements View {
     const btn = amReady
       ? '<button class="pc-btn pc-btn-plain pc-btn-big" data-act="unready" type="button">Not ready</button>'
       : '<button class="pc-btn pc-btn-main pc-btn-big" data-act="ready" type="button">I’m ready</button>';
-    return `<div class="tb-go"><p><span class="tb-next">${escapeHtml(gameInfo(game).name)}</span><span class="tb-status">${status}</span></p>${btn}</div>`;
+    return `<div class="tb-go" data-key="go"><p><span class="tb-next">${escapeHtml(gameInfo(game).name)}</span><span class="tb-status">${status}</span></p>${btn}</div>`;
   }
 
   private onClick = (e: Event) => {
