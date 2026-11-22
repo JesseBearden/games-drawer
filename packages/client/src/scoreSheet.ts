@@ -5,7 +5,7 @@
  * across, and the running total at the end. `history` is the running totals after each hand, one
  * array per row. With no room for every hand the oldest drop off: phones show the last 3,
  * anything else the last 8. `fresh` picks out the hand that just ended. `unit` heads each column
- * (Three Thirteen plays rounds, not hands).
+ * (Three Thirteen plays rounds, not hands); phones show only its number, leaving room for the names.
  */
 export function scoreSheetHtml(rows: { label: string; history: number[]; total: number }[], fresh: boolean, unit = 'Hand'): string {
   const n = rows[0]?.history.length ?? 0;
@@ -15,7 +15,7 @@ export function scoreSheetHtml(rows: { label: string; history: number[]; total: 
   };
   const num = (x: number) => (x < 0 ? `−${-x}` : String(x));
   let html = '<table class="ht-table ht-sheet"><thead><tr><th class="ht-who"></th>';
-  for (let i = 0; i < n; i++) html += `<th class="${cls(i)}">${unit} ${i + 1}</th>`;
+  for (let i = 0; i < n; i++) html += `<th class="${cls(i)}"><span class="ht-unit">${unit} </span>${i + 1}</th>`;
   html += '<th class="ht-tot">Total</th></tr></thead><tbody>';
   for (const r of rows) {
     html += `<tr><th class="ht-who" scope="row"><span class="pc-nm">${r.label}</span></th>`;

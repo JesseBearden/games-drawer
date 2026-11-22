@@ -1,7 +1,7 @@
 import { CARD_SOUNDS } from './audio';
 import { suitOf, type Card, type GameServerMessage, type HeartsView as TableView, type PassDir } from '@tank/shared';
 import { patchHtml, syncKeyed } from './dom';
-import { escapeHtml } from './html';
+import { escapeHtml, nameHtml } from './html';
 import { cardFaceSvg, suitSvg, SUIT_NAME, type Rank, type Suit } from './paperArt';
 import type { PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
@@ -294,16 +294,16 @@ export class HeartsTable implements View {
       const to = this.name((v.seat + { left: 1, right: 3, across: 2, none: 0 }[v.passDir]) % 4);
       if (v.passing) text = 'Waiting for everyone to pass…';
       else {
-        text = `Pick 3 cards to pass ${PASS_WORD[v.passDir]} to <span class="pc-nw">${escapeHtml(to)}</span>`;
+        text = `Pick 3 cards to pass ${PASS_WORD[v.passDir]} to ${nameHtml(to)}`;
         action.hidden = false;
         action.disabled = this.selected.size !== 3 || this.pending;
         action.textContent = `Pass ${this.selected.size}/3`;
         action.dataset.act = 'pass';
       }
     } else if (v.phase === 'playing') {
-      if (v.trickWinner !== null) text = v.trickWinner === v.seat ? 'You take the trick' : `${escapeHtml(this.name(v.trickWinner))} takes the trick`;
+      if (v.trickWinner !== null) text = v.trickWinner === v.seat ? 'You take the trick' : `${nameHtml(this.name(v.trickWinner))} takes the trick`;
       else if (v.turn === v.seat) text = this.shell.device.touch ? (this.lifted ? 'Tap it again to play' : 'Your turn: tap a card') : 'Your turn';
-      else if (v.turn !== null) text = `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>'s turn`;
+      else if (v.turn !== null) text = `${nameHtml(this.name(v.turn))}'s turn`;
       if (v.hand > 0 && v.passDir === 'none' && v.trick.length === 0 && v.seats.every((s) => s.cards === 13)) text += ' · No passing this hand';
     } else if (v.phase === 'handEnd') {
       text = 'Next hand coming up…';
@@ -359,12 +359,12 @@ export class HeartsTable implements View {
     if (!show) return;
     let html = '<div class="ht-panel pc-sheet">';
     if (v.phase === 'gameOver') {
-      const names = v.winners.map((i) => escapeHtml(this.name(i)));
+      const names = v.winners.map((i) => nameHtml(this.name(i)));
       const youWon = v.seat !== null && v.winners.includes(v.seat);
       html += `<h2>${youWon ? 'You win!' : `${names.join(' & ')} ${v.winners.length > 1 ? 'win' : 'wins'}!`}</h2>`;
     } else if (v.phase === 'handEnd' && v.result) {
       html += `<h2>Hand ${v.hand} done</h2>`;
-      if (v.result.moon !== null) html += `<p class="ht-moon">${escapeHtml(this.name(v.result.moon))} shot the moon!</p>`;
+      if (v.result.moon !== null) html += `<p class="ht-moon">${nameHtml(this.name(v.result.moon))} shot the moon!</p>`;
     } else {
       html += '<h2>Scores</h2>';
     }

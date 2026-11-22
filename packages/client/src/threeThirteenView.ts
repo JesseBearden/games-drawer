@@ -3,7 +3,7 @@ import { isJoker, isWild, ttSuit, type GameServerMessage, type TTCard, type Thre
 import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml } from './heartsView';
 import { cardFaceSvg, feltBackHtml, type Rank, type Suit } from './paperArt';
 import { patchHtml, syncKeyed } from './dom';
-import { escapeHtml } from './html';
+import { escapeHtml, nameHtml } from './html';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -205,14 +205,14 @@ export class ThreeThirteenTable implements View {
     const lastTurn = out !== null ? ' (last turn)' : '';
     if (v.seat === null) text = 'Watching. You’ll get a seat when one frees up.';
     else if (v.phase === 'playing') {
-      if (out !== null && out !== v.seat && v.turn !== v.seat) text = `<span class="pc-nw">${escapeHtml(this.name(out))}</span> went out! `;
+      if (out !== null && out !== v.seat && v.turn !== v.seat) text = `${nameHtml(this.name(out))} went out! `;
       if (mine) {
-        text = out !== null ? `<span class="pc-nw">${escapeHtml(this.name(out))}</span> went out. Your last turn: ` : 'Your turn: ';
+        text = out !== null ? `${nameHtml(this.name(out))} went out. Your last turn: ` : 'Your turn: ';
         if (v.step === 'draw') text += 'take a card from the pile or the discards.';
         else if (v.goOut) text += 'you can go out!';
         else if (this.lifted) text += 'tap it again to throw it away.';
         else text += 'tap a card to throw away.';
-      } else if (v.turn !== null) text += `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>’s turn${lastTurn}`;
+      } else if (v.turn !== null) text += `${nameHtml(this.name(v.turn))}’s turn${lastTurn}`;
     } else if (v.phase === 'roundEnd') text = `Round ${v.round} done`;
     patchHtml(q<HTMLElement>('.ht-status'), text);
   }
@@ -414,7 +414,7 @@ export class ThreeThirteenTable implements View {
     let html = '<div class="ht-panel pc-sheet">';
     if (v.phase === 'gameOver') {
       const youWon = v.seat !== null && v.winners.includes(v.seat);
-      html += `<h2>${youWon ? 'You win!' : `${v.winners.map((i) => escapeHtml(this.name(i))).join(' & ')} ${v.winners.length > 1 ? 'win' : 'wins'}!`}</h2>`;
+      html += `<h2>${youWon ? 'You win!' : `${v.winners.map((i) => nameHtml(this.name(i))).join(' & ')} ${v.winners.length > 1 ? 'win' : 'wins'}!`}</h2>`;
     } else if (v.phase === 'roundEnd') {
       html += `<h2>Round ${v.round} done</h2>`;
     } else {
@@ -467,7 +467,7 @@ export class ThreeThirteenTable implements View {
     const v = this.view!;
     const waiting = v.seats.flatMap((s, i) => (!s.bot && !s.away && !v.ready.includes(i) ? [i] : []));
     const mine = v.seat !== null && waiting.includes(v.seat);
-    const others = waiting.filter((i) => i !== v.seat).map((i) => escapeHtml(this.name(i)));
+    const others = waiting.filter((i) => i !== v.seat).map((i) => nameHtml(this.name(i)));
     if (!mine) return others.length ? `Waiting for ${joinNames(others)}…` : '';
     if (!others.length) return 'Everyone else is ready.';
     return '';

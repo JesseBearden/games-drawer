@@ -688,9 +688,17 @@ body.pad-mode .pc-choice:has(input:focus) {
 @media (prefers-reduced-motion: reduce) {
   .pc-page *,
   .pc-page *::before,
-  .pc-page *::after {
+  .pc-page *::after,
+  #game *,
+  #game *::before,
+  #game *::after {
     transition: none !important;
     animation: none !important;
+  }
+  /* Talking still shows: the bars stand up instead of bouncing. */
+  .is-talking .pc-talk i,
+  #game .ht-seat.speaking .pc-talk i {
+    transform: scaleY(1);
   }
 }
 

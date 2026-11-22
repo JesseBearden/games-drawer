@@ -288,12 +288,43 @@ body.pad-mode #game .card.pad-cursor {
   #game .ht-sheet .ht-old {
     display: none;
   }
+  /* "9", not "Round 9": on a 320 px phone the word left no room for the names. */
+  #game .ht-sheet .ht-unit {
+    display: none;
+  }
 }
 #game .ht-panel .pc-small {
   margin: 10px 0 0;
 }
+/* A sheet taller than the screen (Three Thirteen's hands and scores) scrolls above its buttons:
+   Ready is always in sight. The row keeps the sheet to the screen's height, so it can scroll. */
+#game .ht-overlay {
+  grid-template-rows: minmax(0, 1fr);
+}
+#game .ht-panel {
+  padding-bottom: 0;
+}
 #game .ht-panel .actions {
-  margin-top: 14px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 14px -20px 0;
+  padding: 10px 20px 20px;
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+}
+#game .ht-panel .actions:empty {
+  position: static;
+  margin-top: 0;
+  padding-top: 0;
+}
+/* A name too long for a whole line of a heading ends in "…" (it never wraps). */
+#game .ht-panel h2 .pc-nw {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 /* ------------------------------------------------------------------ Spades */

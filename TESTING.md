@@ -38,6 +38,14 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
 - [ ] **Tanks a second time** (get to level 4, Switch game, Tanks again): no Move buttons or
       TRIPLE READY until you earn them. On a slow first load the hearts, wind and Drop show
       before the battlefield does.
+- [ ] **Dominoes when you have to draw**: as Nothing fits and Draw appear, the board may shrink
+      a little but the lines don't fold differently. Two scores in a row both show their +10.
+- [ ] **Score sheets on a narrow phone** (or iPhone Display Zoom, Larger Text): you can read
+      everyone's name, the columns are just numbers, and Ready for round N is in sight without
+      scrolling (try 4 players, all four card and domino games).
+- [ ] **Reduce motion** (the phone's accessibility setting): cards and sheets don't slide and the
+      Tanks nuke doesn't shake. Talking still shows beside names.
+- [ ] **A two-word name** stays on one line in 'takes the trick', 'wins!' and 'Waiting for'.
 
 ## Your decisions from the review (new)
 

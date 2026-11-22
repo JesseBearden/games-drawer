@@ -3,7 +3,7 @@ import { suitOf, type Card, type GameServerMessage, type SpadesView } from '@tan
 import { patchHtml } from './dom';
 import { fitSeatText, scoreSheetHtml, seatNameHtml, showHand, showTrick } from './heartsView';
 import { suitSvg, SUIT_NAME, type Suit } from './paperArt';
-import { escapeHtml } from './html';
+import { escapeHtml, nameHtml } from './html';
 import { focusForPad, type PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
 
@@ -204,11 +204,11 @@ export class SpadesTable implements View {
       if (myBidTurn) {
         const pb = v.seats[(v.seat + 2) % 4].bid;
         text = `How many tricks will you take?${pb === null ? '' : ` Your partner bid ${pb === 0 ? 'nil' : pb}.`}`;
-      } else if (v.turn !== null) text = `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>'s turn to bid`;
+      } else if (v.turn !== null) text = `${nameHtml(this.name(v.turn))}'s turn to bid`;
     } else if (v.phase === 'playing') {
-      if (v.trickWinner !== null) text = v.trickWinner === v.seat ? 'You take the trick' : `${escapeHtml(this.name(v.trickWinner))} takes the trick`;
+      if (v.trickWinner !== null) text = v.trickWinner === v.seat ? 'You take the trick' : `${nameHtml(this.name(v.trickWinner))} takes the trick`;
       else if (v.turn === v.seat) text = this.shell.device.touch ? (this.lifted ? 'Tap it again to play' : 'Your turn: tap a card') : 'Your turn';
-      else if (v.turn !== null) text = `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>'s turn`;
+      else if (v.turn !== null) text = `${nameHtml(this.name(v.turn))}'s turn`;
       if (v.spadesBroken) text += ` <span class="ht-broken">${suitSvg('S')} broken</span>`;
     } else if (v.phase === 'handEnd') text = 'Next hand coming up…';
     patchHtml(q<HTMLElement>('.ht-status'), text);
@@ -256,7 +256,7 @@ export class SpadesTable implements View {
     if (!show) return;
     const mine = this.myTeam();
     const teamName = (t: number) => (t === mine ? 'Us' : 'Them');
-    const players = (t: number) => [t, t + 2].map((s) => escapeHtml(this.name(s))).join(' & ');
+    const players = (t: number) => [t, t + 2].map((s) => nameHtml(this.name(s))).join(' & ');
     let html = '<div class="ht-panel pc-sheet">';
     if (v.phase === 'gameOver') {
       const weWon = v.winners.includes(mine) && v.seat !== null;
@@ -272,7 +272,7 @@ export class SpadesTable implements View {
         const r = v.result[t];
         const parts: string[] = [];
         if (r.bid > 0) parts.push(r.set ? `bid ${r.bid}, took ${r.tricks}: set` : `bid ${r.bid}, took ${r.tricks}`);
-        for (const n of r.nils) parts.push(`${escapeHtml(this.name(n.seat))} ${n.made ? 'made' : 'missed'} nil`);
+        for (const n of r.nils) parts.push(`${nameHtml(this.name(n.seat))} ${n.made ? 'made' : 'missed'} nil`);
         if (r.bagPenalty) parts.push('10 bags: −100');
         html += `<li><b>${teamName(t)}</b> <small>(${players(t)})</small>: ${parts.join(', ')} → <b class="${r.points < 0 ? 'neg' : ''}">${r.points > 0 ? '+' : ''}${r.points}</b></li>`;
       }

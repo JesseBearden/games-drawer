@@ -4,6 +4,11 @@ import type { Sprites } from './sprites';
 import { colorCss } from './html';
 import type { ClientTank, Effect, GameState } from './state';
 
+/** How many pixels the screen shakes, `t` of the way through a nuke. None with Reduce motion on. */
+export function nukeShake(t: number, lessMotion: boolean): number {
+  return lessMotion ? 0 : 14 * Math.max(0, 1 - t) * Math.min(1, t * 6);
+}
+
 const DEG = Math.PI / 180;
 
 /** Turret sprite pivot (dome centre, on the barrel's axis) in sprite pixels (scripts/felt-sprites.cjs prints it). */
@@ -85,7 +90,7 @@ export class Renderer {
     let shakeY = 0;
     if (nuke) {
       const t = (now - nuke.t0) / nuke.dur;
-      const amp = 14 * Math.max(0, 1 - t) * Math.min(1, t * 6);
+      const amp = nukeShake(t, matchMedia('(prefers-reduced-motion: reduce)').matches);
       shakeX = (Math.random() * 2 - 1) * amp;
       shakeY = (Math.random() * 2 - 1) * amp;
     }

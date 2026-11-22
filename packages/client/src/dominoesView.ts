@@ -3,7 +3,7 @@ import { DOMINOES_RULES, type DominoesView, type GameServerMessage, type Move, t
 import { bounds, ghostSpot, layoutSpots, limitsFor, tileSvg, type TileSpot } from './dominoLayout';
 import { focusForPad, type PadPress } from './gamepad';
 import { patchHtml, syncKeyed, type KeyedItem } from './dom';
-import { escapeHtml } from './html';
+import { nameHtml } from './html';
 import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml, seatRows } from './heartsView';
 import type { SafariGesture, ShellApi, View } from './views';
 
@@ -52,6 +52,7 @@ export class DominoesTable implements View {
   /** The fitted board: its box and how big half a domino is, before zooming. */
   private boxW = 0;
   private boxH = 0;
+  private popTimer: number | undefined;
   private fitUnit = MAX_UNIT;
   private hasTiles = false;
   /** Fingers (or the mouse) on the board, and the pinch or drag they started. */
@@ -90,11 +91,17 @@ export class DominoesTable implements View {
     board.addEventListener('gesturechange', this.onGestureChange);
     board.addEventListener('gestureend', this.onGestureEnd);
     this.observer.observe(board);
+    this.observer.observe(this.middle());
     shell.sfx.preloadSounds(CARD_SOUNDS);
   }
 
   private board() {
     return this.el.querySelector('.dm-board') as HTMLElement;
+  }
+
+  /** The middle of the table: the board, and whatever shows under it. */
+  private middle() {
+    return this.el.querySelector('.ht-center') as HTMLElement;
   }
 
   onGameMessage(m: GameServerMessage) {
@@ -220,7 +227,10 @@ export class DominoesTable implements View {
     if (!v || !board) return;
     const box = board.getBoundingClientRect();
     if (!box.width || !box.height) return;
-    const limits = limitsFor(box.width, box.height);
+    // Where the lines bend comes from the whole middle of the table, which keeps its shape when
+    // "Nothing fits" and Draw take room under the board: the tiles only shrink, they don't refold.
+    const middle = this.middle().getBoundingClientRect();
+    const limits = limitsFor(middle.width, middle.height);
     const spots = layoutSpots(v.layout, limits);
     const ghosts: { spot: TileSpot; move: Move }[] = [];
     for (const move of this.myMoves(this.selected)) {
@@ -426,6 +436,8 @@ export class DominoesTable implements View {
     this.hoverAt = { x: e.clientX, y: e.clientY };
     const g = this.gesture;
     if (!g || !this.pointers.has(e.pointerId)) return;
+    // A mouse with no button down has been let go of (off the board, where we didn't hear it).
+    if (e.pointerType === 'mouse' && e.buttons === 0) return this.onPointerUp(e);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const now = this.pointerSpread();
     if (this.pointers.size >= 2 && g.dist > 0) {
@@ -490,14 +502,14 @@ export class DominoesTable implements View {
     const res = v.result;
     if (v.phase === 'gameOver') {
       const youWon = v.seat !== null && v.winners.includes(v.seat);
-      html += `<h2>${youWon ? 'You win!' : `${v.winners.map((i) => escapeHtml(this.name(i))).join(' & ')} ${v.winners.length > 1 ? 'win' : 'wins'}!`}</h2>`;
+      html += `<h2>${youWon ? 'You win!' : `${v.winners.map((i) => nameHtml(this.name(i))).join(' & ')} ${v.winners.length > 1 ? 'win' : 'wins'}!`}</h2>`;
     } else if (v.phase === 'handEnd') {
       html += `<h2>Hand ${v.hand} done</h2>`;
     } else {
       html += '<h2>Scores</h2>';
     }
     if (res && v.phase !== 'playing') {
-      const who = res.winner === null ? null : escapeHtml(this.name(res.winner));
+      const who = res.winner === null ? null : nameHtml(this.name(res.winner));
       html += `<p class="dm-result">${
         res.blocked
           ? who
@@ -541,10 +553,10 @@ export class DominoesTable implements View {
     const v = this.view!;
     const waiting = this.waitingFor();
     const mine = v.seat !== null && waiting.includes(v.seat);
-    const others = waiting.filter((i) => i !== v.seat).map((i) => escapeHtml(this.name(i)));
+    const others = waiting.filter((i) => i !== v.seat).map((i) => nameHtml(this.name(i)));
     if (!mine) return others.length ? `Waiting for ${joinNames(others)}…` : '';
     if (!others.length) return 'Everyone else is ready.';
-    const ready = v.ready.filter((i) => i !== v.seat).map((i) => escapeHtml(this.name(i)));
+    const ready = v.ready.filter((i) => i !== v.seat).map((i) => nameHtml(this.name(i)));
     return ready.length ? `${joinNames(ready)} ${ready.length > 1 ? 'are' : 'is'} ready.` : '';
   }
 
@@ -575,7 +587,9 @@ export class DominoesTable implements View {
     pop.classList.remove('go');
     void pop.offsetWidth;
     pop.classList.add('go');
-    window.setTimeout(() => (pop.hidden = true), 1600);
+    // A second score soon after the first gets its whole time too.
+    clearTimeout(this.popTimer);
+    this.popTimer = window.setTimeout(() => (pop.hidden = true), 1600);
   }
 
   // ------------------------------------------------------------------ input
@@ -756,6 +770,7 @@ export class DominoesTable implements View {
 
   dispose() {
     this.observer.disconnect();
+    clearTimeout(this.popTimer);
     const game = this.el.closest<HTMLElement>('#game');
     for (const p of ['--felt-zoom', '--felt-x', '--felt-y']) game?.style.removeProperty(p);
     this.el.removeEventListener('click', this.onClick);

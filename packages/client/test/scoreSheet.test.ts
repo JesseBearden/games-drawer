@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { scoreSheetHtml } from '../src/scoreSheet';
 
@@ -37,6 +38,13 @@ describe('score sheets', () => {
     // The hand that just ended is picked out.
     expect(hands[9]).toContain('ht-fresh');
     expect(hands.slice(0, 9).some((c) => c.includes('ht-fresh'))).toBe(false);
+  });
+
+  it('keep the word apart from its number, so phones can show the number alone', () => {
+    const html = scoreSheetHtml([{ label: 'Jesse', history: [4, 9], total: 9 }], false, 'Round');
+    expect(html).toContain('<span class="ht-unit">Round </span>2</th>');
+    const css = fs.readFileSync(new URL('../src/cards.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/@media \(max-width: 600px\) \{[^@]*\.ht-unit \{\s*display: none;/);
   });
 
   it('show just the names and totals before any hand is over', () => {
