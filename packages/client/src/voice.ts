@@ -1,4 +1,20 @@
 import type { ClientMessage, RtcSignal, VoicePeer, VoiceSettings } from '@tank/shared';
+import {
+  answerWaitMs,
+  enoughStep,
+  LOST_WAIT_MS,
+  nextStep,
+  readAttempt,
+  relayEnds,
+  RETRY_MS,
+  serversFor,
+  SETTLE_MS,
+  STEP_WAIT_MS,
+  withAttempt,
+  type Attempt,
+  type RelayEnds,
+  type RelayStep,
+} from './voiceRelay';
 
 /**
  * Peer-to-peer voice chat for private rooms.
@@ -17,7 +33,8 @@ import type { ClientMessage, RtcSignal, VoicePeer, VoiceSettings } from '@tank/s
  * after a dropped connection it rejoins by itself (the mic stays open).
  *
  * Some networks can't connect two players directly; the server can hand out credentials for
- * our own TURN relay. Add ?relay=1 to the page URL to force every link through the relay
+ * our own TURN relay. A link tries without it first, and takes as few of its slots as will
+ * connect (voiceRelay.ts). Add ?relay=1 to the page URL to force every link through the relay
  * (for testing it).
  */
 export interface VoiceHooks {
@@ -35,16 +52,33 @@ interface PeerLink {
   pc: RTCPeerConnection;
   audio: HTMLAudioElement;
   analyser: AnalyserNode | null;
+  source: MediaStreamAudioSourceNode | null;
   /** ICE candidates that arrived before the remote description. */
   pending: RTCIceCandidateInit[];
   route: VoiceRoute;
   /** The route last reported to the server, so each is sent once. */
   reported: VoiceRoute | null;
-  restarts: number;
+  /** We make this link's offers (the smaller alias). */
+  offers: boolean;
+  attempt: Attempt | null;
+  /** The other side's page is from before attempts: it gets every relay route, as it expects. */
+  olderPeer: boolean;
+  /** This attempt has connected at some point. */
+  connected: boolean;
+  /** UDP got out, the last time this link looked. */
+  udp: boolean;
+  /** This attempt: addresses were gathered, and one was our public address. */
+  gathered: boolean;
+  sawPublic: boolean;
+  /** Times it was made again to give back slots it wasn't using (MAX_TRIMS). */
+  trims: number;
+  /** They've been told it can't connect (said once, until it does). */
+  told: boolean;
+  timer: number | undefined;
 }
 
-/** Times we'll retry a failed link (ICE restart) before giving up. */
-const MAX_RESTARTS = 2;
+/** A link is made again to give back unused slots at most this often (each time is a blink of silence). */
+const MAX_TRIMS = 3;
 
 function forceRelay(): boolean {
   try {
@@ -300,21 +334,29 @@ export class Voice {
   async onSignal(from: string, data: RtcSignal) {
     if (!this.inVoice || !this.peers.some((p) => p.id === from)) return;
     const link = this.links.get(from) ?? this.createLink(from);
-    const pc = link.pc;
     try {
-      if ('sdp' in data) {
-        await pc.setRemoteDescription(data.sdp);
-        for (const c of link.pending.splice(0)) await pc.addIceCandidate(c).catch(() => {});
-        if (data.sdp.type === 'offer') {
-          await pc.setLocalDescription(await pc.createAnswer());
-          const d = pc.localDescription!;
-          this.hooks.send({ t: 'rtc', to: from, data: { sdp: { type: d.type as 'answer', sdp: d.sdp } } });
-        }
-      } else if (pc.remoteDescription) {
-        await pc.addIceCandidate(data.candidate).catch(() => {});
-      } else {
-        link.pending.push(data.candidate);
+      if (!('sdp' in data)) {
+        if (link.pc.remoteDescription) await link.pc.addIceCandidate(data.candidate).catch(() => {});
+        else link.pending.push(data.candidate);
+        return;
       }
+      const { type } = data.sdp;
+      const { attempt, sdp } = readAttempt(data.sdp.sdp);
+      // Nothing is awaited before the new connection exists, so candidates behind the offer find it.
+      if (type === 'offer') this.takeOffer(from, link, attempt);
+      // An answer to an attempt we've since given up on.
+      else if (!link.attempt || (attempt && attempt.id !== link.attempt.id)) return;
+
+      const pc = link.pc;
+      await pc.setRemoteDescription({ type, sdp });
+      if (link.pc !== pc) return;
+      for (const c of link.pending.splice(0)) await pc.addIceCandidate(c).catch(() => {});
+      if (type !== 'offer') return;
+      await pc.setLocalDescription(await pc.createAnswer());
+      if (link.pc !== pc || this.links.get(from) !== link) return;
+      link.gathered = true;
+      const answer = pc.localDescription!.sdp;
+      this.hooks.send({ t: 'rtc', to: from, data: { sdp: { type: 'answer', sdp: attempt ? withAttempt(answer, attempt) : answer } } });
     } catch (err) {
       console.warn('Voice negotiation failed with', from, err);
     }
@@ -327,27 +369,101 @@ export class Voice {
       if (p.id === this.alias || this.links.has(p.id)) continue;
       const link = this.createLink(p.id);
       // Only one side starts, so offers never collide.
-      if (this.alias < p.id) void this.offer(p.id, link);
+      if (link.offers) void this.tryLink(p.id, link, this.relayOnly ? 'relay' : 'direct');
     }
   }
 
-  private async offer(alias: string, link: PeerLink) {
+  private createLink(alias: string): PeerLink {
+    const audio = new Audio();
+    audio.autoplay = true;
+    audio.setAttribute('playsinline', '');
+    audio.muted = this.muted.has(alias);
+    const link: PeerLink = {
+      pc: this.newConnection([]),
+      audio,
+      analyser: null,
+      source: null,
+      pending: [],
+      route: 'connecting',
+      reported: null,
+      offers: this.alias < alias,
+      attempt: null,
+      olderPeer: false,
+      connected: false,
+      udp: true,
+      gathered: false,
+      sawPublic: false,
+      trims: 0,
+      told: false,
+      timer: undefined,
+    };
+    this.links.set(alias, link);
+    if (!link.offers) this.waitForOffers(alias, link);
+    return link;
+  }
+
+  private newConnection(iceServers: VoiceSettings['iceServers']) {
+    return new RTCPeerConnection({ iceServers, iceTransportPolicy: this.relayOnly ? 'relay' : 'all' });
+  }
+
+  /** The offering side: make one attempt, and move on to the next if it doesn't connect in time. */
+  private async tryLink(alias: string, link: PeerLink, step: RelayStep) {
+    const attempt = { id: Math.random().toString(36).slice(2, 10) || '0', step };
+    link.attempt = attempt;
+    link.route = 'connecting';
+    this.replaceConnection(alias, link, step);
+    clearTimeout(link.timer);
+    link.timer = window.setTimeout(() => this.tryNext(alias, link), STEP_WAIT_MS[step]);
+    this.hooks.changed();
+    const pc = link.pc;
     try {
-      await link.pc.setLocalDescription(await link.pc.createOffer());
-      const d = link.pc.localDescription!;
-      this.hooks.send({ t: 'rtc', to: alias, data: { sdp: { type: d.type as 'offer', sdp: d.sdp } } });
+      await pc.setLocalDescription(await pc.createOffer());
+      if (link.pc !== pc || this.links.get(alias) !== link) return;
+      link.gathered = true;
+      this.hooks.send({ t: 'rtc', to: alias, data: { sdp: { type: 'offer', sdp: withAttempt(pc.localDescription!.sdp, attempt) } } });
     } catch (err) {
       console.warn('Voice offer failed', err);
     }
   }
 
-  private createLink(alias: string): PeerLink {
-    const pc = new RTCPeerConnection({ iceServers: this.settings.iceServers, iceTransportPolicy: this.relayOnly ? 'relay' : 'all' });
-    const audio = new Audio();
-    audio.autoplay = true;
-    audio.setAttribute('playsinline', '');
-    audio.muted = this.muted.has(alias);
-    const link: PeerLink = { pc, audio, analyser: null, pending: [], route: 'connecting', reported: null, restarts: 0 };
+  private tryNext(alias: string, link: PeerLink) {
+    const next = link.attempt && nextStep(link.attempt.step);
+    if (next) void this.tryLink(alias, link, next);
+    else this.giveUp(alias, link);
+  }
+
+  /** The answering side: a new attempt gets a new connection, with the relay only as it needs. */
+  private takeOffer(alias: string, link: PeerLink, attempt: Attempt | null) {
+    if (!attempt) {
+      // An older page restarts ICE on one connection, and expects every relay route here.
+      if (!link.olderPeer || link.pc.signalingState === 'closed') this.replaceConnection(alias, link, 'any');
+      link.olderPeer = true;
+    } else if (attempt.id !== link.attempt?.id) {
+      link.olderPeer = false;
+      link.attempt = attempt;
+      link.route = 'connecting';
+      this.replaceConnection(alias, link, attempt.step);
+    }
+    this.waitForOffers(alias, link);
+  }
+
+  private waitForOffers(alias: string, link: PeerLink) {
+    clearTimeout(link.timer);
+    link.timer = window.setTimeout(() => this.giveUp(alias, link), answerWaitMs(link.attempt?.step ?? 'direct'));
+  }
+
+  /** Close this link's connection (which gives back any relay slots) and make the next one. */
+  private replaceConnection(alias: string, link: PeerLink, step: RelayStep) {
+    // With the relay forced there's no public address to see, so assume UDP works.
+    if (link.gathered && !this.relayOnly) link.udp = link.sawPublic;
+    this.closeConnection(link);
+    link.pending = [];
+    link.connected = false;
+    link.gathered = false;
+    link.sawPublic = false;
+    const servers = serversFor(this.settings.iceServers, { step, offers: link.offers, udp: link.udp, relayOnly: this.relayOnly });
+    const pc = this.newConnection(servers);
+    link.pc = pc;
     // Whatever we're sending right now: the gated mic, or the plain one while the page is hidden.
     const micTrack = this.mic?.getAudioTracks()[0];
     const out = this.rawMic && micTrack ? micTrack : this.sendTrack;
@@ -355,6 +471,7 @@ export class Voice {
     pc.onicecandidate = (e) => {
       if (!e.candidate) return;
       const c = e.candidate.toJSON();
+      if (c.candidate?.includes(' typ srflx')) link.sawPublic = true;
       this.hooks.send({
         t: 'rtc',
         to: alias,
@@ -363,45 +480,84 @@ export class Voice {
     };
     pc.ontrack = (e) => {
       const stream = e.streams[0] ?? new MediaStream([e.track]);
-      audio.srcObject = stream;
-      audio.play().catch(() => {
+      link.audio.srcObject = stream;
+      link.audio.play().catch((err: { name?: string } | null) => {
+        // A newer attempt's sound replacing this one isn't the browser holding sound back.
+        if (err?.name === 'AbortError') return;
         this.hooks.toast('Tap the screen to hear voice chat.');
         this.resumeOnTap();
       });
       if (this.ctx) {
+        link.source?.disconnect();
         const a = this.ctx.createAnalyser();
         a.fftSize = 512;
-        this.ctx.createMediaStreamSource(stream).connect(a);
+        link.source = this.ctx.createMediaStreamSource(stream);
+        link.source.connect(a);
         link.analyser = a;
       }
     };
-    pc.onconnectionstatechange = () => {
-      const state = pc.connectionState;
-      if (state === 'connected') void this.detectRoute(alias, link);
-      else if (state === 'failed') this.onFailed(alias, link);
-      else if (state === 'connecting' || state === 'new') link.route = 'connecting';
-      this.hooks.changed();
-    };
-    this.links.set(alias, link);
-    return link;
+    pc.onconnectionstatechange = () => this.onState(alias, link, pc);
   }
 
-  /** Retry a failed link with fresh network paths; the offering side drives it. */
-  private onFailed(alias: string, link: PeerLink) {
+  private closeConnection(link: PeerLink) {
+    const { pc } = link;
+    pc.onicecandidate = null;
+    pc.ontrack = null;
+    pc.onconnectionstatechange = null;
+    pc.close();
+    link.source?.disconnect();
+    link.source = null;
+    link.analyser = null;
+  }
+
+  private onState(alias: string, link: PeerLink, pc: RTCPeerConnection) {
+    if (link.pc !== pc || this.links.get(alias) !== link) return;
+    const state = pc.connectionState;
+    if (state === 'connected') {
+      link.connected = true;
+      link.told = false;
+      clearTimeout(link.timer);
+      void this.detectRoute(alias, link, pc);
+      link.timer = window.setTimeout(() => void this.settle(alias, link, pc), SETTLE_MS);
+    } else if (state === 'failed') {
+      link.route = 'connecting';
+      if (!link.offers) {
+        // The other side makes the next attempt. (One that was already waited for keeps its deadline.)
+        if (link.connected) this.waitForOffers(alias, link);
+      } else if (link.connected) {
+        // It was working: try the same way again, with every step after it still to come.
+        void this.tryLink(alias, link, link.attempt?.step ?? 'direct');
+      } else this.tryNext(alias, link);
+    } else if (state === 'disconnected') {
+      if (link.connected) {
+        if (!link.offers) this.waitForOffers(alias, link);
+        else {
+          clearTimeout(link.timer);
+          link.timer = window.setTimeout(() => void this.tryLink(alias, link, link.attempt?.step ?? 'direct'), LOST_WAIT_MS);
+        }
+      }
+    } else if (state === 'connecting' || state === 'new') link.route = 'connecting';
+    this.hooks.changed();
+  }
+
+  /** Every attempt failed: say so, don't sit on relay slots, and try again in a while. */
+  private giveUp(alias: string, link: PeerLink) {
     if (this.links.get(alias) !== link) return;
-    if (link.restarts >= MAX_RESTARTS) {
-      link.route = 'failed';
-      this.reportRoute(alias, link);
+    clearTimeout(link.timer);
+    link.route = 'failed';
+    this.reportRoute(alias, link);
+    // An older page may still be trying on this connection.
+    if (!link.olderPeer) {
+      this.closeConnection(link);
+      link.attempt = null;
+    }
+    if (link.offers) link.timer = window.setTimeout(() => void this.tryLink(alias, link, this.relayOnly ? 'relay' : 'direct'), RETRY_MS);
+    if (!link.told) {
+      link.told = true;
       const name = this.peers.find((p) => p.id === alias)?.name ?? 'one player';
       this.hooks.toast(`Couldn't connect voice with ${name} (their network or yours blocked it).`);
-      return;
     }
-    link.restarts++;
-    link.route = 'connecting';
-    if (this.alias < alias) {
-      link.pc.restartIce();
-      void this.offer(alias, link);
-    }
+    this.hooks.changed();
   }
 
   /** Tell the server how this link connected (the admin page counts how often voice needs the relay). */
@@ -412,34 +568,44 @@ export class Voice {
     this.hooks.send({ t: 'voice-route', to: alias, route: link.route });
   }
 
-  /** Direct, or through the relay? Shown in the voice panel. */
-  private async detectRoute(alias: string, link: PeerLink) {
+  /** Direct, or through the relay (and at which end)? Null if the browser wouldn't say. */
+  private async detectRoute(alias: string, link: PeerLink, pc: RTCPeerConnection): Promise<RelayEnds | null> {
+    let ends: RelayEnds | null = null;
     try {
-      const stats = await link.pc.getStats();
-      let pairId: string | undefined;
-      stats.forEach((r) => {
-        if (r.type === 'transport' && r.selectedCandidatePairId) pairId = r.selectedCandidatePairId;
-      });
-      let local: string | undefined;
-      stats.forEach((r) => {
-        if (r.type === 'candidate-pair' && (r.id === pairId || (!pairId && r.nominated && r.state === 'succeeded'))) local = r.localCandidateId;
-      });
-      let relayed = false;
-      stats.forEach((r) => {
-        if (r.type === 'local-candidate' && r.id === local && r.candidateType === 'relay') relayed = true;
-      });
-      link.route = relayed ? 'relayed' : 'direct';
+      ends = relayEnds(await pc.getStats());
     } catch {
-      link.route = 'direct';
+      /* counted as direct */
+    }
+    if (this.links.get(alias) !== link || link.pc !== pc || pc.connectionState !== 'connected') return null;
+    link.route = !ends || ends === 'neither' ? 'direct' : 'relayed';
+    this.hooks.changed();
+    return ends;
+  }
+
+  /**
+   * The link has been up a moment. If it's holding more slots than it uses (direct was only slow,
+   * or an outage pushed it on to the last attempt), make it again on the attempt that would do.
+   */
+  private async settle(alias: string, link: PeerLink, pc: RTCPeerConnection) {
+    const ends = await this.detectRoute(alias, link, pc);
+    if (this.links.get(alias) !== link || link.pc !== pc || pc.connectionState !== 'connected') return;
+    const step = link.attempt?.step;
+    if (step && link.offers && !this.relayOnly && link.trims < MAX_TRIMS) {
+      const enough = enoughStep(step, ends);
+      if (enough !== step) {
+        link.trims++;
+        void this.tryLink(alias, link, enough);
+        return;
+      }
     }
     this.reportRoute(alias, link);
-    if (this.links.get(alias) === link) this.hooks.changed();
   }
 
   private dropLink(alias: string) {
     const link = this.links.get(alias);
     if (!link) return;
-    link.pc.close();
+    clearTimeout(link.timer);
+    this.closeConnection(link);
     link.audio.srcObject = null;
     this.links.delete(alias);
   }

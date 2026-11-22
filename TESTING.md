@@ -37,6 +37,18 @@ been tested).
 - [ ] **A controller** (if you have one handy): it wakes up on the first button press or the
       second, including after being unplugged and plugged back in.
 
+## Voice asks for the relay only when it needs it (new)
+
+Only Chrome and Edge on the PC have been tested, so an iPhone matters most here.
+
+- [ ] **Same Wi-Fi**: two or more people with mics on connect as quickly as before, both ways.
+- [ ] **Cell data against home Wi-Fi** (an iPhone, and an Android if there's one): they connect
+      both ways. If that link needs the relay it takes about 6 seconds instead of 1 or 2.
+- [ ] **A phone that changes networks mid-call** (Wi-Fi off, then on): voice comes back by
+      itself, also the third and fourth time (it used to give up after two).
+- [ ] **A locked iPhone for a minute, then unlocked**: both directions still work, with no
+      "Tap the screen to hear voice chat" that wasn't there before.
+
 ## Fixes from the code review (new)
 
 - [ ] **A locked phone keeps its turn**: at a Hearts, Spades, Dominoes or Three Thirteen table,
@@ -702,7 +714,7 @@ The deploy pipeline is built and tested here, but its first real run needs the A
 - [ ] Start a game, then push a change: your game keeps going on the old version until it
       ends, and a room created after the deploy gets the new one.
 - [ ] Voice relay: open a table link with `?relay=1` on the end on two phones using cell
-      data. Each person in the voice panel should show "(relayed)".
+      data. They hear each other, and the admin page counts those links as through the relay.
 - [ ] A friend in another house joins your table and you talk while playing.
 - [ ] **Link preview** (after the next push): send a new invite in Messages. The picture is felt
       now (felt hands with a yellow and a red piece, "Play a game together."), not the paper

@@ -51,7 +51,7 @@ browser ──voice relay (only when needed)────────────
 | Tanks players at once, not talking | ~100 after a deploy | **~875** at today's quota, ~2,600 with a quota increase |
 | Tanks players at once, all on voice | not measured | **~550–760**, or ~1,600–2,300 (estimate) |
 | People at card tables at once, not talking | ~1,200 after a deploy | **~10,000**, or ~32,000 with a quota increase |
-| People at card tables at once, all on voice | relay fills after ~1 table | **~1,300–3,800**, or ~3,800–11,000 (estimate) |
+| People at card tables at once, all on voice | not measured | **~1,300–3,800**, or ~3,800–11,000 (estimate) |
 | A deploy | new box, DNS moves, 3-hour drain | push an image, flip a pointer, old servers drain |
 
 **Three gates decide whether this works:**
@@ -63,7 +63,7 @@ browser ──voice relay (only when needed)────────────
 3. **The spend limit has to be handled.** At the limit AWS stops the whole project, and deletes
    its data if nobody acts for 90 days. A "huge burst" is bounded by money before technology.
 
-**Effort (estimate):** 9–14 working sessions in eight phases. Phase 0 costs a few dollars and
+**Effort (estimate):** 9–13 working sessions in eight phases. Phase 0 costs a few dollars and
 changes nothing live.
 
 ## 2. What changed since we talked
@@ -80,7 +80,7 @@ Checking turned up things that were wrong or missing in what I said in our discu
 | Bigger tasks raise capacity | Only up to 1 vCPU: each game server is single-threaded | 0.5 vCPU to start, 1 vCPU at most |
 | 20 servers hold 5,000–10,000 Tanks players, and 4 vCPUs hold 1,500–2,000 | That was at 100% CPU, with no servers spare for deploys | 2,600–5,250 at 15 live servers, ~875 on 4 vCPUs |
 | A 1,000-player evening costs a couple of dollars | True once. A sustained Tanks burst costs far more in bandwidth than in servers, and can reach the spend limit in a day or two | A live spend estimate in the controller |
-| The capacity and bandwidth figures were the whole picture | The load test had no audio. Relayed voice costs more bandwidth than Tanks, and coturn's cap reserves room per connection, used or not | [8.1 Voice](#81-voice): lower figures when people talk, relay limits sized per slot, relay bytes in the spend estimate |
+| The capacity and bandwidth figures were the whole picture | The load test had no audio. Relayed voice costs more bandwidth than Tanks, and coturn's cap reserves room per slot, used or not | [8.1 Voice](#81-voice): lower figures when people talk, relay limits sized per slot, relay bytes in the spend estimate |
 | A code's server needs no lookup | **Holds** | Joining is pure arithmetic |
 | Six letters make guessing about 4× harder | **Holds**, however many servers run (checked) | No shared guess counter needed |
 
@@ -435,31 +435,30 @@ public IP. It can't use CloudFront or its free terabyte. A server with a table d
 a drain doesn't cut off voice early.
 
 **Measured 2026-11-21**, with our client in Chrome, a fake mic, and a counting test relay on
-the development PC:
+the development PC. "Before" and "after" are the change to ask for slots only when a link needs
+one (`packages/client/src/voiceRelay.ts`), made outside this plan:
 
 | | 2 people | 3 people | 4 people |
 |---|---|---|---|
-| Relay slots held when every link is **direct** (internet-like delay) | 4 | 10 | 18–22 |
-| Relay slots held when every link is relayed | 4 | 12 | 24 |
+| Relay slots held when every link is **direct**, before | 4 | 10 | 18–22 |
+| The same, after | 0 | 0 | 0 |
+| Relay slots held when every link is relayed, before | 4 | 12 | 24 |
+| The same, after (twice that if UDP is blocked at both ends) | 1 | 3 | 6 |
 | Sent out by the relay when every link is relayed | 14.8 KB/s (53 MB/h) | about 44 KB/s | 88.3 KB/s (318 MB/h) |
 
 One relayed stream is 7.4 KB/s on the wire and 51 packets a second. The three-person relayed
 column is worked out from that. The other figures are measured.
 
-**The cap counts reservations, not audio.** Each browser connection opens a relay slot over UDP
-and one over TCP, and keeps them after the link connects directly. coturn 4.6.1 sets aside
-`max-bps` from `bps-capacity` for each slot as it opens (checked in its source). At 16,000 and
-300,000 that is **19 slots in all**, about one full table. With that cap, one table of four
-connected directly left a relay-only pair at another table unable to connect, with no error on
-screen. Without the cap the same pair connected.
+**The cap counts reservations, not audio.** coturn 4.6.1 sets aside `max-bps` from `bps-capacity`
+for each slot as it opens (checked in its source). At 16,000 and 300,000 that is **19 slots in
+all**. A slot is only given back when its connection closes: restarting ICE doesn't do it.
 
-A server taking 150 tables would need up to 3,600 slots, each with a port. So, before phase 5:
+A server taking 150 tables would need about 180 slots with 20% of links relayed and 900 with all
+of them, each with a port. So, before phase 5:
 
-1. Ask for relay slots only when a link needs one (retry with the relay after the direct
-   attempt fails), or at least only one slot per connection.
-2. Size `bps-capacity`, `total-quota` and the port range in slots, from the admission limit.
-3. Admit tables by free slots as well as CPU.
-4. Cap money by relayed bytes in the controller, since a slot limit that large is no cost ceiling.
+1. Size `bps-capacity`, `total-quota` and the port range in slots, from the admission limit.
+2. Admit tables by free slots as well as CPU.
+3. Cap money by relayed bytes in the controller, since a slot limit that large is no cost ceiling.
 
 **Bandwidth.** Ohio charges $0.09/GB after 100 GB a month that's free across the account
 (checked). The share of links needing the relay is a guess: 20% here for planning, and 0 of the
@@ -543,7 +542,6 @@ Let's Encrypt sees only the origin's hostname, never player traffic, and needs n
 - `main.ts`: warm-up, "Building the table…", six-letter entry and display.
 - Photo upload and `photoUrl` (`packages/shared/src/photoUrls.ts`) through the helper. Getting
   `?slot=` onto them for today's boxes is a separate fix, outside this plan.
-- `voice.ts`: relay slots on demand ([8.1](#81-voice)).
 
 **Server**
 
@@ -585,7 +583,7 @@ Each ends at a point that's safe to stop at.
 | Phase | What | Sessions | Live site changes? |
 |---|---|---|---|
 | 0 | Gates and a throwaway spike | 1–2 | no |
-| 1 | Fixes useful on the boxes anyway | 1–2 | normal deploy |
+| 1 | Fixes useful on the boxes anyway | 1 | normal deploy |
 | 2 | CloudFront and S3 in front of the boxes | 1–2 | yes |
 | 3 | The server as a task | 1–2 | no |
 | 4 | Controller and routing, on staging | 2 | staging |
@@ -608,9 +606,9 @@ Each ends at a point that's safe to stop at.
 | Cold start, tap to welcome, 20 runs at different hours | 18 of 20 within 40 s (the agreed wait), median within 30 s |
 | Tanks on 0.5 vCPU, 100 players | late ticks under 0.1%, response time within 20 ms of today's |
 | EFS from a task as uid 1500 | reads and writes existing saves |
-| coturn in a task, two phones on cell data with `?relay=1` | "(relayed)", audio both ways |
+| coturn in a task, two phones on cell data with `?relay=1` | audio both ways, counted as relayed on the admin page |
 | coturn's CPU at 500 and 2,000 relayed streams of 51 packets a second | under 20 µs a packet, or redo [8.1](#81-voice) |
-| Relay slots a real iPhone and Android hold on cell data | recorded: Chrome on a PC holds up to 2 a connection |
+| Relay slots a real iPhone and Android hold on cell data | none when direct, one a relayed link, as in Chrome on a PC |
 | Image built from the PC | runs on ARM |
 
 **Stop here** if the key-value store, the WebSocket or the cold start fails, and choose from
@@ -618,8 +616,8 @@ Each ends at a point that's safe to stop at.
 
 ### Phase 1: fixes useful on the boxes anyway
 
-- EFS off the event loop. `/64` keys. The credential provider. Relay slots on demand, and limits
-  sized in slots.
+- `/64` keys. The credential provider. Relay limits sized in slots. Confirm that EFS work is off
+  the event loop.
 - **Done when:** ten full tables on voice leave room for a pair that can only use the relay.
 
 ### Phase 2: CloudFront and S3 in front of the boxes

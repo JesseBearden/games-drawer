@@ -218,15 +218,21 @@ what kind of thing the check found) and `photo_check_failed`; never the photo.
 Voice chat connects players directly. Some networks (strict routers, some mobile carriers,
 work Wi-Fi) block that; those players' audio goes through coturn instead. The box a table is on
 hands each player relay credentials for its own coturn, which expire after 24 hours
-(`TURN_TTL_SECONDS`), signed with the shared secret.
+(`TURN_TTL_SECONDS`), signed with the shared secret. The browser uses them only for a link that
+hasn't connected directly within 5 seconds
+([voiceRelay.ts](../packages/client/src/voiceRelay.ts)), so a relayed link takes about 6 seconds
+to come up and a direct one holds no room on the relay.
 
 **Testing it:** open a private room with `?relay=1` on the end of the URL (for example
 `https://<domain>/r/BCDFG?relay=1`) on two phones on cell data. That forces every voice
-link through the relay. The voice panel shows "(relayed)" next to each person when it works.
+link through the relay. They should hear each other, and the admin page's Voice section counts
+those links as through the relay.
 
 **Limits:** the relay refuses to forward to private and internal addresses (including the AWS
-metadata service), allows 16 KB/s per relayed link (`max-bps`) and 300 KB/s in total per box
-(`bps-capacity`), which is about 50 voice streams at once. Both are in
+metadata service), allows 16 KB/s per slot (`max-bps`) and 300 KB/s in total per box
+(`bps-capacity`). coturn sets the 16 KB/s aside as each slot opens, used or not, so that is **19
+slots per box**: 19 relayed links, or about three tables of four where every link needs the
+relay. A link takes two slots if UDP is blocked at the answering end. Both numbers are in
 [turnserver.conf](turnserver.conf); change them there and deploy (setup.sh re-renders the file
 and restarts coturn). The admin page's Voice section shows how often voice needs the relay.
 Networks that only allow port 443 aren't covered; that would need a second address for the relay.
