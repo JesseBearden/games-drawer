@@ -17,13 +17,13 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function battle() {
+function battle(stateEvery = DEFAULT_CONFIG.stateEvery) {
   const info = { id: 1, color: 0, name: 'Liz', controller: 'human', owner: 'Liz', kills: 0, level: 0, protectedUntil: 0 } as unknown as TankInfo;
   const init = {
     t: 'init',
     tankId: 1,
     reclaimed: false,
-    config: DEFAULT_CONFIG,
+    config: { ...DEFAULT_CONFIG, stateEvery },
     snapshot: {
       tick: 0,
       terrain: generateTerrain(DEFAULT_CONFIG, 5).toData(),
@@ -72,6 +72,21 @@ function battle() {
     },
   };
 }
+
+describe('how far behind it draws', () => {
+  it.each([[3, 7], [6, 13]])('with a state every %i ticks, %i ticks behind, so a moving tank never waits', (every, behind) => {
+    const b = battle(every);
+    expect(b.state.renderTick).toBe(-behind);
+    const xs: number[] = [];
+    for (let tick = every; tick <= 240; tick += every) {
+      b.server(tick, 100 + tick * 2);
+      xs.push(...b.playTo(tick + every - 1));
+    }
+    const moves = xs.slice(80).map((x, i, all) => (i ? x - all[i - 1] : 2)).filter((_, i) => i > 0);
+    // About 2 a frame all the way: no standing still between states.
+    for (const d of moves) expect(d).toBeGreaterThan(0.5);
+  });
+});
 
 describe('after a gap in frames', () => {
   const explosion = (tick: number, rev: number) => ({ type: 'explode', tick, rev, shell: rev, x: 100 + rev * 20, y: 520, r: 30, shielded: false, hitTank: null });

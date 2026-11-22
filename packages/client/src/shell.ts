@@ -1,8 +1,8 @@
-import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type GameServerMessage, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
+import { CHAT_FILTER_LABELS, GAME_NAMES, gameInfo, MAX_CHAT_LENGTH, type ChatFilterMode, type ChatMessage, type GameId, type GameServerMessage, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
 import { fetchGameView, gameViewNow } from './gameViews';
 import { LobbyView } from './lobby';
-import type { Net } from './net';
+import { PING_MS, type Net } from './net';
 import { patchHtml } from './dom';
 import { colorCss, escapeHtml } from './html';
 import { reloadIfSiteAnswers } from './reload';
@@ -75,6 +75,9 @@ export class RoomApp {
   private api: ShellApi;
   /** How swearing in chat is handled here (the server has the final say). */
   chatFilter: ChatFilterMode;
+  /** The filter itself, which downloads once the table is open. */
+  private filter: typeof import('./chatCheck') | null = null;
+  private disposed = false;
   /** Chat is paused until then (ms, page clock) after too many caught messages. */
   private chatPausedUntil = 0;
   private pauseTimer: number | undefined;
@@ -113,7 +116,8 @@ export class RoomApp {
     this.updateRoomInfo();
     this.renderMic();
     this.showGame(welcome.game);
-    this.pingTimer = window.setInterval(() => this.net.send({ t: 'ping', at: performance.now() }), 2000);
+    this.fetchFilter();
+    this.pingTimer = window.setInterval(() => this.net.send({ t: 'ping', at: performance.now() }), PING_MS);
     // "With mic on": the mic was asked for in that tap; join with it now.
     if (entry.mic && this.voice.available && this.voice.supported) void this.voice.join({ auto: true, stream: entry.micStream, ctx: entry.audioCtx, muted: entry.muted });
     else {
@@ -447,6 +451,28 @@ export class RoomApp {
 
   // ------------------------------------------------------------------ chat
 
+  private fetchFilter() {
+    if (this.filter) return;
+    import('./chatCheck').then(
+      (m) => {
+        this.filter = m;
+        if (!this.disposed) this.updateChatInput();
+      },
+      () => {}, // (typing asks again)
+    );
+  }
+
+  /** Can this be sent, and if not, is that because the filter caught it? */
+  private checkMessage(text: string): { ok: boolean; caught: boolean } {
+    if (this.filter) {
+      const r = this.filter.checkChat(text, this.chatFilter);
+      return { ok: r.ok, caught: !r.ok && r.reason !== 'empty' && r.reason !== 'too-long' };
+    }
+    // Not here yet: the server has the final say anyway.
+    const n = [...text.trim()].length;
+    return { ok: n > 0 && n <= MAX_CHAT_LENGTH, caught: false };
+  }
+
   /** Grey out Send (with a reminder) when the message would be caught, or while chat is paused. */
   private updateChatInput() {
     const input = $<HTMLInputElement>('chat-input');
@@ -462,9 +488,8 @@ export class RoomApp {
     }
     input.disabled = false;
     input.placeholder = this.room.kind === 'public' ? 'Write a message (keep it family friendly)' : 'Write a message';
-    const r = checkChat(input.value, this.chatFilter);
-    const caught = !r.ok && r.reason !== 'empty' && r.reason !== 'too-long';
-    send.disabled = !r.ok;
+    const { ok, caught } = this.checkMessage(input.value);
+    send.disabled = !ok;
     hint.hidden = !caught;
     input.classList.toggle('caught', caught);
   }
@@ -804,7 +829,7 @@ export class RoomApp {
       const input = $<HTMLInputElement>('chat-input');
       const text = input.value.trim();
       // Caught messages never leave the browser: Send stays greyed out with a reminder.
-      if (!text || Date.now() < this.chatPausedUntil || !checkChat(text, this.chatFilter).ok) {
+      if (!text || Date.now() < this.chatPausedUntil || !this.checkMessage(text).ok) {
         this.updateChatInput();
         return;
       }
@@ -815,7 +840,10 @@ export class RoomApp {
     };
     form.addEventListener('submit', submit);
     this.cleanups.push(() => form.removeEventListener('submit', submit));
-    const typed = () => this.updateChatInput();
+    const typed = () => {
+      this.fetchFilter();
+      this.updateChatInput();
+    };
     $('chat-input').addEventListener('input', typed);
     this.cleanups.push(() => $('chat-input').removeEventListener('input', typed));
     const filterPick = (e: Event) => {
@@ -1019,6 +1047,7 @@ export class RoomApp {
   }
 
   dispose() {
+    this.disposed = true;
     this.screen++;
     this.view?.dispose();
     this.view = null;

@@ -57,7 +57,7 @@ beforeEach(() => {
   parts = new Map();
   boardHeight = 500;
   vi.mocked(limitsFor).mockClear();
-  vi.stubGlobal('document', { getElementById: () => element() });
+  vi.stubGlobal('document', { getElementById: () => element(), querySelector: () => null });
   vi.stubGlobal('window', { setTimeout: (f: () => void, ms: number) => setTimeout(f, ms) });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
 });

@@ -40,7 +40,7 @@ const image = await sharp(input).rotate().resize({ width: 2400, withoutEnlargeme
 const { width, height } = await sharp(image).metadata();
 fs.mkdirSync(path.join(dir, 'thumbs'), { recursive: true });
 fs.writeFileSync(path.join(dir, `${id}.jpg`), image);
-fs.writeFileSync(path.join(dir, 'thumbs', `${id}.webp`), await sharp(image).resize(360).webp({ quality: 80 }).toBuffer());
+fs.writeFileSync(path.join(dir, 'thumbs', `${id}.webp`), await sharp(image).resize(240).webp({ quality: 70 }).toBuffer());
 
 const listFile = path.join(dir, 'puzzles.json');
 let list: { id: string; title: string; width: number; height: number }[] = [];

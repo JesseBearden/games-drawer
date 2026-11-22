@@ -75,7 +75,12 @@ export default defineConfig({
               // updates and only downloads again when the lists themselves change.
               name: 'chat-filter',
               test: /[\\/]node_modules[\\/]obscenity[\\/]|[\\/]shared[\\/]src[\\/]chatFilter\.ts$/,
+              // Only those: the small files it uses are the first page's too, which would then
+              // fetch the word lists with them.
+              includeDependenciesRecursively: false,
             },
+            // What names and the filter share, on its own, so an update doesn't rename the filter's file.
+            { name: 'look-alike', test: /[\\/]shared[\\/]src[\\/](lookAlike|chatModes)\.ts$/ },
           ],
         },
       },

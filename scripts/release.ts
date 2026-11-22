@@ -7,6 +7,7 @@
  * Layout:
  *   server.mjs          the game server, bundled with its dependencies
  *   client/             the built web client
+ *   client-hashes.json  each client file's fingerprint (its ETag)
  *   blocklist.txt       extra chat filter words
  *   deploy/             setup.sh, rollout.mjs and config templates used on the server
  *   RELEASE             the git commit this was built from
@@ -16,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { writeFingerprints } from '../packages/server/src/static';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'release');
@@ -44,6 +46,8 @@ for (const f of fs.readdirSync(path.join(out, 'client/assets'))) {
     throw new Error(`${f} has a font folded into it as a data: address, which the page's security header blocks. See assetsInlineLimit in packages/client/vite.config.ts.`);
   }
 }
+
+writeFingerprints(path.join(out, 'client'));
 
 // ws and other CommonJS packages call require(); give the ES module bundle one.
 const banner = "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);";

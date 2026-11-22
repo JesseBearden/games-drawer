@@ -22,8 +22,11 @@ import { TerrainRenderer } from './terrainRenderer';
 /** The tank game's start-up message: config plus a full snapshot. */
 export type TankInit = Extract<TankServerMessage, { t: 'init' }>;
 
-/** Render this many ticks behind the newest server state, to interpolate smoothly. */
-const INTERP_DELAY = 7;
+/**
+ * How many ticks behind the newest state to draw, to glide smoothly between them: two gaps
+ * between states and one over. The server says the gap, so it can send fewer without a stutter.
+ */
+const interpDelay = (stateEvery: number) => 2 * stateEvery + 1;
 /**
  * Events this far behind the moment being drawn were missed (the tab was hidden, the connection
  * stalled): they change the battlefield, but don't explode, play or pop up all at once.
@@ -112,6 +115,7 @@ export class GameState {
   renderTick: number;
   private offset: number;
   private tickMs: number;
+  private delay: number;
   private queue: GameEvent[] = [];
   /** While catching up on missed events: the ground they changed, painted once at the end. */
   private groundToPaint: { x0: number; x1: number; all: boolean } | null = null;
@@ -137,7 +141,8 @@ export class GameState {
     this.snapshotTick = snap.tick;
     this.serverTick = snap.tick;
     this.offset = snap.tick - performance.now() / this.tickMs;
-    this.renderTick = snap.tick - INTERP_DELAY;
+    this.delay = interpDelay(this.cfg.stateEvery);
+    this.renderTick = snap.tick - this.delay;
     this.terrain = Terrain.fromData(snap.terrain, this.cfg.bedrock);
     this.terrainRev = snap.terrainRev;
     this.terrainView = new TerrainRenderer(this.terrain);
@@ -232,7 +237,7 @@ export class GameState {
   // ------------------------------------------------------------------ per-frame update
 
   update(now: number) {
-    const target = now / this.tickMs + this.offset - INTERP_DELAY;
+    const target = now / this.tickMs + this.offset - this.delay;
     // Ease render time toward its target so clock corrections never jump.
     const step = target - this.renderTick;
     this.renderTick += Math.abs(step) > 20 ? step : step * 0.2 + 0;

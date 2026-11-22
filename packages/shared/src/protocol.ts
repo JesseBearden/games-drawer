@@ -13,7 +13,7 @@ import { isPuzzleId, type PuzzleState, type PuzzleSummary, type TablePhotoInfo }
  * rejects clients on a different version and the client asks the player to reload.
  * Fixtures in test/fixtures exercise every message type from both sides.
  */
-import { isChatFilterMode, type ChatFilterMode } from './chatFilter';
+import { isChatFilterMode, type ChatFilterMode } from './chatModes';
 import { isGameId, type GameId } from './games';
 
 export const PROTOCOL_VERSION = 4;

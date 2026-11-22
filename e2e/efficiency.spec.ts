@@ -1,7 +1,7 @@
 /** The cheaper ways of updating the screen, as a browser sees them. */
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { createRoom, createTable, joinByInvite, newPlayer, passThree, toLobby, watchErrors } from './helpers';
+import { at, createRoom, createTable, joinByInvite, newPlayer, passThree, toLobby, watchErrors } from './helpers';
 
 test.skip(({ isMobile }) => isMobile, 'one screen size is enough');
 test.skip(() => !!process.env.E2E_BASE_URL, 'local only');
@@ -155,6 +155,19 @@ test('the lobby changes around a button you’re about to tap, without replacing
   expect(await game.evaluate((el) => (el as HTMLElement & { same?: boolean }).same)).toBe(true);
   expect(await button.evaluate((el) => (el as HTMLElement & { same?: boolean }).same)).toBe(true);
   await friend.context().close();
+});
+
+test('the first page leaves the chat filter and the games’ own pictures for later', async ({ page }) => {
+  const asked: string[] = [];
+  page.on('request', (r) => asked.push(new URL(r.url()).pathname));
+  await page.goto(at('/'));
+  await page.waitForLoadState('networkidle');
+  expect(asked.filter((p) => /chat-filter|chatCheck|card-stock|windsock/.test(p))).toEqual([]);
+  // The smaller picture, on this screen.
+  expect(asked.filter((p) => p.includes('together'))).toEqual(['/art/together-1024.webp']);
+  await createRoom(page, 'Wren', 'dominoes');
+  await expect.poll(() => asked.some((p) => p.includes('chat-filter'))).toBe(true);
+  await expect.poll(() => asked).toContain('/art/card-stock.webp');
 });
 
 test('each game’s screen downloads when it’s picked, and works again after switching', async ({ page }) => {

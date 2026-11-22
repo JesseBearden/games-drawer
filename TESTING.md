@@ -64,6 +64,16 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
 - [ ] **The next deploy** (these fixes were only tested with a pretend AWS): the launch's lines
       show as they happen, and it finishes even if the previous box shuts down meanwhile. If a
       hand deploy is stopped with Ctrl+C, `fleet.ts status` then shows no new box.
+- [ ] **The front page's picture** still looks sharp on your phone, iPad and computer (smaller
+      copies are sent to smaller screens).
+- [ ] **The Jigsaw picture list** looks fine on a tablet (the thumbnails are smaller now, a
+      little softer, and quicker to appear).
+- [ ] **Dominoes**: the tile just played looks as before. **Tanks**: the windsock shows as
+      before, and tanks and helicopters move as smoothly.
+- [ ] **Messages right after joining**: Send still greys out for a caught word (the word lists
+      now download once you're at the table).
+- [ ] **A dead connection** still reconnects within about 15 seconds (the page checks in every 5
+      seconds now instead of 2).
 
 ## Your decisions from the review (new)
 

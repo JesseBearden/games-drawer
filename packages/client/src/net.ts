@@ -59,8 +59,10 @@ function slotFor(roomCode: string | null): Slot | null {
 
 export type FatalError = Extract<ServerMessage, { t: 'error' }>;
 
+/** The shell pings this often. (It was every 2 seconds, which was most of a card table's traffic.) */
+export const PING_MS = 5000;
 /**
- * At a table something arrives at least every couple of seconds (the shell pings every 2 s). This
+ * At a table something arrives at least every few seconds (an answer to each ping). This
  * long with nothing, while the page is showing, means the connection died quietly (Wi-Fi to
  * cellular, a router dropping it) even though the browser still calls it open: start again.
  * Generous, so a slow moment on the server doesn't turn into everyone reconnecting at once.

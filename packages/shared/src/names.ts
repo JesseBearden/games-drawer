@@ -1,3 +1,4 @@
+import { asEnglishLetters, SHOWS_NOTHING } from './lookAlike';
 import type { Rng } from './rng';
 
 /** Anything that can pick a whole number in a range (an Rng, or a game host's dice). */
@@ -95,30 +96,6 @@ export function freshName(taken: Set<string>, rng?: IntSource): string {
     if (!taken.has(n.toLowerCase())) return n;
   }
   return uniqueName(randomName(rng), taken);
-}
-
-/**
- * Characters that show as nothing: the invisible fillers (Hangul's, Khmer's, the joiners) and
- * Braille's blank. (Not the two selectors that make a heart an emoji heart.)
- */
-export const SHOWS_NOTHING = /\u2800|(?![\uFE0E\uFE0F])\p{Default_Ignorable_Code_Point}/gu;
-
-/** Letters from other alphabets that look just like an English one. */
-const LOOKS_LIKE = new Map<string, string>();
-for (const [theirs, english] of [
-  ['АВЕЅІЈКМНОРСТУХԚԜ', 'ABESIJKMHOPCTYXQW'], // Cyrillic capitals
-  ['аеѕіјорсухһԁԛԝ', 'aesijopcyxhdqw'], // Cyrillic
-  ['ΑΒΕΖΗΙΚΜΝΟΡΤΥΧ', 'ABEZHIKMNOPTYX'], // Greek capitals
-  ['αικνορυχ', 'aiknopux'], // Greek
-  ['ıɪɑɡ', 'iiag'], // Latin's own
-] as const) {
-  const to = [...english];
-  [...theirs].forEach((c, i) => LOOKS_LIKE.set(c, to[i]));
-}
-
-/** The text with each of those letters written as the English one it looks like. */
-export function asEnglishLetters(text: string): string {
-  return [...text].map((c) => LOOKS_LIKE.get(c) ?? c).join('');
 }
 
 /** What two names share when they can't be told apart at a glance. */

@@ -118,8 +118,11 @@ describe('Net (the connection to a table)', () => {
 
   it('keeps a connection that is talking', async () => {
     await makeNet();
+    const { PING_MS } = await import('../src/net');
+    expect(PING_MS).toBe(5000); // a card table's traffic is mostly this
     for (let i = 0; i < 20; i++) {
-      vi.advanceTimersByTime(2000);
+      // Every other answer lost still isn't silence.
+      vi.advanceTimersByTime(PING_MS * 2);
       latest().receive({ t: 'pong', at: 0 });
     }
     expect(FakeSocket.all).toHaveLength(1);

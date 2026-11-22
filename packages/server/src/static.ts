@@ -89,11 +89,49 @@ const KEEP_SECONDS: Record<string, number> = { sfx: 86400, sprites: 86400, art: 
 /**
  * A fingerprint of each file's contents (its ETag). A browser that already has a file sends the
  * fingerprint back, and gets a one-line "still the same" (304) instead of the whole file. It is
- * worked out while the file is first sent, so nothing is read twice, and kept until the file
- * changes. It comes from the contents, not the date: every box and every release gives the same
+ * worked out when the release is built (or, without that, while the file is first sent), and kept
+ * until the file changes. It comes from the contents, not the date: every box and every release gives the same
  * answer for a picture that hasn't changed.
  */
 const fingerprints = new Map<string, { size: number; mtimeMs: number; etag: string }>();
+
+const tagOf = (hash: crypto.Hash) => `"${hash.digest('base64url')}"`;
+
+type ReleaseFingerprints = Record<string, { size: number; etag: string }>;
+
+/** Where a release keeps every client file's fingerprint: beside client/, so it isn't served. */
+export const fingerprintsPath = (clientDir: string) => path.join(clientDir, '..', 'client-hashes.json');
+
+/**
+ * Work out every file's fingerprint when a release is built (scripts/release.ts), so the first
+ * person after a deploy gets them too. Without one a browser downloads the file again when its
+ * ten minutes are up.
+ */
+export function writeFingerprints(clientDir: string) {
+  const all: ReleaseFingerprints = {};
+  for (const entry of fs.readdirSync(clientDir, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue;
+    const file = path.join(entry.parentPath, entry.name);
+    const body = fs.readFileSync(file);
+    all[path.relative(clientDir, file).split(path.sep).join('/')] = { size: body.length, etag: tagOf(crypto.createHash('sha1').update(body)) };
+  }
+  fs.writeFileSync(fingerprintsPath(clientDir), JSON.stringify(all));
+}
+
+const fromRelease = new Map<string, ReleaseFingerprints>();
+
+function releaseFingerprints(root: string): ReleaseFingerprints {
+  let known = fromRelease.get(root);
+  if (!known) {
+    try {
+      known = JSON.parse(fs.readFileSync(fingerprintsPath(root), 'utf8')) as ReleaseFingerprints;
+    } catch {
+      known = {}; // no release built it (development): worked out as each file is sent
+    }
+    fromRelease.set(root, known);
+  }
+  return known;
+}
 
 /** Does the browser's If-None-Match name this fingerprint? (A proxy may have marked it weak, W/.) */
 function namesTag(header: string | undefined, etag: string): boolean {
@@ -156,6 +194,10 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
   // files have their contents in their names, so they never change.
   const top = path.relative(root, file).split(path.sep)[0];
   const keep = Object.hasOwn(KEEP_SECONDS, top) ? KEEP_SECONDS[top] : 0;
+  if (!fingerprints.has(file)) {
+    const built = releaseFingerprints(root)[path.relative(root, file).split(path.sep).join('/')];
+    if (built?.size === stat.size) fingerprints.set(file, { ...built, mtimeMs: stat.mtimeMs });
+  }
   const known = fingerprints.get(file);
   const etag = known && known.size === stat.size && known.mtimeMs === stat.mtimeMs ? known.etag : undefined;
   const headers = {
@@ -182,7 +224,7 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
       read += chunk.length;
     });
     stream.on('end', () => {
-      if (read === stat.size) fingerprints.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, etag: `"${hash.digest('base64url')}"` });
+      if (read === stat.size) fingerprints.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, etag: tagOf(hash) });
     });
   }
   // A file that can't be read after all ends this one response, not the server. And pipeline,

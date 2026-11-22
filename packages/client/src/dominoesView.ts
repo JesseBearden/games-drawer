@@ -64,6 +64,7 @@ export class DominoesTable implements View {
 
   constructor(private shell: ShellApi) {
     this.el.hidden = false;
+    document.querySelector('#gd-stock image')?.setAttribute('href', '/art/card-stock.webp');
     this.el.innerHTML = `
       <div class="ht">
         <div class="ht-seat ht-pos-2"></div>

@@ -13,6 +13,8 @@ export * from './hearts';
 export * from './games';
 export * from './spades';
 export * from './chatFilter';
+export * from './chatModes';
+export * from './lookAlike';
 export * from './dominoes';
 export * from './threeThirteen';
 export * from './puzzle';
