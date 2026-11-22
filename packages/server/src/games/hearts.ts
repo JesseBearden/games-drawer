@@ -11,7 +11,7 @@ import {
   type HandResult,
   type HeartsView,
 } from '@tank/shared';
-import { botPlays, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, leftLongAgo, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
 
 /** A finished trick stays on the table this long so everyone sees who took it. */
 export const TRICK_PAUSE_MS = 1400;
@@ -127,7 +127,7 @@ export class HeartsGame implements ServerGame {
     if (seat === null) return;
     this.seats[seat].session = null;
     // Someone watching can take the seat.
-    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null);
+    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
     if (watcher) this.seats[seat].session = watcher.session;
     this.schedule();
     this.sync();

@@ -46,6 +46,14 @@ export function botPlays(m: Member | undefined, now: number): boolean {
   return m.awaySince == null || now - m.awaySince >= BOT_TAKEOVER_MS;
 }
 
+/**
+ * Dropped out so long ago that they've gone, as far as a game starting now is concerned: they
+ * aren't dealt in or handed a seat that comes free. Coming back, they take a free seat.
+ */
+export function leftLongAgo(m: Member, now: number): boolean {
+  return !m.conn && botPlays(m, now);
+}
+
 /** One of several messages going out together (GameHost.broadcastTogether). */
 export interface Outgoing {
   msg: GameServerMessage;

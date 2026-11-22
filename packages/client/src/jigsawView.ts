@@ -18,6 +18,7 @@ import {
   puzzleImage,
   TAB_REACH,
   tabCurve,
+  keepGroupOnTable,
   tableBounds,
   type GameServerMessage,
   type PuzzlePhase,
@@ -1570,7 +1571,8 @@ export class JigsawTable implements View {
     if (!d || !this.state) return;
     const [bx, by] = this.toBoard({ clientX: at.clientX, clientY: at.clientY - this.liftNow() });
     const p = this.state.pieces[d.piece];
-    this.moveGroup(d.g, bx - d.offX - p.x, by - d.offY - p.y);
+    const to = keepGroupOnTable(this.state, this.groups.get(d.g) ?? [], d.piece, bx - d.offX, by - d.offY);
+    this.moveGroup(d.g, to.x - p.x, to.y - p.y);
     const now = performance.now();
     const was = this.dragSentAt;
     // (Alone, the drop says where it ended up. And holding still says nothing new.)

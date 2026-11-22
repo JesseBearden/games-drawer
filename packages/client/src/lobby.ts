@@ -137,7 +137,8 @@ export class LobbyView implements View {
     let html = `<section class="tb-seats" data-key="seats">`;
     // Games that let the table choose how many play (the server picks the seats the same way).
     const chooses = choosesPlayers(game);
-    const people = Math.min(SEAT_COUNT, this.members.length);
+    // (Counted as the server deals: someone who has gone only plays if they'd picked a seat.)
+    const people = Math.min(SEAT_COUNT, this.members.filter((m) => m.connected || t.seats.includes(m.id)).length);
     const count = chooses ? Math.max(2, Math.min(SEAT_COUNT, Math.max(t.players, people))) : SEAT_COUNT;
     const inPlay = new Set(t.seats.flatMap((s, i) => (s ? [i] : [])));
     for (const i of SEAT_FILL_ORDER) if (inPlay.size < count) inPlay.add(i);

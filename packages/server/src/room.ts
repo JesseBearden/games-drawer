@@ -42,7 +42,7 @@ import { ThreeThirteenGame } from './games/threeThirteen';
 import { JigsawGame } from './games/jigsaw';
 import { PuzzleStore } from './puzzleStore';
 import { TanksGame } from './games/tanks';
-import type { Conn, GameHost, Member, Outgoing, ServerGame } from './games/types';
+import { leftLongAgo, type Conn, type GameHost, type Member, type Outgoing, type ServerGame } from './games/types';
 import type { TablePhoto } from './photos';
 
 export type { Conn } from './games/types';
@@ -757,7 +757,8 @@ export class Room {
       return i >= 0 ? i : undefined;
     };
     for (const m of members) if (chosen(m) !== undefined) this.game.addPlayer(m, chosen(m));
-    for (const m of members) if (chosen(m) === undefined) this.game.addPlayer(m);
+    const now = this.deps.now();
+    for (const m of members) if (chosen(m) === undefined && !leftLongAgo(m, now)) this.game.addPlayer(m);
     for (const m of members) if (m.conn && m.welcomed) this.game.sendInit(m, false);
     this.systemChat(`Everyone’s ready: ${GAME_NAMES[id]} is starting.`);
     this.log('game_start', { game: id, humans: this.humansConnected() });

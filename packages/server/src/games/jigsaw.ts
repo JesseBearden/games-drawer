@@ -1,5 +1,6 @@
 import {
   gridFor,
+  keepGroupOnTable,
   maxPieces,
   photoIdOf,
   PIECE_COUNTS,
@@ -38,6 +39,10 @@ const STARTS_PER_HOUR = 20;
 const SAVES_ASK_GAP_MS = 3000;
 /** The browser remembers at most 30 saves; never look up more than that at once. */
 const SAVES_ASK_MAX = 30;
+/** A save that hasn't come back from the disk in this long isn't waited for. */
+const LOAD_MAX_MS = 10_000;
+/** After "Continue" found nothing, the next one waits this long (each is a file read). */
+const MISS_GAP_MS = 1000;
 
 /**
  * Slot positions along one axis: outside the frame's span (lo..hi), packed outwards from it to
@@ -77,8 +82,9 @@ export class JigsawGame implements ServerGame {
   /** When this table started or brought back a puzzle, over the last hour. */
   private starts: number[] = [];
   private savesAskedAt = new Map<string, number>();
-  /** A saved puzzle is being read from the disk. */
-  private loading = false;
+  /** A saved puzzle is being read from the disk: since when, and for whom. */
+  private loading: { at: number; name: string } | null = null;
+  private missedAt = -Infinity;
   private disposed = false;
 
   constructor(
@@ -135,13 +141,6 @@ export class JigsawGame implements ServerGame {
       p.x += dx;
       p.y += dy;
     }
-  }
-
-  /** Keep a dragged piece on the table. */
-  private clamp(x: number, y: number) {
-    const s = this.state!;
-    const b = tableBounds(s.width, s.height, s.cols, s.rows);
-    return { x: Math.min(b.maxX - this.pw, Math.max(b.minX, x)), y: Math.min(b.maxY - this.ph, Math.max(b.minY, y)) };
   }
 
   /**
@@ -282,6 +281,7 @@ export class JigsawGame implements ServerGame {
     const image = photo ? { id: photo.image, file: photo.url, title: photo.title, width: photo.width, height: photo.height } : puzzleImage(imageId);
     if (!image || !(PIECE_COUNTS as readonly number[]).includes(count)) return;
     if (!this.mayStart(m)) return;
+    this.countStart();
     if (this.state) this.saveNow();
     // A small picture offers fewer pieces (each keeps MIN_PIECE_PX of it across): asking for
     // more gets its most. (The picker greys out the sizes it can't do.)
@@ -314,19 +314,24 @@ export class JigsawGame implements ServerGame {
 
   private resume(m: Member, id: string) {
     if (this.phase === 'playing' || this.loading) return;
+    const now = this.host.now();
+    if (now - this.missedAt < MISS_GAP_MS) return;
     if (!this.mayStart(m)) return;
-    this.loading = true;
+    const loading = { at: now, name: m.name };
+    this.loading = loading;
     const before = this.state;
     this.store
       .load(id)
       .then((s) => {
-        this.loading = false;
+        if (this.loading !== loading) return; // it took too long and was given up on
+        this.loading = null;
         // Someone may have started another, or the table moved on, while the disk was read.
         if (this.disposed || this.phase === 'playing' || this.state !== before) return;
         this.resumed(m, id, s);
       })
       .catch((err) => {
-        this.loading = false;
+        if (this.loading === loading) this.loading = null;
+        this.missedAt = this.host.now();
         this.host.log('jigsaw_load_failed', { error: String(err) });
       });
   }
@@ -340,9 +345,11 @@ export class JigsawGame implements ServerGame {
 
   private resumed(m: Member, id: string, s: PuzzleState | null) {
     if (!s) {
+      this.missedAt = this.host.now();
       this.host.send(m, { t: 'pz-saves', saves: [], gone: [id] });
       return;
     }
+    this.countStart();
     if (this.state) this.saveNow();
     this.state = s;
     this.reset(s.doneAt !== null ? 'done' : 'playing');
@@ -359,8 +366,12 @@ export class JigsawGame implements ServerGame {
       this.host.systemChat(`That's a lot of puzzles for one hour, ${m.name}. Try again in a few minutes.`);
       return false;
     }
-    this.starts.push(now);
     return true;
+  }
+
+  /** A puzzle really did start or come back (one that couldn't be opened doesn't count). */
+  private countStart() {
+    this.starts.push(this.host.now());
   }
 
   private backToSetup(m: Member) {
@@ -412,7 +423,7 @@ export class JigsawGame implements ServerGame {
     const h = this.holding.get(m.session);
     const s = this.state;
     if (!h || !s || this.phase !== 'playing') return;
-    const to = this.clamp(x, y);
+    const to = keepGroupOnTable(s, this.members(h.g), h.piece, x, y);
     const anchor = s.pieces[h.piece];
     this.moveGroup(h.g, to.x - anchor.x, to.y - anchor.y);
     // Their pointer rides along with the piece, so an older one waiting to go out is out of date.
@@ -508,6 +519,13 @@ export class JigsawGame implements ServerGame {
         snapped = true;
       }
     }
+    // Lining up with a neighbour at the table's edge can carry the rest a hair past it: back on.
+    if (!s.locked.includes(g)) {
+      const group = this.members(g);
+      const at = s.pieces[group[0]];
+      const to = keepGroupOnTable(s, group, group[0], at.x, at.y);
+      this.moveGroup(g, to.x - at.x, to.y - at.y);
+    }
     return { g, touched: [...touched], snapped };
   }
 
@@ -543,6 +561,13 @@ export class JigsawGame implements ServerGame {
     const now = this.host.now();
     if ((this.cursors.size || this.drags.size) && now - this.liveSentAt >= LIVE_GAP_MS) this.sendLive();
     if (this.saveAt !== null && now >= this.saveAt) this.saveNow();
+    const loading = this.loading;
+    if (loading && now - loading.at >= LOAD_MAX_MS) {
+      // The shared disk has stalled: don't leave Continue dead at this table.
+      this.loading = null;
+      this.host.systemChat(`That puzzle wouldn't open just now, ${loading.name}. Try again in a moment.`);
+      this.host.log('jigsaw_load_failed', { error: 'timed out' });
+    }
   }
 
   /** Everybody else's newest pointer or drag, in one frame each. */

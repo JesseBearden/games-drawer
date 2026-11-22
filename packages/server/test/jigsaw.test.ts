@@ -268,6 +268,60 @@ describe('jigsaw in a room', () => {
     expect(s.pieces[0].y).toBeCloseTo(b.minY);
   });
 
+  it('keeps the whole of a joined strip on the table, whichever piece it’s held by', () => {
+    const { send, s, pw, ph } = started();
+    const b = tableBounds(s.width, s.height, s.cols, s.rows);
+    // Five in a row, joined, and held by the right-hand one.
+    for (let i = 0; i < 5; i++) Object.assign(s.pieces[i], { x: 100 + i * pw, y: -ph * 2, g: 0 });
+    send('a', { t: 'pz-grab', piece: 4 });
+    send('a', { t: 'pz-drag', x: -1e5, y: 1e5 });
+    expect(s.pieces[0].x).toBeCloseTo(b.minX);
+    expect(s.pieces[4].x).toBeCloseTo(b.minX + 4 * pw);
+    expect(s.pieces[4].y + ph).toBeCloseTo(b.maxY);
+    send('a', { t: 'pz-drop', x: 1e5, y: 1e5 });
+    expect(s.pieces[4].x + pw).toBeLessThanOrEqual(b.maxX + 0.001);
+  });
+
+  it('a join at the edge leaves all of it on the table', () => {
+    const { send, s, pw } = started();
+    const b = tableBounds(s.width, s.height, s.cols, s.rows);
+    const y = b.minY + 10;
+    // A pair against the left edge, and the piece to their right a hair nearer than it should be.
+    Object.assign(s.pieces[0], { x: b.minX, y, g: 0 });
+    Object.assign(s.pieces[1], { x: b.minX + pw, y, g: 0 });
+    Object.assign(s.pieces[2], { x: b.minX + 1.9 * pw, y });
+    send('a', { t: 'pz-grab', piece: 1 });
+    send('a', { t: 'pz-drop', x: b.minX + pw, y });
+    expect(s.pieces[2].g).toBe(s.pieces[0].g);
+    expect(s.pieces[0].x).toBeCloseTo(b.minX);
+    expect(s.pieces[2].x).toBeCloseTo(b.minX + 2 * pw);
+  });
+
+  it('Continue isn’t dead at a table after a read that never came back', async () => {
+    const store = new PuzzleStore(null);
+    vi.spyOn(store, 'load').mockImplementation(() => new Promise(() => {}));
+    const { a, send, mgr, clock } = jigsawRoom({ puzzles: store });
+    send('a', { t: 'pz-resume', id: 'abcdefgh01234567' });
+    run(mgr, clock, 5000);
+    send('a', { t: 'pz-resume', id: 'abcdefgh01234567' });
+    expect(store.load).toHaveBeenCalledTimes(1); // one read at a time
+    run(mgr, clock, 6000);
+    expect(lastChat(a.conn)).toContain('wouldn\'t open just now');
+    send('a', { t: 'pz-resume', id: 'abcdefgh01234567' });
+    expect(store.load).toHaveBeenCalledTimes(2);
+  });
+
+  it('a puzzle that couldn’t be opened doesn’t use up one of the hour’s starts', async () => {
+    const { game, send, mgr, clock } = jigsawRoom();
+    for (let i = 0; i < 25; i++) {
+      send('a', { t: 'pz-resume', id: 'abcdefgh01234567' });
+      await new Promise((r) => setTimeout(r, 0));
+      run(mgr, clock, 1100);
+    }
+    send('a', { t: 'pz-new', image: 'dog', pieces: 50 });
+    expect(game.phase).toBe('playing');
+  });
+
   it('finishes when every piece is in one group', () => {
     const { a, b, send, s, pw, ph, game } = started();
     for (let i = 0; i < s.pieces.length; i++) {

@@ -14,7 +14,7 @@ import {
   type SpadesView,
   type TeamHandResult,
 } from '@tank/shared';
-import { botPlays, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, leftLongAgo, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS, TRICK_PAUSE_MS } from './hearts';
 
 /** Bots (and bots covering for disconnected players) think this long. */
@@ -120,7 +120,7 @@ export class SpadesGame implements ServerGame {
     const seat = this.seatOf(m.session);
     if (seat === null) return;
     this.seats[seat].session = null;
-    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null);
+    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
     if (watcher) this.seats[seat].session = watcher.session;
     this.schedule();
     this.sync();

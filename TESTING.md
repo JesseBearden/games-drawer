@@ -46,6 +46,13 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
 - [ ] **Reduce motion** (the phone's accessibility setting): cards and sheets don't slide and the
       Tanks nuke doesn't shake. Talking still shows beside names.
 - [ ] **A two-word name** stays on one line in 'takes the trick', 'wins!' and 'Waiting for'.
+- [ ] **Someone who left a while ago** (over 20 seconds): pick Three Thirteen with 2 players and
+      it's the two of you, not three. If they come back they get a free seat. Hearts, Spades and
+      Dominoes show a named computer rather than their name (away).
+- [ ] **Jigsaw at the table's edge**: grab a joined strip by one end and pull it off the side: the
+      whole strip stops at the edge, and nothing jumps when you let go.
+- [ ] **Dominoes, winning by going out**: the winner's total includes the points it says they got
+      for the tiles left.
 
 ## Your decisions from the review (new)
 

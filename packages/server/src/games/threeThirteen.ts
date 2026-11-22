@@ -11,7 +11,7 @@ import {
   type GameInput,
   type ThreeThirteenView,
 } from '@tank/shared';
-import { botPlays, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, leftLongAgo, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS } from './hearts';
 
 /** Computer players (and computers covering for disconnected players) think this long. */
@@ -69,10 +69,12 @@ export class ThreeThirteenGame implements ServerGame {
       return { session: null, botName, botColor, score: 0 };
     });
     // In play: the seats people picked, then free ones (across first) up to how many play (never
-    // fewer than the people here, never fewer than 2).
+    // fewer than the people here, never fewer than 2). Someone who left long ago isn't one of
+    // them, unless they'd picked a seat.
     const sessions = new Set(host.members().map((m) => m.session));
     const picked = (table?.seats ?? []).flatMap((s, i) => (s && sessions.has(s) ? [i] : []));
-    const count = Math.max(2, Math.min(TT_SEATS, Math.max(table?.players ?? TT_SEATS, sessions.size)));
+    const playing = host.members().filter((m) => table?.seats.includes(m.session) || !leftLongAgo(m, host.now()));
+    const count = Math.max(2, Math.min(TT_SEATS, Math.max(table?.players ?? TT_SEATS, playing.length)));
     const active = new Set(picked);
     for (const i of SEAT_FILL_ORDER) if (active.size < count) active.add(i);
     this.active = [...active].sort((a, b) => a - b);
@@ -135,7 +137,7 @@ export class ThreeThirteenGame implements ServerGame {
     const seat = this.seatOf(m.session);
     if (seat === null) return;
     this.seats[seat].session = null;
-    const watcher = this.active.includes(seat) ? this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null) : undefined;
+    const watcher = this.active.includes(seat) ? this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now())) : undefined;
     if (watcher) this.seats[seat].session = watcher.session;
     this.schedule();
     this.sync();

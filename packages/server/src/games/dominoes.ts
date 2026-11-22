@@ -9,7 +9,7 @@ import {
   type DominoesView,
   type GameInput,
 } from '@tank/shared';
-import { botPlays, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, leftLongAgo, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS } from './hearts';
 
 /** Bots (and bots covering for disconnected players) think this long. */
@@ -117,7 +117,7 @@ export class DominoesGame implements ServerGame {
     const seat = this.seatOf(m.session);
     if (seat === null) return;
     this.seats[seat].session = null;
-    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null);
+    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
     if (watcher) this.seats[seat].session = watcher.session;
     this.schedule();
     this.sync();
@@ -216,6 +216,14 @@ export class DominoesGame implements ServerGame {
     if (points === null) return false;
     if (points) {
       this.seats[seat].score += points;
+      if (this.seats[seat].score >= DOMINOES_RULES.target) {
+        // The game is won on this tile. Going out with it scores the others' tiles as well. A
+        // board it happened to block scores nothing more (the game was already over), so the
+        // sheet mustn't claim points for that.
+        const res = this.round.result;
+        if (res?.winner === seat) this.seats[seat].score += res.points;
+        else if (res) this.round.result = null;
+      }
       if (this.checkWin()) return true;
     }
     this.afterMove();

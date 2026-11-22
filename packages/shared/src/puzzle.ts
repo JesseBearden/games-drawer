@@ -295,6 +295,35 @@ export function tableBounds(width: number, height: number, cols: number, rows: n
   return { minX: -mx, minY: -my, maxX: width + mx, maxY: height + my };
 }
 
+/**
+ * Where a dragged group's grabbed `piece` may go when it's asked to go to x, y: no part of the
+ * group leaves the table. (The page and the server both ask this, so they agree.)
+ */
+export function keepGroupOnTable(
+  s: Pick<PuzzleState, 'width' | 'height' | 'cols' | 'rows' | 'pieces'>,
+  group: readonly number[],
+  piece: number,
+  x: number,
+  y: number,
+): { x: number; y: number } {
+  const at = s.pieces[piece];
+  let left = 0;
+  let right = 0;
+  let top = 0;
+  let bottom = 0;
+  for (const i of group) {
+    left = Math.min(left, s.pieces[i].x - at.x);
+    right = Math.max(right, s.pieces[i].x - at.x);
+    top = Math.min(top, s.pieces[i].y - at.y);
+    bottom = Math.max(bottom, s.pieces[i].y - at.y);
+  }
+  const b = tableBounds(s.width, s.height, s.cols, s.rows);
+  return {
+    x: Math.min(b.maxX - s.width / s.cols - right, Math.max(b.minX - left, x)),
+    y: Math.min(b.maxY - s.height / s.rows - bottom, Math.max(b.minY - top, y)),
+  };
+}
+
 /** What's saved to disk and sent to players. */
 export interface PuzzleState {
   /** Unguessable id: how a puzzle is continued later. */
