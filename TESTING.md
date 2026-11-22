@@ -13,6 +13,59 @@ _Last updated: 2026-11-22_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## Your decisions from the review (new)
+
+- [ ] **Back in a new tab, same seat**: in a Spades or Hearts game with someone else, close your
+      tab (or tap the invite link again from Messages) and join again. You are yourself, in your
+      own seat with your own cards, not "Mom 2" in another seat. On the same phone or computer
+      it works at once; from a different device, once the table has said you left (about 10
+      seconds). Two tabs open side by side are still two people.
+- [ ] **Six-letter table codes**: a new table's code and link have 6 letters, the Home box says
+      "6 letters", and typing or pasting one joins. In Tanks the new tab gets a fresh tank (your
+      level isn't carried over yet).
+- [ ] **The privacy page** reads right to you: Chat messages, Your voice, Your own photos, the
+      device number and Logs each changed a sentence.
+
+## Fixes from the second code review (new)
+
+Each has a unit test; none has been tried in a real browser or on a phone.
+
+- [ ] **Closed out of a table**: leave a table quiet until it closes itself (10 minutes), or open
+      the same table in a second tab so the first is replaced. The home page that appears says
+      why ("This table closed after…", "Opened in another tab."). Before, it said nothing.
+- [ ] **"Closing soon" goes away when someone arrives**: let a table sit until the one-minute
+      warning shows, then join it from another device. The warning closes on the first device.
+- [ ] **Three Thirteen, a round ending while you hold a card**: on your last turn, keep dragging a
+      card around while the computers finish. When the round ends and you let go, the score
+      sheet and "Ready for round…" appear.
+- [ ] **Jigsaw, phone changes network while holding a piece** (Wi-Fi off mid-drag): once the page
+      reconnects, the piece rests where it was and anyone can pick it up.
+- [ ] **Pasting an invite link into "Have a table code?"**: the box keeps just the code's letters
+      and Join goes to that table.
+- [ ] **Another table's link in a tab that's at a table**: you get the new table's join page, not
+      the old table. A plain reload at a table still puts you straight back in your seat.
+- [ ] **Tapping fast at the table** (game, seats, ready, a dozen times in a few seconds): after
+      about 12 changes in 10 seconds a line says to give it a few seconds. Normal use never
+      sees it.
+- [ ] **Adding a photo for a puzzle** still works, one after another. (Limits are now counted
+      the moment an upload starts, and a table can have two in the air at once.)
+
+## Pictures the browser keeps (new; needs a deploy)
+
+The felt, the cards and the puzzle pictures used to download again on every page load (about
+3.9 MB each time on the live site). Now a browser keeps them for ten minutes, then asks "still
+the same?" and gets a one-line yes. Only tested on this PC, never behind Caddy or on a phone.
+
+- [ ] **Second visit is quick**: open the site, start a table, then reload the page. The felt and
+      the card backs are there at once, with no blank or plain-coloured moment.
+- [ ] **A puzzle you've opened before** starts quickly the second time, also on a phone.
+- [ ] **New art after a deploy** shows up within about ten minutes without clearing anything.
+      (If a picture is ever replaced under the same file name, that's how long the old one can
+      linger.)
+- [ ] **A name with unusual letters** (try "Łukasz"): it looks right on the join page and on name
+      tags. Before, the part of the heading font that holds letters like Ł was blocked by the
+      site's own security rule (every page load logged an error for it).
+
 ## Speed-ups (new)
 
 Nothing should look or feel different, except quicker and easier on a phone's battery. These are
@@ -120,7 +173,7 @@ old look until steps 2–4.
       After that your name shows as a line with **Change**.
 - [ ] A game's own address picks that game: `/dominoes`, `/tanks` (and
       `/tankyouforbeingafriend`).
-- [ ] **A code**: type a table's 5 letters on Home and tap Join. A wrong or old code says "This
+- [ ] **A code**: type a table's 6 letters on Home and tap Join. A wrong or old code says "This
       table has closed" with just **Back to home**.
 - [ ] **Who's there, before you join**: the join page's heading names everyone at the table
       ("Join Jesse, Sam and Mory for a puzzle"), so you can back out first. If whoever invited you

@@ -37,6 +37,13 @@ fs.mkdirSync(path.join(out, 'deploy'), { recursive: true });
 console.log('Building the client…');
 execSync('npx vite build --config packages/client/vite.config.ts --logLevel warn', { cwd: root, stdio: 'inherit' });
 fs.cpSync(path.join(root, 'packages/client/dist'), path.join(out, 'client'), { recursive: true });
+// The page's security header only lets in fonts that are files of the site's own (font-src 'self'
+// in static.ts). One folded into the CSS as a data: address would be refused by every browser.
+for (const f of fs.readdirSync(path.join(out, 'client/assets'))) {
+  if (f.endsWith('.css') && /url\(["']?data:font/.test(fs.readFileSync(path.join(out, 'client/assets', f), 'utf8'))) {
+    throw new Error(`${f} has a font folded into it as a data: address, which the page's security header blocks. See assetsInlineLimit in packages/client/vite.config.ts.`);
+  }
+}
 
 // ws and other CommonJS packages call require(); give the ES module bundle one.
 const banner = "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);";

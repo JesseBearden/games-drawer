@@ -144,6 +144,25 @@ describe('the rollout tool on a box', () => {
     m.stopServer();
     expect(await r.check()).toBe(false);
   });
+
+  it("fails a server that is running but doesn't answer, after asking a few times", async () => {
+    const m = fakeBox();
+    const r = new Rollout(m.sys, 'aaaaaaa1', releaseDir('aaaaaaa1'));
+    await r.start('a');
+    const real = m.sys.stats;
+    let asked = 0;
+    // Frozen: systemd still says active, and nothing comes back.
+    m.sys.stats = async () => {
+      asked++;
+      return null;
+    };
+    expect(await r.check()).toBe(false);
+    expect(asked).toBe(3);
+    // Slow for a moment (a new box catching its breath) is fine: the second ask answers.
+    asked = 0;
+    m.sys.stats = async () => (++asked < 2 ? null : real());
+    expect(await r.check()).toBe(true);
+  });
 });
 
 describe('rollout pieces', () => {

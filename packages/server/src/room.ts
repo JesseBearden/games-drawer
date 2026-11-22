@@ -86,6 +86,11 @@ export interface RoomDeps {
 /** Default idle time before a table closes, and the warning before it does. */
 export const IDLE_ROOM_MS = 10 * 60_000;
 export const IDLE_WARNING_MS = 60_000;
+/** Messages a table remembers so a reported one can be found (the privacy page says how many). */
+export const RECENT_MESSAGES = 200;
+/** Picking a game, sitting, ready, back to the table, the filter, the mic: at most this many, per person. */
+export const TABLE_ACTS = { max: 12, windowMs: 10_000 };
+const TABLE_ACT_TYPES: ReadonlySet<string> = new Set(['pick', 'sit', 'players', 'ready', 'lobby', 'filter', 'voice']);
 
 /** Chat reports per player per minute. */
 export const REPORTS_PER_MINUTE = 5;
@@ -128,6 +133,10 @@ interface Player extends Member {
   pendingLeave: { at: number; text: string } | null;
   leaveAnnounced: boolean;
   lastNotice: number;
+  /** Their device's scrambled number (devicePseudonym), to know them again in a new tab. Never logged from here. */
+  did: string | null;
+  /** When they last changed something at the table (a pick, a seat, ready, the mic…): see TABLE_ACTS. */
+  tableActs: number[];
   inVoice: boolean;
   reportTimes: number[];
   /** The current connection has been sent its welcome (game messages wait for it). */
@@ -408,6 +417,7 @@ export class Room {
       existing.conn = conn;
       existing.welcomed = false;
       existing.lastActive = now;
+      this.cancelIdleWarning();
       existing.device = device;
       existing.connectedAt = now;
       existing.reservedUntil = Infinity;
@@ -423,15 +433,23 @@ export class Room {
       return { ok: true, reclaimed: wasAway && seatBack, name: existing.name };
     }
 
-    if (this.players.size >= this.capacity()) {
+    const wanted = this.acceptableName(requestedName);
+    const did = deviceId ? devicePseudonym(deviceId) : null;
+    // The same person in a new tab is a new session. Give them the place they had, rather than
+    // seating "Mom 2" somewhere else (in Spades, on the other team) while a computer plays Mom.
+    const old = this.returning(wanted, did, now);
+    const oldSeat = old ? (this.game?.seatOf?.(old.session) ?? undefined) : undefined;
+    const oldTableSeat = old ? this.setup.seats.indexOf(old.session) : -1;
+    if (old) {
+      this.removeForGood(old, 'came_back');
+    } else if (this.players.size >= this.capacity()) {
       const gone = this.makingWay(now)[0];
       if (!gone) return { ok: false, code: 'room-full', message: 'Room is full.' };
       // Their "left" notice first, if housekeeping hasn't got to it yet.
       this.postPendingLeaves(now);
       this.removeForGood(gone, 'made_way');
     }
-    const wanted = this.acceptableName(requestedName);
-    const name = uniqueName(wanted ?? this.randomName(), this.takenNames());
+    const name = uniqueName(wanted ?? old?.name ?? this.randomName(), this.takenNames());
     this.accrue();
     const notices = this.goneNotices.get(session);
     this.goneNotices.delete(session);
@@ -441,17 +459,19 @@ export class Room {
       name,
       conn,
       device,
-      color: this.freeColor(),
+      color: old?.color ?? this.freeColor(),
+      did,
       connectedAt: now,
       reservedUntil: Infinity,
       awaySince: null,
       limiter: new RateLimiter(),
       lastRename: -Infinity,
-      lastArrive: notices?.arrive ?? -Infinity,
-      lastLeave: notices?.leave ?? -Infinity,
+      lastArrive: old?.lastArrive ?? notices?.arrive ?? -Infinity,
+      lastLeave: old?.lastLeave ?? notices?.leave ?? -Infinity,
       pendingLeave: null,
       leaveAnnounced: false,
       lastNotice: -Infinity,
+      tableActs: [],
       alias: this.newAlias(),
       inVoice: false,
       reportTimes: [],
@@ -462,18 +482,43 @@ export class Room {
       lastActive: now,
     };
     this.players.set(session, p);
-    if (this.game && !this.game.addPlayer(p)) {
+    if (this.game && !this.game.addPlayer(p, oldSeat)) {
       this.players.delete(session);
       return { ok: false, code: 'room-full', message: 'Room is full.' };
     }
+    if (old) {
+      // The seat they'd picked at the table, and being the one who started it, come with them.
+      if (oldTableSeat >= 0 && this.setup.seats[oldTableSeat] === null) {
+        this.setup.seats[oldTableSeat] = session;
+        this.broadcastTable();
+      }
+      if (this.starter === old.session) this.starter = session;
+    }
+    this.cancelIdleWarning();
     this.starter ??= session;
     this.countPeople();
     this.emptySince = null;
     // did: the browser's device number, scrambled, so the admin page counts devices, not tabs.
     this.log('join', { pid: p.pid, device, ...(deviceId && { did: devicePseudonym(deviceId) }) });
-    this.announce(p, 'arrive', `${p.name} is here.`);
+    // Back before anyone was told they'd left: nothing to say.
+    if (!old) this.announce(p, 'arrive', `${p.name} is here.`);
+    else if (old.leaveAnnounced) this.announce(p, 'arrive', `${p.name} is back.`);
     this.broadcastMembers();
     return { ok: true, reclaimed: false, name: p.name };
+  }
+
+  /**
+   * Who a newcomer at a private table really is, if they're someone who dropped out: the same
+   * device (its scrambled number) at once, or the same name once they've been gone long enough
+   * for the table to have said so. Only ever someone with no connection, so two tabs open side
+   * by side stay two people, and nobody can take the place of someone who is here.
+   */
+  private returning(name: string | null, did: string | null, now: number): Player | null {
+    if (this.kind !== 'private') return null;
+    const away = [...this.players.values()].filter((p) => !p.conn && p.awaySince !== null);
+    const sameDevice = away.filter((p) => did !== null && p.did === did);
+    const sameName = away.filter((p) => name !== null && p.name === name && now - p.awaySince! >= QUIET_DROP_MS);
+    return sameDevice.find((p) => p.name === name) ?? sameDevice[0] ?? sameName[0] ?? null;
   }
 
   /** A cleaned name that passes the filter, or null. */
@@ -541,6 +586,17 @@ export class Room {
   }
 
   private idleWarned = false;
+
+  /**
+   * Someone arriving restarts the quiet time, so a warning that's showing is off too. Without
+   * telling the table, the "closing in a minute" sheet stayed up counting down to nothing, and
+   * ten quiet minutes later the table closed with no warning at all.
+   */
+  private cancelIdleWarning() {
+    if (!this.idleWarned) return;
+    this.idleWarned = false;
+    this.broadcast({ t: 'idle', closesInMs: null });
+  }
 
   private markActive(p: Player) {
     p.lastActive = this.deps.now();
@@ -744,11 +800,29 @@ export class Room {
 
   // ------------------------------------------------------------------ messages
 
+  /**
+   * Changes at the table are for fingers: more than TABLE_ACTS.max in TABLE_ACTS.windowMs is a
+   * script. Each one writes log lines and most post a line in everyone's Messages, and they all
+   * fit under the connection's own message limit, so without this one visitor could fill the
+   * logs and bury the chat.
+   */
+  private mayActAtTable(p: Player): boolean {
+    const now = this.deps.now();
+    p.tableActs = p.tableActs.filter((t) => now - t < TABLE_ACTS.windowMs);
+    if (p.tableActs.length >= TABLE_ACTS.max) {
+      this.notice(p, 'That was a lot of changes at once. Give it a few seconds.');
+      return false;
+    }
+    p.tableActs.push(now);
+    return true;
+  }
+
   handle(session: string, msg: ClientMessage) {
     const p = this.players.get(session);
     if (!p || !p.conn) return;
     // Anything a person does keeps the table open (not the background heartbeat or voice set-up).
     if (msg.t !== 'ping' && msg.t !== 'rtc' && msg.t !== 'voice-route') this.markActive(p);
+    if (TABLE_ACT_TYPES.has(msg.t) && !this.mayActAtTable(p)) return;
     switch (msg.t) {
       case 'active':
         return;
@@ -992,7 +1066,7 @@ export class Room {
     this.deps.log.chat({ ...base, outcome: 'delivered' });
     if (this.session) this.session.chats++;
     this.recentMessages.set(msgId, { pid: p.pid, name: p.name, text: msg.text, at: now });
-    if (this.recentMessages.size > 200) this.recentMessages.delete(this.recentMessages.keys().next().value!);
+    if (this.recentMessages.size > RECENT_MESSAGES) this.recentMessages.delete(this.recentMessages.keys().next().value!);
     this.pushHistory(msg);
     this.broadcast({ t: 'chat', msg });
   }

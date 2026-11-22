@@ -259,9 +259,18 @@ export class Rollout {
       /* is-active exits non-zero when the unit isn't running */
     }
     const restarts = Number(/NRestarts=(\d+)/.exec(this.sys.sh('systemctl', ['show', '-p', 'NRestarts', this.unit(slot)]))?.[1] ?? 0);
-    const s = (await this.sys.stats()) ?? {};
+    // No answer is a problem, not "nothing wrong": a server that has frozen answers nothing, and
+    // systemd still calls it active. Asked three times, a second apart, because a box that has
+    // just booted can be slow for a moment.
+    let answer = await this.sys.stats();
+    for (let again = 0; again < 2 && !answer; again++) {
+      await this.sys.sleep(1000);
+      answer = await this.sys.stats();
+    }
+    const s = answer ?? {};
     const stats: ServerStats = { running, restarts, handlerErrors: Number(s.handlerErrors ?? 0), roomErrors: Number(s.roomErrors ?? 0) };
     const problems = serverProblems(stats);
+    if (running && !answer) problems.push("the game server is running but didn't answer");
     this.sys.log(`Box ${slot}: ${s.players ?? 0} players in ${s.roomCount ?? 0} rooms. ${problems.length ? `Problems: ${problems.join('; ')}.` : 'Healthy.'}`);
     return problems.length === 0;
   }

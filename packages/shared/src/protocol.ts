@@ -20,14 +20,36 @@ export const PROTOCOL_VERSION = 4;
 
 /** Private room codes: consonants only (they never spell words), this many letters. */
 export const ROOM_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
-export const ROOM_CODE_LENGTH = 5;
+export const ROOM_CODE_LENGTH = 6;
+/**
+ * Codes were 5 letters until 2026-11-22. A table opened before that keeps its code until it
+ * closes (a box finishing its games after the deploy still has some), so 5 letters still read as
+ * a code; no new table gets one. With 5 letters and one box's share of the codes, a few hundred
+ * addresses guessing could land on an open table within a day; 6 makes that twenty times harder.
+ * This can go once the deploy that brought 6 letters is a day old.
+ */
+const OLD_ROOM_CODE_LENGTH = 5;
+const isCodeLength = (n: number) => n === ROOM_CODE_LENGTH || n === OLD_ROOM_CODE_LENGTH;
 
 export function normalizeRoomCode(code: string) {
   return code.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, ROOM_CODE_LENGTH);
 }
 
+/**
+ * What someone typed or pasted into "Have a table code?": the code, or '' if it isn't one. A
+ * whole invite link works too (its code is taken out). Anything else with a ':' or '/' in it is
+ * an address, not a code: "https" is all letters, and used to be read as the code HTTPS.
+ */
+export function roomCodeFromEntry(text: string) {
+  const link = /\/r\/([A-Za-z]+)/.exec(text);
+  if (link) return isCodeLength(link[1].length) ? link[1].toUpperCase() : '';
+  if (/[:/]/.test(text)) return '';
+  const letters = text.toUpperCase().replace(/[^A-Z]/g, '');
+  return isCodeLength(letters.length) ? letters : '';
+}
+
 export function isRoomCode(code: string) {
-  return code.length === ROOM_CODE_LENGTH && [...code].every((c) => ROOM_CODE_ALPHABET.includes(c));
+  return isCodeLength(code.length) && [...code].every((c) => ROOM_CODE_ALPHABET.includes(c));
 }
 
 /**

@@ -88,6 +88,8 @@ export class ThreeThirteenTable implements View {
     hand.addEventListener('pointermove', this.onMove);
     hand.addEventListener('pointerup', this.onUp);
     hand.addEventListener('pointercancel', this.onCancel);
+    // iPhones sometimes never send the finger lifting; losing the pointer ends the drag too.
+    hand.addEventListener('lostpointercapture', this.onCancel);
     this.handObserver.observe(hand);
     shell.sfx.preloadSounds(CARD_SOUNDS);
   }
@@ -314,15 +316,19 @@ export class ThreeThirteenTable implements View {
       return;
     }
     const v = this.view!;
-    const order = v.cards.filter((c) => c !== p.card);
-    order.splice(p.target, 0, p.card);
-    if (order.join() !== v.cards.join()) {
-      v.cards = order;
-      this.arranged = { order, until: performance.now() + ARRANGE_ECHO_MS };
-      this.shell.sendGame({ t: 'tt-arrange', cards: order });
-      // Rebuild in the new order (the moved card is now where it was dropped).
-      this.renderHand();
-    } else this.layoutHand();
+    // Updates that arrived mid-drag drew only the table (the hand was kept still), so draw
+    // everything now. A round that ended during the drag otherwise left no score sheet and no
+    // Ready button: against computers nothing more ever arrives, and the game sat there.
+    if (v.cards.includes(p.card)) {
+      const order = v.cards.filter((c) => c !== p.card);
+      order.splice(p.target, 0, p.card);
+      if (order.join() !== v.cards.join()) {
+        v.cards = order;
+        this.arranged = { order, until: performance.now() + ARRANGE_ECHO_MS };
+        this.shell.sendGame({ t: 'tt-arrange', cards: order });
+      }
+    }
+    this.render();
   };
 
   private onCancel = (e: PointerEvent) => {
@@ -331,7 +337,7 @@ export class ThreeThirteenTable implements View {
     if (el) el.style.transform = '';
     this.press = null;
     this.el.querySelector('.tt-hand')!.classList.remove('tt-dragging');
-    this.renderHand();
+    this.render();
   };
 
   /** Tap a card: lift it to throw away; tap it again to throw it. */

@@ -35,7 +35,7 @@ in a felt look, like a games table.
 1. **Start a table**: type your first name and choose the mic on or off. A game's own page
    (`/hearts`, `/dominoes`…) opens the table with that game already picked.
 2. **Invite people**: a link (it says who sent it, and can name who it's for) or the table's
-   five-letter code. Before joining, the join page says who's already at the table.
+   six-letter code. Before joining, the join page says who's already at the table.
 3. **Gather at the table**: talk, pick a game together (anyone can pick or change it), and for
    the card and tile games pick where you sit (Three Thirteen also picks how many play, 2 to 4).
 4. **Play**: the game starts once everyone at the table taps **I'm ready**. Someone whose phone

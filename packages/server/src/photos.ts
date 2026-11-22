@@ -32,7 +32,14 @@ export interface TablePhoto {
 }
 
 /** Uploads one address may send per hour, one table per hour, and the whole server per day. */
-export const PHOTO_LIMITS = { perIpPerHour: 10, perTablePerHour: 12, perServerPerDay: 300 };
+export const PHOTO_LIMITS = {
+  perIpPerHour: 10,
+  perTablePerHour: 12,
+  perServerPerDay: 300,
+  /** Uploads being read or checked at the same moment: each holds a few copies of the photo in memory. */
+  atOnce: 6,
+  atOncePerTable: 2,
+};
 /** Photos in memory across every table, at most (the server has 450 MB in all). */
 export const PHOTO_MEMORY_BYTES = 48 * 1024 * 1024;
 
@@ -131,6 +138,10 @@ export function photoRoutes(o: PhotoRoutesOptions) {
     res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...(status === 413 && { connection: 'close' }) }).end(JSON.stringify(body));
   const refuse = (res: ServerResponse, status: number, reason: PhotoRefusal) => json(res, status, { ok: false, reason });
 
+  /** Uploads being read or checked right now, in all and per table. */
+  let inFlight = 0;
+  const inFlightAt = new Map<string, number>();
+
   function memoryInUse() {
     let n = 0;
     for (const r of o.rooms.values()) for (const p of r.photos.values()) n += p.jpeg.length;
@@ -159,6 +170,27 @@ export function photoRoutes(o: PhotoRoutesOptions) {
     if (perIp.count(ip, t) >= PHOTO_LIMITS.perIpPerHour || perTable.count(code, t) >= PHOTO_LIMITS.perTablePerHour || perServer.count('all', t) >= PHOTO_LIMITS.perServerPerDay) {
       return refuse(res, 429, 'busy');
     }
+    if (inFlight >= PHOTO_LIMITS.atOnce || (inFlightAt.get(code) ?? 0) >= PHOTO_LIMITS.atOncePerTable) return refuse(res, 429, 'busy');
+    // Counted now, before anything is waited for. Counting only once the photo had arrived let a
+    // burst sent together all pass the checks above before any of them was counted.
+    perIp.add(ip, t);
+    perTable.add(code, t);
+    perServer.add('all', t);
+    inFlight++;
+    inFlightAt.set(code, (inFlightAt.get(code) ?? 0) + 1);
+    try {
+      await receive(req, res, room, code, session);
+    } finally {
+      inFlight--;
+      const left = (inFlightAt.get(code) ?? 1) - 1;
+      if (left <= 0) inFlightAt.delete(code);
+      else inFlightAt.set(code, left);
+    }
+  }
+
+  /** An upload that's been let in: read it, clean it, check it, and add it to the table. */
+  async function receive(req: IncomingMessage, res: ServerResponse, room: Room, code: string, session: string) {
+    const checker = o.checker!;
     const body = await readBody(req, PHOTO_MAX_BYTES);
     if (body === 'too-big') return refuse(res, 413, 'too-big');
     const clean = cleanJpeg(body);
@@ -167,16 +199,13 @@ export function photoRoutes(o: PhotoRoutesOptions) {
     if (Math.max(width, height) > PHOTO_MAX_SIDE) return refuse(res, 413, 'too-big');
     if (Math.min(width, height) < PHOTO_MIN_SIDE) return refuse(res, 400, 'too-small');
     if (memoryInUse() + clean.jpeg.length > PHOTO_MEMORY_BYTES) return refuse(res, 429, 'busy');
-    perIp.add(ip, t);
-    perTable.add(code, t);
-    perServer.add('all', t);
     const by = pseudonym(session);
     let verdict;
     const started = now();
     try {
-      verdict = await o.checker.check(clean.jpeg, { width, height });
+      verdict = await checker.check(clean.jpeg, { width, height });
     } catch (err) {
-      o.log.event('photo_check_failed', { room: code, checker: o.checker.name, error: String(err).slice(0, 300) });
+      o.log.event('photo_check_failed', { room: code, checker: checker.name, error: String(err).slice(0, 300) });
       return refuse(res, 503, 'unavailable');
     }
     const ms = now() - started;

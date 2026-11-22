@@ -124,8 +124,11 @@ describe('Jigsaw pointers and drags', () => {
     send(0, { t: 'pz-drag', x: -250, y: -120 });
     room.disconnect(people[0].session, people[0].conn, 'disconnect');
     const got = people[1].conn.game();
-    expect(got.map((m) => m.t)).toEqual(['pz-held', 'pz-drag', 'pz-held']);
-    expect(got[1]).toMatchObject({ x: (room.game as JigsawGame).state!.pieces[4].x });
+    // It rests there as a dropped piece does: one "moved" saying where, then the letting go.
+    expect(got.map((m) => m.t)).toEqual(['pz-held', 'pz-moved', 'pz-held']);
+    const piece = (room.game as JigsawGame).state!.pieces[4];
+    expect(got[1]).toMatchObject({ pieces: [[4, piece.x, piece.y, piece.g]] });
+    expect(piece.x).toBe(-250);
   });
 });
 

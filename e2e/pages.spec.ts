@@ -48,15 +48,15 @@ test('a code that’s too short, or a table that has closed, says so on screen',
   await page.locator('#code-input').fill('bcd');
   await page.locator('#code-form button').click();
   const error = page.locator('#landing-error');
-  await expect(error).toHaveText('Table codes are 5 letters.');
+  await expect(error).toHaveText('Table codes are 6 letters.');
   await expect(page.locator('#code-form + #landing-error')).toHaveCount(1);
   // Fixing the code clears it.
   await page.locator('#code-input').fill('bcdf');
   await expect(error).toBeHidden();
 
-  await page.locator('#code-input').fill('bcdfg');
+  await page.locator('#code-input').fill('bcdfgh');
   await page.locator('#code-form button').click();
-  await expect(page).toHaveURL(/\/r\/BCDFG/);
+  await expect(page).toHaveURL(/\/r\/BCDFGH/);
   await expect(page.locator('#join-title')).toHaveText('This table has closed');
   await expect(page.locator('#join-form')).toBeHidden();
   await expect(page.locator('#join-home')).toHaveText('Back to home');

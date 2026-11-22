@@ -241,7 +241,15 @@ export class Fleet {
     const boxes = this.cloud.boxes().sort((a, b) => a.launchedAt.localeCompare(b.launchedAt));
     if (!boxes.length) this.cloud.log('No boxes running.');
     for (const b of boxes) this.cloud.log(`${b.slot}  ${b.role.padEnd(9)} ${b.release.slice(0, 7)}  ${b.id}  ${b.publicIp || '-'} / ${b.privateIp || '-'}  since ${b.launchedAt}`);
-    for (const name of [...this.frontNames(), ...this.stagingNames()]) this.cloud.log(`${name} → ${this.cloud.pointsTo(name) ?? 'not set'}`);
+    for (const name of [...this.frontNames(), ...this.stagingNames()]) {
+      let to: string | null;
+      try {
+        to = this.cloud.pointsTo(name) ?? 'not set';
+      } catch {
+        to = "couldn't look it up";
+      }
+      this.cloud.log(`${name} → ${to}`);
+    }
   }
 }
 
@@ -351,16 +359,14 @@ export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
       execFileSync('aws', ['route53', 'wait', 'resource-record-sets-changed', '--id', res.ChangeInfo.Id], { stdio: 'inherit', env: awsEnv });
       this.log(`${names.join(', ')} → ${ip}`);
     },
+    // A failed lookup throws: "couldn't find out" must never read as "points nowhere", or the
+    // guard that keeps the box the site points at would let it be removed.
     pointsTo(name) {
-      try {
-        const res = aws(['route53', 'list-resource-record-sets', '--hosted-zone-id', zone(), '--start-record-name', name, '--start-record-type', 'A', '--max-items', '1']) as {
-          ResourceRecordSets: { Name: string; ResourceRecords?: { Value: string }[]; AliasTarget?: { DNSName: string } }[];
-        };
-        const r = res.ResourceRecordSets.find((s) => s.Name === `${name}.`);
-        return r?.ResourceRecords?.[0]?.Value ?? r?.AliasTarget?.DNSName ?? null;
-      } catch {
-        return null;
-      }
+      const res = aws(['route53', 'list-resource-record-sets', '--hosted-zone-id', zone(), '--start-record-name', name, '--start-record-type', 'A', '--max-items', '1']) as {
+        ResourceRecordSets: { Name: string; ResourceRecords?: { Value: string }[]; AliasTarget?: { DNSName: string } }[];
+      };
+      const r = res.ResourceRecordSets.find((s) => s.Name === `${name}.`);
+      return r?.ResourceRecords?.[0]?.Value ?? r?.AliasTarget?.DNSName ?? null;
     },
     async waitForStaging(release) {
       const url = `https://staging.${domain}/healthz`;

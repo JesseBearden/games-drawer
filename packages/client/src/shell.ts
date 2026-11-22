@@ -306,6 +306,11 @@ export class RoomApp {
 
   /** After a reconnect the server sends a fresh welcome; the game resends its own state. */
   private rewelcome(w: Welcome) {
+    // Coming back restarts the table's quiet time, so a "closing soon" warning no longer holds.
+    if (this.idleWarning) {
+      this.idleWarning = false;
+      if (!$('idle').hidden) this.openSheet(null);
+    }
     $('chat-log').innerHTML = '';
     this.liveChat = false;
     for (const m of w.chat) this.addChat(m);

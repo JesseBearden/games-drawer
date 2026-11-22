@@ -147,6 +147,41 @@ describe('jigsaw in a room', () => {
     expect(game.phase).toBe('setup');
   });
 
+  it('a piece held when its holder comes back on a new connection is let go', () => {
+    // A phone hopping from Wi-Fi to mobile data: the new connection replaces one the server
+    // still thinks is open, so nothing ever said "disconnected".
+    const { a, b, send, mgr } = started();
+    send('a', { t: 'pz-grab', piece: 5 });
+    send('a', { t: 'pz-drag', x: -300, y: -200 });
+    const again = joinPrivate(mgr, 'session-aaaa', a.room.code);
+    expect(pz(again.conn, 'pz-state').at(-1)!.held).toEqual([]);
+    expect(pz(b.conn, 'pz-held').at(-1)).toEqual({ t: 'pz-held', g: 5, by: null });
+    // It rests where it was dragged to, and anyone can pick it up.
+    expect(pz(b.conn, 'pz-moved').at(-1)!.pieces).toEqual([[5, -300, -200, 5]]);
+    send('b', { t: 'pz-grab', piece: 5 });
+    expect(pz(b.conn, 'pz-held').at(-1)).toEqual({ t: 'pz-held', g: 5, by: aliasOf(b.conn) });
+  });
+
+  it('the part of the picture already in the frame never moves, whatever joins it', () => {
+    const { a, b, send, s, pw, ph } = started();
+    const home = (i: number) => ({ x: (i % s.cols) * pw, y: Math.floor(i / s.cols) * ph });
+    const place = (who: 'a' | 'b', i: number) => {
+      send(who, { t: 'pz-grab', piece: i });
+      send(who, { t: 'pz-drop', ...home(i) });
+    };
+    place('b', 0);
+    expect(s.locked).toContain(s.pieces[0].g);
+    // A carries piece 2 to a hair from its place, and drops out before letting go.
+    send('a', { t: 'pz-grab', piece: 2 });
+    send('a', { t: 'pz-drag', x: home(2).x + 0.2 * pw, y: home(2).y });
+    a.room.disconnect('session-aaaa', a.conn, 'disconnect');
+    // B puts the piece between them exactly in its place: it joins both.
+    place('b', 1);
+    expect([s.pieces[0].g, s.pieces[1].g, s.pieces[2].g]).toEqual([s.pieces[0].g, s.pieces[0].g, s.pieces[0].g]);
+    for (const i of [0, 1, 2]) expect({ x: s.pieces[i].x, y: s.pieces[i].y }).toEqual(home(i));
+    void b;
+  });
+
   it('lets one person hold a piece at a time', () => {
     const { a, b, send, s, mgr, clock } = started();
     send('a', { t: 'pz-grab', piece: 5 });

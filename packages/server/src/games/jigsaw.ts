@@ -94,17 +94,21 @@ export class JigsawGame implements ServerGame {
   }
 
   reconnect(m: Member): boolean {
+    // A new connection holds nothing. One that replaced a live connection (a phone hopping from
+    // Wi-Fi to mobile data mid-drag) never went through disconnect, and its piece stayed "held":
+    // nobody else could pick it up.
+    this.letGo(m);
     this.sendInit(m);
     return true;
   }
 
   disconnect(m: Member): string | null {
-    this.letGo(m.session);
+    this.letGo(m);
     return null;
   }
 
   removePlayer(m: Member) {
-    this.letGo(m.session);
+    this.letGo(m);
   }
 
   renamed() {}
@@ -220,12 +224,21 @@ export class JigsawGame implements ServerGame {
     else this.store.save(s);
   }
 
-  private letGo(session: string) {
-    const h = this.holding.get(session);
+  /**
+   * Whatever `m` is holding comes to rest where it was last dragged to (they dropped out, came
+   * back on a new connection, or picked up something else). It rests as a dropped piece does:
+   * joined to what it lines up with, and saved. Left loose a hair from its place instead, a later
+   * piece could join the frame's group to it and pull the finished part of the picture askew.
+   */
+  private letGo(m: Member) {
+    const h = this.holding.get(m.session);
     if (!h) return;
-    // Everyone needs where it was last dragged to before hearing it's been let go.
-    if (this.drags.has(session)) this.sendLive();
-    this.holding.delete(session);
+    if (this.state && this.phase === 'playing') {
+      this.drags.delete(m.session); // the resting place below says where it really is
+      this.rest(m, h);
+      return;
+    }
+    this.holding.delete(m.session);
     this.held.delete(h.g);
     this.host.broadcast({ t: 'pz-held', g: h.g, by: null });
   }
@@ -389,7 +402,7 @@ export class JigsawGame implements ServerGame {
       this.host.send(m, { t: 'pz-held', g, by: holder ? (this.host.member(holder)?.alias ?? '') : '' });
       return;
     }
-    this.letGo(m.session);
+    this.letGo(m);
     this.held.set(g, m.session);
     this.holding.set(m.session, { g, piece });
     this.host.broadcast({ t: 'pz-held', g, by: m.alias });
@@ -409,6 +422,12 @@ export class JigsawGame implements ServerGame {
       return;
     }
     this.drags.delete(m.session); // the drop says where it really is
+    this.rest(m, h);
+  }
+
+  /** A held group is let go where it is: join it to what it lines up with, tell everyone, save. */
+  private rest(m: Member, h: { g: number; piece: number }) {
+    const s = this.state!;
     const { g, touched, snapped } = this.snap(h.g);
     this.holding.delete(m.session);
     this.held.delete(h.g);
@@ -462,8 +481,10 @@ export class JigsawGame implements ServerGame {
           const ex = s.pieces[i].x + dc * pw;
           const ey = s.pieces[i].y + dr * ph;
           if (Math.abs(s.pieces[n].x - ex) > tol || Math.abs(s.pieces[n].y - ey) > tol) continue;
-          // Line the dropped group up exactly with its new neighbour, then merge.
-          this.moveGroup(g, s.pieces[n].x - ex, s.pieces[n].y - ey);
+          // Line the dropped group up exactly with its new neighbour, then merge. Once it has
+          // joined the frame it stays put, and the neighbour comes to it: the frame never moves.
+          if (s.locked.includes(g) && !s.locked.includes(other)) this.moveGroup(other, ex - s.pieces[n].x, ey - s.pieces[n].y);
+          else this.moveGroup(g, s.pieces[n].x - ex, s.pieces[n].y - ey);
           const wasLocked = s.locked.includes(g) || s.locked.includes(other);
           for (const p of s.pieces) if (p.g === g) p.g = other;
           s.locked = s.locked.filter((x) => x !== g);

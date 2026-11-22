@@ -8,7 +8,7 @@ import { SpadesGame } from '../src/games/spades';
 import { DominoesGame } from '../src/games/dominoes';
 import { BOT_TAKEOVER_MS } from '../src/games/types';
 import { RoomManager } from '../src/manager';
-import { devicePseudonym, IDLE_ROOM_MS, IDLE_WARNING_MS, turnCredentials, type Conn, type RoomDeps, type Room } from '../src/room';
+import { devicePseudonym, IDLE_ROOM_MS, IDLE_WARNING_MS, TABLE_ACTS, turnCredentials, type Conn, type RoomDeps, type Room } from '../src/room';
 import { stunFromTurn } from '../src/server';
 
 /** Pick a game at the table and have everyone here say they're ready, so it starts. */
@@ -1061,5 +1061,133 @@ it('says how each voice link connected, once per link, for the admin page', () =
     expect(closed.message).toBe('This table closed after 10 minutes with nobody playing or talking.');
     expect(a.conn.closed && b.conn.closed).toBe(true);
   });
+
+  it('someone joining takes the "closing soon" warning down, and the table warns again before it closes', () => {
+    const { mgr, clock } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const code = a.room.code;
+    clock.now += IDLE_ROOM_MS - IDLE_WARNING_MS + 1000;
+    mgr.housekeeping();
+    expect(a.conn.of('idle').at(-1)!.closesInMs).not.toBeNull();
+    // A friend arrives: the quiet time starts again, so the warning is off for everyone.
+    const b = joinPrivate(mgr, 'session-bbbb', code);
+    expect(a.conn.of('idle').at(-1)!.closesInMs).toBeNull();
+    // Ten more quiet minutes: both are warned first, the newcomer included.
+    clock.now += IDLE_ROOM_MS - IDLE_WARNING_MS + 1000;
+    mgr.housekeeping();
+    expect(mgr.rooms.has(code)).toBe(true);
+    expect(a.conn.of('idle').at(-1)!.closesInMs).not.toBeNull();
+    expect(b.conn.of('idle').at(-1)!.closesInMs).not.toBeNull();
+  });
+
+  it('coming back on a new connection takes the warning down too', () => {
+    const { mgr, clock } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    clock.now += IDLE_ROOM_MS - IDLE_WARNING_MS + 1000;
+    mgr.housekeeping();
+    expect(b.conn.of('idle').at(-1)!.closesInMs).not.toBeNull();
+    joinPrivate(mgr, 'session-aaaa', a.room.code);
+    expect(b.conn.of('idle').at(-1)!.closesInMs).toBeNull();
+  });
+
+  it('table changes are for fingers: a script flipping the game is cut off, and can go on a moment later', () => {
+    const { mgr, clock } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    const b = joinPrivate(mgr, 'session-bbbb', a.room.code);
+    const lines = () => b.conn.of('chat').length;
+    const before = lines();
+    for (let i = 0; i < 100; i++) a.room.handle('session-aaaa', { t: 'pick', game: i % 2 ? 'hearts' : 'spades' });
+    expect(lines() - before).toBeLessThanOrEqual(TABLE_ACTS.max);
+    expect(a.conn.of('chat').filter((m) => m.msg.text.includes('a lot of changes')).length).toBe(1);
+    // Other people at the table aren't held up by it.
+    b.room.handle('session-bbbb', { t: 'pick', game: 'dominoes' });
+    expect(a.room.tableSetup().pick).toBe('dominoes');
+    clock.now += TABLE_ACTS.windowMs + 1;
+    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    expect(a.room.tableSetup().pick).toBe('hearts');
+  });
 });
 
+describe('coming back in a new tab', () => {
+  /** A join as the server does it: a name, and maybe the device's number. */
+  const come = (mgr: RoomManager, code: string, session: string, name: string, deviceId?: string) => {
+    const lookup = mgr.resolve({ kind: 'private', code }, session);
+    if (!lookup.ok) throw new Error(lookup.code);
+    const conn = new FakeConn();
+    const r = lookup.room.join(conn, session, name, 'phone', deviceId);
+    if (!r.ok) throw new Error(r.code);
+    lookup.room.sendWelcome(session, r);
+    return { conn, name: r.name };
+  };
+  const seatOf = (room: Room, session: string) => (room.game as unknown as { seatOf(s: string): number | null }).seatOf(session);
+  const names = (room: Room) => room.members().map((m) => m.name).sort();
+
+  function spades() {
+    const env = setup();
+    const a = joinPrivate(env.mgr, 'session-aaaa');
+    const code = a.room.code;
+    come(env.mgr, code, 'session-mom1', 'Mom', 'device-moms-phone-1234');
+    come(env.mgr, code, 'session-bro1', 'Bro', 'device-bros-phone-5678');
+    play(a.room, 'spades');
+    return { ...env, room: a.room, code };
+  }
+
+  it('the same name, once the table has heard they left, gets their own seat back', () => {
+    const { mgr, clock, room, code } = spades();
+    const seat = seatOf(room, 'session-mom1');
+    expect(seat).not.toBeNull();
+    room.disconnect('session-mom1', room.players.get('session-mom1')!.conn, 'disconnect');
+    clock.now += 30_000;
+    mgr.housekeeping();
+    // A new tab (a new session), on another device even: still Mom, in Mom's seat.
+    const back = come(mgr, code, 'session-mom2', 'Mom', 'device-moms-tablet-9999');
+    expect(back.name).toBe('Mom');
+    expect(seatOf(room, 'session-mom2')).toBe(seat);
+    expect(seatOf(room, 'session-mom1')).toBeNull();
+    expect(names(room)).toEqual(['Bro', 'Mom', 'aaaa']);
+    expect((room.players.get('session-aaaa')!.conn as FakeConn).of('chat').at(-1)!.msg.text).toBe('Mom is back.');
+  });
+
+  it('the same device is known at once, before anyone was told they had gone', () => {
+    const { mgr, room, code } = spades();
+    const seat = seatOf(room, 'session-mom1');
+    const host = room.players.get('session-aaaa')!.conn as FakeConn;
+    const said = host.of('chat').length;
+    room.disconnect('session-mom1', room.players.get('session-mom1')!.conn, 'disconnect');
+    const back = come(mgr, code, 'session-mom2', 'Mom', 'device-moms-phone-1234');
+    expect(back.name).toBe('Mom');
+    expect(seatOf(room, 'session-mom2')).toBe(seat);
+    expect(names(room)).toEqual(['Bro', 'Mom', 'aaaa']);
+    // Nobody heard she left, so nobody hears she's back.
+    expect(host.of('chat').length).toBe(said);
+  });
+
+  it('never takes the place of someone who is still here, and waits before trusting a name alone', () => {
+    const { mgr, clock, room, code } = spades();
+    // Two tabs side by side on one device stay two people.
+    expect(come(mgr, code, 'session-mom2', 'Mom', 'device-moms-phone-1234').name).toBe('Mom 2');
+    expect(seatOf(room, 'session-mom1')).not.toBeNull();
+    // Bro blinks out for two seconds; a stranger calling themselves Bro doesn't get his cards.
+    room.disconnect('session-bro1', room.players.get('session-bro1')!.conn, 'disconnect');
+    clock.now += 2000;
+    const seat = seatOf(room, 'session-bro1');
+    // (The table is full at four, and Bro hasn't been gone long enough to make way.)
+    expect(() => come(mgr, code, 'session-xxxx', 'Bro', 'device-someone-else-0000')).toThrow('room-full');
+    expect(seatOf(room, 'session-bro1')).toBe(seat);
+  });
+
+  it('at the table before a game, the seat they picked comes with them', () => {
+    const { mgr, clock } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    come(mgr, a.room.code, 'session-mom1', 'Mom', 'device-moms-phone-1234');
+    a.room.handle('session-aaaa', { t: 'pick', game: 'hearts' });
+    a.room.handle('session-mom1', { t: 'sit', seat: 2 });
+    const momAlias = () => a.room.members().find((m) => m.name === 'Mom')!.id;
+    expect(a.room.tableSetup().seats[2]).toBe(momAlias());
+    a.room.disconnect('session-mom1', a.room.players.get('session-mom1')!.conn, 'disconnect');
+    clock.now += 1000;
+    come(mgr, a.room.code, 'session-mom2', 'Mom', 'device-moms-phone-1234');
+    expect(a.room.tableSetup().seats[2]).toBe(momAlias());
+  });
+});

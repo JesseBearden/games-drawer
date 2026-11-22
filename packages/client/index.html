@@ -55,7 +55,7 @@
             <form id="code-form" class="entry-code" novalidate>
               <label class="pc-field" for="code-input">Have a table code?</label>
               <div class="entry-row">
-                <input id="code-input" class="pc-input pc-input-code" maxlength="5" placeholder="5 letters" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
+                <input id="code-input" class="pc-input pc-input-code" maxlength="120" placeholder="6 letters" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
                 <button class="pc-btn pc-btn-plain" type="submit">Join</button>
               </div>
             </form>
@@ -103,27 +103,27 @@
             <ul>
               <li><b>Your name.</b> Everyone at your table sees it. Your browser remembers it for next time; our server forgets it when the table closes.</li>
               <li><b>A name on an invite.</b> If you make an invite for someone by name, the server keeps both names with the table until it closes.</li>
-              <li><b>Chat messages.</b> Everyone at the table sees them. The server keeps the last 10 while the table is open, so someone who joins late can catch up, and erases them when it closes.</li>
+              <li><b>Chat messages.</b> Everyone at the table sees them. The server keeps the last 10 while the table is open, so someone who joins late can catch up, and up to 200 recent ones so a message that gets reported can be found. All of them are erased when the table closes.</li>
               <li><b>A reported message.</b> If someone taps Report on a message, that message and the sender’s name are saved so it can be looked at. It’s deleted after 30 days.</li>
             </ul>
             <h2>Your voice</h2>
             <ul>
               <li>The mic is only used once you turn it on.</li>
               <li>Your voice goes straight to the others at your table, encrypted, or through our own relay server when a direct connection won’t work. It’s never recorded or saved.</li>
-              <li>To connect directly, the devices at your table learn each other’s internet address. With your mic off, they don’t.</li>
+              <li>To connect directly, the devices of the people with their mics on learn each other’s internet address. Muting keeps you connected, so it doesn’t change that; turning your mic off in the Menu ends it. If your mic is off, nobody’s device learns your address.</li>
             </ul>
             <h2>Your own photos</h2>
             <ul>
               <li>If you add a photo for a jigsaw, your phone or computer makes it smaller first. That leaves its location, date and camera details behind on your device.</li>
               <li>Before anyone sees it, it’s checked automatically for nudity, violence and the like by Amazon Rekognition, part of Amazon Web Services. No person looks at it, and we’ve told Amazon not to keep it or use it for anything else. A photo that doesn’t pass is thrown away.</li>
-              <li>Only the people at your table can see it. It’s kept only in our server’s memory, never saved, and it’s deleted when the table closes. Puzzles of your own photos aren’t saved either.</li>
+              <li>It’s shown only to the people at your table. Its web address is long and random, and stops working when the table closes. It’s kept only in our server’s memory, never saved, and it’s deleted when the table closes. Puzzles of your own photos aren’t saved either.</li>
             </ul>
             <h2>What the site keeps to work</h2>
             <ul>
               <li><b>In your browser:</b> your name, a random number that gives you your seat back if you drop out, another for this device, the table you’re at (so reloading brings you back), when the page last reloaded itself for an update, your list of saved puzzles, and your sound and magnifier settings. No cookies. Clearing your browser’s data for this site removes them.</li>
-              <li><b>The device number</b> lets us count how many devices play, rather than every tab or visit. It’s random, says nothing about you, and is only ever written down scrambled.</li>
+              <li><b>The device number</b> lets us count how many devices play, rather than every tab or visit, and lets your table know you again if you come back in a new tab. It’s random, says nothing about you, and is only ever written down scrambled.</li>
               <li><b>Saved puzzles:</b> kept on our server so anyone at the table can carry on later. Just the picture and where the pieces are, no names. A finished puzzle is deleted, and a puzzle nobody has played for 30 days is deleted.</li>
-              <li><b>Logs:</b> what happens in the games (a table opened, a game played, for how long) under scrambled numbers instead of your name, and how many chat messages were sent, not what they said. When a photo is added or turned away, they note that (and what kind of thing the check found), never the photo itself. They help us see what people enjoy and fix problems, and only the people who run the site see them. Your internet address is kept in our servers’ memory while you’re connected and for up to about an hour after, to stop abuse like too many tries, and these logs only ever have it scrambled. Logs are deleted after 30 days.</li>
+              <li><b>Logs:</b> what happens in the games (a table opened, a game played, for how long) under scrambled numbers instead of your name, and how many chat messages were sent, not what they said. When a photo is added or turned away, they note that (and what kind of thing the check found), never the photo itself. They help us see what people enjoy and fix problems, and only the people who run the site see them. Your internet address is kept in our servers’ memory while you’re connected and for up to about an hour after, to stop abuse like too many tries, and these logs only ever have it scrambled, in a way that can’t be worked back into the address. Logs are deleted after 30 days.</li>
               <li><b>Our servers’ own logs:</b> the voice relay and the web server keep short technical notes, which can include internet addresses. They’re deleted after 30 days too.</li>
             </ul>
             <h2>Who else is involved</h2>

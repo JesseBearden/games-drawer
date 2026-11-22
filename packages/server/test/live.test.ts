@@ -265,6 +265,41 @@ describe('live server: abuse limits', () => {
     }
   });
 
+  it('cuts off a steady flood too, not just one big burst', async () => {
+    // A few messages a second still get through, so a guard that forgot every dropped message
+    // each time one was accepted never tripped on a flood that simply kept going.
+    const s = await startWith({ messageRate: 50, messageBurst: 10, maxStrikes: 60 });
+    try {
+      const { c } = await joined(s.port);
+      let closed = false;
+      void c.closed.then(() => (closed = true));
+      // About 400 a second for up to 3 seconds: never more than a handful dropped in a row.
+      for (let i = 0; i < 300 && !closed; i++) {
+        for (let k = 0; k < 4 && c.ws.readyState === c.ws.OPEN; k++) c.send({ t: 'ping', at: i });
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(closed).toBe(true);
+      expect(s.counters.rateLimitedClosures).toBe(1);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('leaves someone alone who just sends a little faster than the limit now and then', async () => {
+    const s = await startWith({ messageRate: 50, messageBurst: 10, maxStrikes: 60 });
+    try {
+      const { c } = await joined(s.port);
+      for (let round = 0; round < 5; round++) {
+        for (let k = 0; k < 20; k++) c.send({ t: 'ping', at: k });
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      expect(c.ws.readyState).toBe(c.ws.OPEN);
+      expect(s.counters.rateLimitedClosures).toBe(0);
+    } finally {
+      await s.close();
+    }
+  });
+
   it('closes on oversized frames', async () => {
     const s = await startWith();
     try {
@@ -303,6 +338,50 @@ describe('live server: abuse limits', () => {
       await c.opened;
       hello(c, { kind: 'private', code: realCode });
       expect((await c.waitFor('error')).code).toBe('rate-limited');
+      host.c.ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('wrong codes from the same address never keep someone out of the table they are already at', async () => {
+    const s = await startWith({ failedJoinsPer5Min: 2 });
+    try {
+      const host = await joined(s.port, { kind: 'create-private' });
+      const code = host.w.room.code;
+      for (const guess of ['BBBBB', 'CCCCC']) await fetch(`http://127.0.0.1:${s.port}/api/table?code=${guess}`);
+      // A newcomer is refused for now…
+      const stranger = connect(s.port);
+      await stranger.opened;
+      hello(stranger, { kind: 'private', code });
+      expect((await stranger.waitFor('error')).code).toBe('rate-limited');
+      // …but the host's phone reconnecting with its own session gets its seat back.
+      host.c.ws.close();
+      await host.c.closed;
+      const back = connect(s.port);
+      await back.opened;
+      hello(back, { kind: 'private', code }, host.w.session);
+      expect((await back.waitFor('welcome')).room.code).toBe(code);
+      back.ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("another website can't use up a household's wrong tries through the table lookup", async () => {
+    const s = await startWith({ failedJoinsPer5Min: 2 });
+    try {
+      const host = await joined(s.port, { kind: 'create-private' });
+      const url = (code: string) => `http://127.0.0.1:${s.port}/api/table?code=${code}`;
+      // What ten hidden pictures on someone else's page would send.
+      for (let i = 0; i < 10; i++) {
+        const res = await fetch(url('BBBBB'), { headers: { 'sec-fetch-site': 'cross-site' } });
+        expect(await res.json()).toEqual({ ok: false, reason: 'busy' });
+      }
+      // It tells that website nothing about a real table either.
+      expect(await (await fetch(url(host.w.room.code), { headers: { 'sec-fetch-site': 'cross-site' } })).json()).toEqual({ ok: false, reason: 'busy' });
+      // The family's own page still works.
+      expect(await (await fetch(url(host.w.room.code), { headers: { 'sec-fetch-site': 'same-origin' } })).json()).toMatchObject({ ok: true });
       host.c.ws.close();
     } finally {
       await s.close();
@@ -378,7 +457,7 @@ describe('live server: abuse limits', () => {
     }
   });
 
-  it('private room codes are 5 random consonants', async () => {
+  it('private room codes are 6 random consonants', async () => {
     const s = await startWith();
     try {
       const codes = new Set<string>();
@@ -386,7 +465,7 @@ describe('live server: abuse limits', () => {
         const r = s.manager.create('private');
         if (r.ok) codes.add(r.room.code);
       }
-      for (const code of codes) expect(code).toMatch(/^[BCDFGHJKLMNPQRSTVWXZ]{5}$/);
+      for (const code of codes) expect(code).toMatch(/^[BCDFGHJKLMNPQRSTVWXZ]{6}$/);
       expect(codes.size).toBe(4);
     } finally {
       await s.close();
@@ -406,6 +485,8 @@ describe('live server: HTTP in production mode', () => {
     fs.writeFileSync(path.join(dist, 'assets', 'app.js'), 'console.log(1)');
     fs.mkdirSync(path.join(dist, 'sfx'), { recursive: true });
     fs.writeFileSync(path.join(dist, 'sfx', 'boom.wav'), 'RIFF');
+    fs.mkdirSync(path.join(dist, 'art', 'felt'), { recursive: true });
+    fs.writeFileSync(path.join(dist, 'art', 'felt', 'sky.webp'), 'RIFF felt WEBP');
     fs.writeFileSync(path.join(tmp, 'secret.txt'), 'TOP SECRET');
     // The site's real robots.txt.
     fs.copyFileSync(path.join(__dirname, '..', '..', 'client', 'public', 'robots.txt'), path.join(dist, 'robots.txt'));
@@ -455,6 +536,51 @@ describe('live server: HTTP in production mode', () => {
     const res = await fetch(`${base}/sfx/boom.wav`);
     expect(res.headers.get('content-type')).toBe('audio/wav');
     expect(res.headers.get('cache-control')).toBe('public, max-age=86400');
+  });
+
+  it('lets a browser keep the felt for ten minutes, then answers "still the same?" without sending it again', async () => {
+    const url = `${base}/art/felt/sky.webp`;
+    const first = await fetch(url);
+    expect(first.status).toBe(200);
+    expect(first.headers.get('content-type')).toBe('image/webp');
+    expect(first.headers.get('cache-control')).toBe('public, max-age=600');
+    expect(first.headers.get('content-length')).toBe('14');
+    expect(await first.text()).toBe('RIFF felt WEBP');
+
+    // The fingerprint is worked out while the file is first sent, so it's there from then on.
+    const again = await fetch(url);
+    const etag = again.headers.get('etag');
+    expect(etag).toMatch(/^"[\w-]+"$/);
+    await again.text();
+
+    const same = await fetch(url, { headers: { 'if-none-match': etag! } });
+    expect(same.status).toBe(304);
+    expect(same.headers.get('cache-control')).toBe('public, max-age=600');
+    expect(await same.text()).toBe('');
+    // A proxy that compresses on the way out may hand the fingerprint back marked weak.
+    expect((await fetch(url, { headers: { 'if-none-match': `"other", W/${etag}` } })).status).toBe(304);
+    expect((await fetch(url, { headers: { 'if-none-match': '"other"' } })).status).toBe(200);
+  });
+
+  it('sends a changed picture again, with a new fingerprint', async () => {
+    const file = path.join(dist, 'art', 'felt', 'moss.webp');
+    const url = `${base}/art/felt/moss.webp`;
+    fs.writeFileSync(file, 'old felt');
+    await (await fetch(url)).text();
+    const old = (await fetch(url)).headers.get('etag')!;
+    fs.writeFileSync(file, 'new felt, a little longer');
+    const changed = await fetch(url, { headers: { 'if-none-match': old } });
+    expect(changed.status).toBe(200);
+    expect(await changed.text()).toBe('new felt, a little longer');
+    const now = (await fetch(url)).headers.get('etag');
+    expect(now).toBeTruthy();
+    expect(now).not.toBe(old);
+  });
+
+  it('never tells a browser to keep the page itself, or a build file for less than forever', async () => {
+    expect((await fetch(`${base}/`)).headers.get('cache-control')).toBe('no-cache');
+    expect((await fetch(`${base}/robots.txt`)).headers.get('cache-control')).toBe('no-cache');
+    expect((await fetch(`${base}/assets/app.js`)).headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
   });
 
   it('invite links fall back to the game page', async () => {

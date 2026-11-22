@@ -63,6 +63,9 @@ export default defineConfig({
   build: {
     outDir: path.join(here, 'dist'),
     emptyOutDir: true,
+    // Fonts always stay files. Vite folds small files into the CSS as data: addresses, and the
+    // page's own security header (font-src 'self', static.ts) refuses a font that arrives that way.
+    assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined),
     rolldownOptions: {
       output: {
         codeSplitting: {

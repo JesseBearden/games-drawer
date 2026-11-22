@@ -329,6 +329,38 @@ describe('your own photos at a table', () => {
     t.clock.now += 3_600_000;
     expect((await t.upload(p)).status).toBe(200);
   });
+
+  it('a burst of photos sent together gets no further than one at a time would', async () => {
+    // A slow check, as the real one is: every upload in the burst is still in the air together.
+    let checking = 0;
+    let most = 0;
+    let checks = 0;
+    const slow: PhotoChecker = {
+      name: 'slow',
+      async check() {
+        checks++;
+        most = Math.max(most, ++checking);
+        await new Promise((r) => setTimeout(r, 60));
+        checking--;
+        return { ok: true };
+      },
+    };
+    const t = await table({ checker: slow });
+    const p = await photo(600, 400);
+    const burst = await Promise.all(Array.from({ length: 40 }, () => t.upload(p)));
+    const taken = burst.filter((r) => r.status === 200).length;
+    expect(taken).toBeGreaterThan(0);
+    expect(taken).toBeLessThanOrEqual(PHOTO_LIMITS.perIpPerHour);
+    expect(checks).toBeLessThanOrEqual(PHOTO_LIMITS.perIpPerHour);
+    expect(most).toBeLessThanOrEqual(PHOTO_LIMITS.atOncePerTable);
+    for (const r of burst.filter((r) => r.status !== 200)) expect(r.body).toEqual({ ok: false, reason: 'busy' });
+  });
+
+  it('counts an upload the moment it is let in, so ones that turn out not to be photos count too', async () => {
+    const t = await table();
+    for (let i = 0; i < PHOTO_LIMITS.perIpPerHour; i++) expect((await t.upload(Buffer.from('not a photo'))).body.reason).toBe('not-image');
+    expect((await t.upload(await photo(600, 400))).body).toEqual({ ok: false, reason: 'busy' });
+  });
 });
 
 describe('piece counts follow the picture’s size', () => {

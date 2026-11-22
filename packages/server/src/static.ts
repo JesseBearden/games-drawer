@@ -1,5 +1,7 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pipeline } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { gameForPath } from '@tank/shared';
 
@@ -44,6 +46,7 @@ const TYPES: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
   '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
   '.wav': 'audio/wav',
   '.mp3': 'audio/mpeg',
 };
@@ -74,6 +77,38 @@ export function securityHeaders(host: string | undefined): Record<string, string
   };
 }
 
+/**
+ * Folders whose files keep their names between builds, and how many seconds a browser may use
+ * its own copy without asking. After that it asks "still the same?" (see `fingerprints`) rather
+ * than downloading the file again; without this the felt alone was about 3.6 MB on every single
+ * page load. Sounds and sprites rarely change, so a day. The felt, the cards and the puzzle
+ * pictures get ten minutes, so new art shows up soon after a deploy.
+ */
+const KEEP_SECONDS: Record<string, number> = { sfx: 86400, sprites: 86400, art: 600, puzzles: 600 };
+
+/**
+ * A fingerprint of each file's contents (its ETag). A browser that already has a file sends the
+ * fingerprint back, and gets a one-line "still the same" (304) instead of the whole file. It is
+ * worked out while the file is first sent, so nothing is read twice, and kept until the file
+ * changes. It comes from the contents, not the date: every box and every release gives the same
+ * answer for a picture that hasn't changed.
+ */
+const fingerprints = new Map<string, { size: number; mtimeMs: number; etag: string }>();
+
+/** Does the browser's If-None-Match name this fingerprint? (A proxy may have marked it weak, W/.) */
+function namesTag(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  return header.split(',').some((t) => t.trim().replace(/^W\//, '') === etag);
+}
+
+function statOrNull(file: string): fs.Stats | null {
+  try {
+    return fs.statSync(file);
+  } catch {
+    return null;
+  }
+}
+
 /** Serve the built client. Unknown paths (like /r/ABCDE invite links) get index.html. */
 export function serveStatic(dir: string, pathname: string, req: IncomingMessage, res: ServerResponse) {
   const root = path.resolve(dir);
@@ -93,28 +128,19 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
     res.writeHead(403).end();
     return;
   }
-  let stat: fs.Stats | null = null;
-  try {
-    stat = fs.statSync(file);
-  } catch {
-    stat = null;
-  }
+  const stat = statOrNull(file);
   // A missing file with an extension (a build asset or a sound) is a real 404. Answering with the
   // page instead would hand a browser HTML where it expects JavaScript, e.g. mid-deploy.
   if (!stat && path.extname(decoded) !== '') {
     res.writeHead(404, { 'content-type': 'text/plain', 'cache-control': 'no-store' }).end('Not found');
     return;
   }
-  if (!stat || stat.isDirectory()) file = path.join(root, 'index.html');
-  if (!fs.existsSync(file)) {
-    res.writeHead(404, { 'content-type': 'text/plain' }).end('Client not built. Run npm run build.');
-    return;
-  }
-  const ext = path.extname(file);
-  const immutable = file.includes(`${path.sep}assets${path.sep}`);
-  // Sounds and sprites keep their names between builds; a day of caching saves re-downloading ~1 MB.
-  const daily = file.includes(`${path.sep}sfx${path.sep}`) || file.includes(`${path.sep}sprites${path.sep}`);
-  if (path.basename(file) === 'index.html') {
+  if (!stat || !stat.isFile() || path.basename(file) === 'index.html') {
+    if (!stat || !stat.isFile()) file = path.join(root, 'index.html');
+    if (!fs.existsSync(file)) {
+      res.writeHead(404, { 'content-type': 'text/plain' }).end('Client not built. Run npm run build.');
+      return;
+    }
     // Link previews (iMessage and friends) need an absolute image URL; fill in our address.
     const host = req.headers.host && /^[A-Za-z0-9.:[\]-]{1,255}$/.test(req.headers.host) ? req.headers.host : null;
     let html = withPageMeta(fs.readFileSync(file, 'utf8'), pageMeta(decoded));
@@ -126,17 +152,40 @@ export function serveStatic(dir: string, pathname: string, req: IncomingMessage,
     res.end(req.method === 'HEAD' ? undefined : html);
     return;
   }
-  res.writeHead(200, {
-    'content-type': TYPES[ext] ?? 'application/octet-stream',
-    'cache-control': immutable ? 'public, max-age=31536000, immutable' : daily ? 'public, max-age=86400' : 'no-cache',
+  // The folder under the site's root says how long a browser may keep the file: the build's own
+  // files have their contents in their names, so they never change.
+  const top = path.relative(root, file).split(path.sep)[0];
+  const keep = Object.hasOwn(KEEP_SECONDS, top) ? KEEP_SECONDS[top] : 0;
+  const known = fingerprints.get(file);
+  const etag = known && known.size === stat.size && known.mtimeMs === stat.mtimeMs ? known.etag : undefined;
+  const headers = {
+    'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream',
+    'cache-control': top === 'assets' ? 'public, max-age=31536000, immutable' : keep ? `public, max-age=${keep}` : 'no-cache',
+    ...(etag && { etag }),
     ...securityHeaders(req.headers.host),
-  });
+  };
+  if (etag && namesTag(req.headers['if-none-match'], etag)) {
+    res.writeHead(304, headers).end();
+    return;
+  }
+  res.writeHead(200, { ...headers, 'content-length': stat.size });
   if (req.method === 'HEAD') {
     res.end();
     return;
   }
-  // A file that can't be read after all ends this one response, not the server.
-  fs.createReadStream(file)
-    .on('error', () => res.destroy())
-    .pipe(res);
+  const stream = fs.createReadStream(file);
+  if (!etag) {
+    const hash = crypto.createHash('sha1');
+    let read = 0;
+    stream.on('data', (chunk) => {
+      hash.update(chunk);
+      read += chunk.length;
+    });
+    stream.on('end', () => {
+      if (read === stat.size) fingerprints.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, etag: `"${hash.digest('base64url')}"` });
+    });
+  }
+  // A file that can't be read after all ends this one response, not the server. And pipeline,
+  // unlike a bare pipe(), closes the file when the browser goes away part-way through.
+  pipeline(stream, res, () => {});
 }

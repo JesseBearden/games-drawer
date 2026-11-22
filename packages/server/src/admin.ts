@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { ADMIN_COOKIE, ADMIN_SESSION_MS, issueAdminSession, verifyAdminPassword, verifyAdminSession } from './adminAuth';
 import { AdminStatsCache, type AdminStats } from './adminStats';
 import type { LogSink } from './eventlog';
@@ -134,8 +134,15 @@ function readBody(req: IncomingMessage): Promise<string | null> {
   });
 }
 
+/**
+ * An address as the sign-in log writes it: scrambled with a random salt made when the server
+ * starts and never written anywhere, so nobody can work back to the address by trying every
+ * one (a fixed salt, in a public repo, let them). Tries from one address still show as one
+ * until the next restart.
+ */
+const ADDRESS_SALT = randomBytes(16);
 function shortHash(s: string) {
-  return createHash('sha256').update('games-drawer-admin-ip:').update(s).digest('hex').slice(0, 12);
+  return createHash('sha256').update(ADDRESS_SALT).update(s).digest('hex').slice(0, 12);
 }
 
 function page(res: ServerResponse, status: number, html: string) {

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LOG_KEEP_DAYS } from '../src/eventlog';
 import { PUZZLE_KEEP_DAYS } from '../src/puzzleStore';
+import { RECENT_MESSAGES } from '../src/room';
 import { CHAT_HISTORY_SIZE, DEFAULT_ICE_SERVERS, stunFromTurn } from '../src/server';
 import { securityHeaders } from '../src/static';
 
@@ -29,6 +30,8 @@ describe('the privacy page and house rules match the code', () => {
 
   it('says how many messages a table keeps', () => {
     expect(privacy).toContain(`keeps the last ${CHAT_HISTORY_SIZE} while the table is open`);
+    expect(privacy).toContain(`up to ${RECENT_MESSAGES} recent ones so a message that gets reported can be found`);
+    expect(privacy).toContain('All of them are erased when the table closes');
   });
 
   it('only involves our own servers: no outside fonts, and voice set-up through our relay', () => {

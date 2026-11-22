@@ -22,6 +22,7 @@ import {
   isRoomCode,
   MAX_NAME_LENGTH,
   normalizeRoomCode,
+  roomCodeFromEntry,
   randomName,
   ROOM_CODE_LENGTH,
   slotOfCode,
@@ -35,6 +36,7 @@ import type { Device } from './views';
 import { Sfx } from './audio';
 import { Gamepads, moveFocus, watchPadMode } from './gamepad';
 import { reloadForUpdate } from './reload';
+import { resumesTable } from './resume';
 import { Net } from './net';
 import { escapeHtml } from './html';
 import { MIC_CONSTRAINTS, voiceSupported } from './voice';
@@ -217,7 +219,7 @@ function chosenName(form: 'start' | 'join'): string | null {
 
 $('code-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  const code = normalizeRoomCode($<HTMLInputElement>('code-input').value);
+  const code = roomCodeFromEntry($<HTMLInputElement>('code-input').value);
   if (!isRoomCode(code)) {
     showError(`Table codes are ${ROOM_CODE_LENGTH} letters.`, $('code-form'));
     $('code-input').focus();
@@ -225,7 +227,15 @@ $('code-form').addEventListener('submit', (e) => {
   }
   navigate(`/r/${code}`);
 });
-$('code-input').addEventListener('input', () => showError(null));
+$('code-input').addEventListener('input', () => {
+  showError(null);
+  // A pasted invite link: keep just its code, so the box shows what will be joined.
+  const box = $<HTMLInputElement>('code-input');
+  if (box.value.includes('/')) {
+    const code = roomCodeFromEntry(box.value);
+    if (code) box.value = code;
+  }
+});
 
 // ------------------------------------------------------------------ start a table
 
@@ -583,7 +593,10 @@ window.visualViewport?.addEventListener('resize', unscrollSoon);
 
 showPage();
 const resume = getActive();
-if (resume && resume.room.kind === 'private') start(resume.room, { mic: resume.mic, name: stored(NAME_KEY) || randomName(), resumed: true });
+if (resume && resume.room.kind === 'private') {
+  if (resumesTable(page, resume.room.code)) start(resume.room, { mic: resume.mic, name: stored(NAME_KEY) || randomName(), resumed: true });
+  else setActive(null);
+}
 
 function enterGame() {
   showError(null);
@@ -598,6 +611,9 @@ function enterGame() {
 /** Leave the table and go home. */
 function leave() {
   setActive(null);
+  // Whatever is said next ("This table closed…") goes on the page being shown, not under the
+  // button that got you in: that page is hidden now, and the reason would be hidden with it.
+  errorAnchor = null;
   app?.dispose();
   app = null;
   net?.close();

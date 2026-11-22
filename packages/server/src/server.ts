@@ -212,7 +212,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
         return;
       }
       if (url.pathname === '/api/table') {
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(tableLookup(url, clientIp(req, o.trustProxy))));
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(tableLookup(url, clientIp(req, o.trustProxy), req.headers['sec-fetch-site'] === 'cross-site')));
         return;
       }
       if (o.production) {
@@ -233,8 +233,11 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
    * The join page's look at a table before joining: who's there, the game, who invited you. Wrong
    * codes count with wrong codes at join, so this can't be used to hunt for open tables.
    */
-  function tableLookup(url: URL, ip: string): TableInfo {
+  function tableLookup(url: URL, ip: string, crossSite: boolean): TableInfo {
     const now = Date.now();
+    // Only our own pages ask. Another website making a visitor's browser ask (ten hidden pictures
+    // would do) must not use up that household's wrong tries and lock it out of joining.
+    if (crossSite) return { ok: false, reason: 'busy' };
     if (failedJoins.count(ip, now) >= limits.failedJoinsPer5Min) return { ok: false, reason: 'busy' };
     const code = normalizeRoomCode(url.searchParams.get('code') ?? '');
     const room = isRoomCode(code) ? manager.rooms.get(code) : undefined;
@@ -336,7 +339,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       ws.close(4004, code);
     };
     const helloTimer = setTimeout(() => {
-      if (!room) ws.close(4002, 'no hello');
+      if (!room) conn.close(4002, 'no hello');
     }, limits.helloTimeoutMs);
     ws.on('pong', () => (alive = true));
     const heartbeat = setInterval(() => {
@@ -359,7 +362,9 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           }
           return;
         }
-        strikes = 0;
+        // An accepted message pays one strike back, rather than clearing them all: a steady flood
+        // has a few accepted messages mixed in, and clearing on each meant it was never cut off.
+        strikes = Math.max(0, strikes - 1);
         const msg = isBinary ? null : parseClientMessage(data.toString());
         if (!msg) {
           counters.badMessages++;
@@ -373,7 +378,10 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           session = signer.verify(msg.session) ? msg.session! : signer.issue();
           const req = msg.room;
           if (req.kind === 'private') {
-            if (failedJoins.count(ip, now) >= limits.failedJoinsPer5Min) {
+            // Someone coming back to their own seat isn't guessing codes: wrong tries from their
+            // address (anyone's, on the same Wi-Fi) must not keep them out of a table they're at.
+            const seated = manager.rooms.get(normalizeRoomCode(req.code))?.hasSession(session) ?? false;
+            if (!seated && failedJoins.count(ip, now) >= limits.failedJoinsPer5Min) {
               return fail('rate-limited', 'Too many wrong room codes. Wait a few minutes and try again.');
             }
             const code = normalizeRoomCode(req.code);
@@ -391,7 +399,18 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           if (!lookup.ok) return fail(lookup.code, lookup.message);
           if (req.kind === 'create-private') privateCreates.add(ip, now);
           conn.batches = msg.batch === true;
-          const result = lookup.room.join(conn, session, msg.name || randomName(), msg.device, msg.deviceId);
+          let result;
+          try {
+            result = lookup.room.join(conn, session, msg.name || randomName(), msg.device, msg.deviceId);
+          } catch (err) {
+            // Half-joined: take them off the table again, or a "connected" ghost keeps the seat.
+            try {
+              lookup.room.disconnect(session, conn, 'error');
+            } catch {
+              /* the room is in no state to tidy up; the error below is what matters */
+            }
+            throw err;
+          }
           if (!result.ok) return fail(result.code, result.message);
           room = lookup.room;
           clock?.wake();
