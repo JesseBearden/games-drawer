@@ -102,13 +102,14 @@ on calm grey. [DESIGN.md](DESIGN.md) has the rules (words, sizes, layouts, what 
 ## Deploying
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) tests every pull request
-and push. Each push to `main` also starts a deploy inside the AWS account (CodeBuild,
-[deploy/buildspec.yml](deploy/buildspec.yml)), which launches a new server box with the new version. It shows on staging for smoke
-tests, then gets 10% of new tables for 10 minutes. If it stays healthy, it takes all new tables
-and the front door (CloudFront); the old box finishes its games and shuts itself down, so a
-deploy doesn't cut anyone off (a table still going after 3 hours gets a 10-minute warning). If it isn't, the new box is removed. The AWS side (CloudFront and
-DNS, the boxes' launch template, a shared disk, budgets and a spending kill switch) is code in
-[infra/](infra/README.md); how a deploy moves between boxes is in [deploy/README.md](deploy/README.md).
+and push. Each push to `main` also starts the pipeline inside the AWS account
+([deploy/README.md](deploy/README.md#the-pipeline)): it runs every test, browser tests too, then
+puts the build on staging and **waits for someone to approve it**. Approved, that same build gets
+a new box and 10% of new tables for 10 minutes. If it stays healthy, it takes all new tables
+and the front door; the old box finishes its games and shuts itself down, so a deploy doesn't cut
+anyone off (a table still going after 3 hours gets a 10-minute warning). If it isn't, the new box
+is removed. The AWS side (DNS, the boxes' launch template, a shared disk, the pipeline, budgets
+and a spending kill switch) is code in [infra/](infra/README.md).
 
 ## Adding a game
 

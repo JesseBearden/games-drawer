@@ -1,68 +1,118 @@
-import { spawnSync } from 'node:child_process';
+// Runs the real deploy.sh, with pretend npx and sleep in front of it, and fails each step in turn.
+// (A failed step inside a shell function never reached the script's ERR trap, so a failed check
+// used to leave the new box up with its share of new tables. Reading the script didn't show it.)
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-// deploy.sh with a pretend npx: no AWS, no browser, no network. (On Windows it needs Git Bash:
-// plain "bash" there can be WSL's.)
-const windows = process.platform === 'win32';
-const bash = windows ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
-const script = new URL('./deploy.sh', import.meta.url);
-/** A Windows path as Git Bash writes it. */
-const sh = (p: string) => p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
-
-/** Run it with `npx` answering as `fake` says. */
-function deploy(fake: string, env: Record<string, string> = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-deploy-'));
-  const calls = path.join(dir, 'calls');
-  fs.writeFileSync(calls, '');
-  fs.writeFileSync(path.join(dir, 'npx'), `#!/usr/bin/env bash\necho "$*" >> "${sh(calls)}"\n${fake}\n`, { mode: 0o755 });
-  const copy = path.join(dir, 'deploy.sh');
-  fs.writeFileSync(copy, fs.readFileSync(script, 'utf8').replace(/\r\n/g, '\n'));
-  const run = spawnSync(bash, ['-c', `PATH="${sh(dir)}:$PATH"; source "${sh(copy)}" abcdef1`], {
-    encoding: 'utf8',
-    timeout: 15_000,
-    env: { ...process.env, AWS_REGION: 'none', SITE_DOMAIN: 'games.example', LAUNCH_TEMPLATE: 'none', SKIP_BROWSER_INSTALL: '1', STAGING_ONLY: '', CANARY_MINUTES: '0', ...env },
-  });
-  const called = fs.readFileSync(calls, 'utf8');
-  fs.rmSync(dir, { recursive: true, force: true });
-  return { status: run.status, out: run.stdout, rollbacks: called.match(/ rollback abcdef1/g)?.length ?? 0, called };
+/** On Windows, Git's bash: a plain "bash" can be WSL's, which may not be installed. */
+function findBash(): string {
+  if (process.platform !== 'win32') return 'bash';
+  const git = execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(); // <Git>/mingw64/libexec/git-core
+  return path.resolve(git, '../../../bin/bash.exe');
 }
 
-const LAUNCHES = 'case "$*" in *" launch "*) echo "Launching box b"; echo CANARY_SLOT=b;; esac';
+const script = fileURLToPath(new URL('./deploy.sh', import.meta.url)).replaceAll('\\', '/');
+const release = 'c0ffee0000000000000000000000000000000000';
+let bash = '';
+let dir = '';
 
-describe.skipIf(windows && !fs.existsSync(bash))('deploy.sh', () => {
-  it('a failed launch leaves its log to read, then rolls back', () => {
-    const r = deploy('case "$*" in *" launch "*) echo "Started i-1; waiting for it to boot"; echo "then it broke"; exit 1;; esac');
-    expect(r.out).toContain('Started i-1; waiting for it to boot');
-    expect(r.out).toContain('then it broke');
-    expect(r.status).not.toBe(0);
-    expect(r.rollbacks).toBe(1);
-  }, 20_000);
+beforeAll(() => {
+  bash = findBash();
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-deploy-'));
+  const fake = (name: string, lines: string[]) => fs.writeFileSync(path.join(dir, name), ['#!/usr/bin/env bash', ...lines, ''].join('\n'), { mode: 0o755 });
+  fake('npx', [
+    'echo "$*" >> "$CALLS"',
+    'if [[ "$*" == *"fleet.ts launch"* ]]; then echo "Started i-1; waiting for it to boot"; fi',
+    'if [ -n "$FAIL" ] && [[ "$*" == *"$FAIL"* ]]; then exit 1; fi',
+    'if [ -n "$KILL_AT" ] && [[ "$*" == *"$KILL_AT"* ]]; then kill -"$SIGNAL" "$PPID"; exit 0; fi',
+    'if [[ "$*" == *"fleet.ts launch"* ]]; then echo CANARY_SLOT=b; fi',
+    'exit 0',
+  ]);
+  fake('sleep', ['exit 0']);
+});
+afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  for (const [signal, status] of [['INT', 130], ['TERM', 143]] as const) {
-    it(`stopped with ${signal}, it removes the new box`, () => {
-      const r = deploy(`${LAUNCHES}\ncase "$*" in *playwright*) kill -${signal} $PPID;; esac`);
+function deploy(env: Record<string, string>) {
+  const calls = path.join(dir, 'calls');
+  fs.writeFileSync(calls, '');
+  // Windows may spell it Path; two spellings in one environment would hide the pretend npx.
+  const base = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(path|go_live)$/i.test(k)));
+  const res = spawnSync(bash, ['-c', 'export PATH="$(cd "$FAKES" && pwd):$PATH"; exec bash "$0" "$1"', script, release], {
+    encoding: 'utf8',
+    env: {
+      ...base,
+      PATH: process.env.PATH ?? process.env.Path ?? '',
+      FAKES: dir.replaceAll('\\', '/'),
+      CALLS: calls.replaceAll('\\', '/'),
+      AWS_REGION: 'nowhere',
+      SITE_DOMAIN: 'games.invalid',
+      LAUNCH_TEMPLATE: 'none',
+      CANARY_MINUTES: '2',
+      SKIP_BROWSER_INSTALL: '1',
+      FAIL: '',
+      KILL_AT: '',
+      SIGNAL: 'TERM',
+      ...env,
+    },
+  });
+  const ran = fs.readFileSync(calls, 'utf8');
+  return { code: res.status, out: res.stdout, rollbacks: ran.split('fleet.ts rollback').length - 1, ran };
+}
+
+describe('deploy.sh', { timeout: 120_000 }, () => {
+  it('staging: puts it there and changes nothing on the site', () => {
+    const r = deploy({});
+    expect(r.code, r.ran).toBe(0);
+    expect(r.rollbacks).toBe(0);
+    expect(r.ran).not.toMatch(/fleet\.ts (canary|promote)/);
+  });
+
+  it('going live: canary, checks, promote', () => {
+    const r = deploy({ GO_LIVE: '1' });
+    expect(r.code, r.ran).toBe(0);
+    expect(r.rollbacks).toBe(0);
+    expect(r.ran).toMatch(/on-staging[\s\S]*launch[\s\S]*canary[\s\S]*check[\s\S]*check[\s\S]*promote/);
+  });
+
+  it('a failed first check touches nothing, not even to roll back', () => {
+    for (const env of [{ FAIL: 'pipeline.ts turn' }, { GO_LIVE: '1', FAIL: 'on-staging' }] as Record<string, string>[]) {
+      const r = deploy(env);
+      expect(r.code, r.ran).not.toBe(0);
+      expect(r.ran, r.ran).not.toMatch(/fleet\.ts (launch|rollback)/);
+    }
+  });
+
+  it.each([
+    ['launch', {}, 'fleet.ts launch'],
+    ['staging’s smoke tests', {}, 'playwright test'],
+    ['launch, going live', { GO_LIVE: '1' }, 'fleet.ts launch'],
+    ['canary', { GO_LIVE: '1' }, 'fleet.ts canary'],
+    ['health check', { GO_LIVE: '1' }, 'fleet.ts check'],
+    ['promote', { GO_LIVE: '1' }, 'fleet.ts promote'],
+  ])('a failed %s removes the new box', (_, env, fail) => {
+    const r = deploy({ ...env, FAIL: fail });
+    expect(r.code, r.ran).not.toBe(0);
+    expect(r.rollbacks, r.ran).toBe(1);
+  });
+
+  it('a failed launch leaves its log to read', () => {
+    expect(deploy({ FAIL: 'fleet.ts launch' }).out).toContain('Started i-1; waiting for it to boot');
+  });
+
+  it.each([
+    ['INT', 130],
+    ['TERM', 143],
+  ])('stopped with %s, it removes the new box', (SIGNAL, status) => {
+    for (const env of [{ GO_LIVE: '1', KILL_AT: 'fleet.ts canary' }, { KILL_AT: 'playwright test' }] as Record<string, string>[]) {
+      const r = deploy({ ...env, SIGNAL });
       expect(r.out).toContain('The deploy was stopped.');
-      expect(r.status).toBe(status);
-      expect(r.rollbacks).toBe(1);
-      expect(r.called).not.toContain(' promote ');
-    }, 20_000);
-  }
-
-  it('one that works reads the slot from the launch, and rolls nothing back', () => {
-    const r = deploy(LAUNCHES);
-    expect(r.status).toBe(0);
-    expect(r.out).toContain('Canary: box b');
-    expect(r.called).toContain(' promote abcdef1');
-    expect(r.rollbacks).toBe(0);
-  }, 20_000);
-
-  it('staging only stops after the smoke tests', () => {
-    const r = deploy(LAUNCHES, { STAGING_ONLY: '1' });
-    expect(r.status).toBe(0);
-    expect(r.called).not.toContain(' promote ');
-    expect(r.rollbacks).toBe(0);
-  }, 20_000);
+      expect(r.code, r.ran).toBe(status);
+      expect(r.rollbacks, r.ran).toBe(1);
+      expect(r.ran).not.toContain('promote');
+    }
+  });
 });

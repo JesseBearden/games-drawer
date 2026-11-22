@@ -1,6 +1,7 @@
 # Every pull request and push: typecheck, unit tests, a release build, and browser tests.
-# Deploys don't happen here: AWS deploys each push to main itself, from inside the account
-# (CodeBuild, deploy/buildspec.yml; see deploy/README.md), so GitHub never signs in to AWS.
+# Deploys don't happen here: a pipeline inside the AWS account runs every test again on a push to
+# main, puts it on staging, and waits for approval to go live (deploy/README.md), so GitHub never
+# signs in to AWS.
 name: CI
 
 on:

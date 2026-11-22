@@ -1,0 +1,23 @@
+# The pipeline's last step, after someone approves: the same tested build goes live, if it's still
+# what's on staging. A canary share of new tables, ten minutes of checks, then everyone.
+#
+# The project sets SITE_DOMAIN, FRONT_DOOR, LAUNCH_TEMPLATE, RELEASE_BUCKET, CANARY_PERCENT and
+# CANARY_MINUTES; the pipeline sets COMMIT (the approved one) and hands over the tested build.
+version: 0.2
+
+env:
+  variables:
+    CI: 'true'
+  shell: bash
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 24
+    commands:
+      # This step may deploy, so packages' install scripts don't run in it.
+      - npm ci --ignore-scripts
+  pre_build:
+    commands:
+      - aws s3 cp "$CODEBUILD_SRC_DIR_Release/release.tar.gz" "s3://$RELEASE_BUCKET/releases/$COMMIT.tar.gz" --only-show-errors
+      - GO_LIVE=1 bash deploy/deploy.sh "$COMMIT"

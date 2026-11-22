@@ -5,15 +5,15 @@ import type { Construct } from 'constructs';
 
 /**
  * The link from AWS to the GitHub repo, through AWS's own GitHub app ("AWS Connector for
- * GitHub"), so the account can fetch the code and deploy it itself (the deploy project in
+ * GitHub"), so the account can fetch the code and deploy it itself (the pipeline in
  * stack.ts). No keys or tokens are stored anywhere, and GitHub never signs in to AWS.
  *
  * On its own and created before the main stack: it starts out pending, and you approve it once
- * on GitHub (infra/README.md) before the deploy project can watch the repo.
+ * on GitHub (infra/README.md) before the pipeline can watch the repo.
  *
- * The deploy project's role lives here too, already allowed to use the connection: CodeBuild
- * checks that when the project is created, and a role made in the same stack as the project
- * may not have its permissions in place yet. The main stack adds the deploy permissions.
+ * The role of the pipeline's two deploy steps lives here too (it began as the one deploy
+ * project's, which needed the connection when it was created). The main stack adds the deploy
+ * permissions.
  */
 export class GamesDrawerGitHubStack extends cdk.Stack {
   readonly connectionArn: string;

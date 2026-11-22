@@ -5,6 +5,8 @@ import * as cdk from 'aws-cdk-lib';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
 import * as ce from 'aws-cdk-lib/aws-ce';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
+import * as codepipeline from 'aws-cdk-lib/aws-codepipeline';
+import * as actions from 'aws-cdk-lib/aws-codepipeline-actions';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as efs from 'aws-cdk-lib/aws-efs';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -16,6 +18,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { PIPELINE } from '../../deploy/pipeline';
 import { FrontDoor } from './edge';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -31,9 +34,9 @@ export interface GamesDrawerProps extends cdk.StackProps {
   zone: route53.IHostedZone;
   /** Where budget alerts go. Passed in at deploy time, never committed (the repo is public). */
   alertEmail: string;
-  /** owner/name of the GitHub repository whose pushes to main deploy. */
+  /** owner/name of the GitHub repository whose pushes to main go through the pipeline. */
   githubRepo: string;
-  /** The link to GitHub the deploy project reads the repo through, and the project's role (both the GamesDrawerGitHub stack, github.ts). */
+  /** The link to GitHub the pipeline reads the repo through, and the role of its two deploy steps (both the GamesDrawerGitHub stack, github.ts). */
   githubConnectionArn: string;
   deployRoleArn: string;
   /** Email alerts at 50% and 80% of this, and when the month is forecast to go over. */
@@ -57,9 +60,9 @@ export interface GamesDrawerProps extends cdk.StackProps {
  * Where the game servers run: disposable boxes, launched one per deploy from a launch template
  * (the old box finishes its games and shuts itself down; deploy/README.md), and what outlives
  * them: the shared disk for Jigsaw saves and logs (EFS), release bundles (S3), secrets
- * (Parameter Store, made by the first box). Plus the deploy project (CodeBuild, which deploys
- * each push to main from inside the account), the spending guardrails, and the front door
- * (CloudFront and its certificate, edge.ts).
+ * (Parameter Store, made by the first box). Plus the pipeline (CodePipeline and CodeBuild, inside
+ * the account: each push to main is tested and put on staging, and goes live once approved), the
+ * spending guardrails, and the front door (CloudFront and its certificate, edge.ts).
  *
  * Deliberately no load balancer or NAT gateway: either costs more than the server. The only
  * Lambda functions are the kill switch and two that run at deploy time (a lookup, and the
@@ -181,44 +184,102 @@ export class GamesDrawerStack extends cdk.Stack {
     });
 
     // ------------------------------------------------------------ deploys, run by the account itself
-    // CodeBuild deploys each push to main (deploy/buildspec.yml, deploy/deploy.sh). It reads the
-    // repo through the GitHub connection, which you approve once; GitHub never signs in to AWS,
-    // and nothing secret is stored anywhere. (The account's organization doesn't allow GitHub
-    // sign-in links anyway.) One deploy at a time; a push during one waits its turn.
-    // The role comes from the GitHub stack, already allowed to use the connection; this adds the
-    // permissions to deploy.
+    // The pipeline (deploy/README.md): each push to main gets every test, then goes to staging; a
+    // person approves it before it goes live. Each stage does one release at a time, and a push
+    // during one waits its turn (if several do, only the newest goes on). It reads the repo through
+    // the GitHub connection, which you approve once; GitHub never signs in to AWS, and nothing
+    // secret is stored anywhere. (The account's organization doesn't allow GitHub sign-in links
+    // anyway.)
+    //
+    // The tests run with a role of their own that can't deploy. Staging and going live share the
+    // deploy role, which comes from the GitHub stack; this adds the permissions to deploy. So the
+    // approval is a guard against mistakes, not against whoever can push to main.
     const deployRole = iam.Role.fromRoleArn(this, 'DeployRole', props.deployRoleArn, { mutable: true });
-    const [owner, repo] = props.githubRepo.split('/');
-    const deployProject = new codebuild.Project(this, 'Deploy', {
-      projectName: 'games-drawer-deploy',
-      description: 'Deploys Games Drawer on each push to main, a box at a time (deploy/README.md)',
-      role: deployRole,
-      source: codebuild.Source.gitHub({
-        owner,
-        repo,
-        cloneDepth: 1,
-        reportBuildStatus: true,
-        webhook: true,
-        webhookFilters: [codebuild.FilterGroup.inEventOf(codebuild.EventAction.PUSH).andBranchIs('main')],
-      }),
-      buildSpec: codebuild.BuildSpec.fromSourceFilename('deploy/buildspec.yml'),
-      // The small Ubuntu machine: the one CodeBuild's free monthly minutes cover.
-      environment: { buildImage: codebuild.LinuxBuildImage.STANDARD_7_0, computeType: codebuild.ComputeType.SMALL },
-      environmentVariables: {
-        SITE_DOMAIN: { value: props.domain },
-        LAUNCH_TEMPLATE: { value: LAUNCH_TEMPLATE_NAME },
-        RELEASE_BUCKET: { value: releases.bucketName },
-        CANARY_PERCENT: { value: '10' },
-        CANARY_MINUTES: { value: '10' },
-        FRONT_DOOR: { value: props.frontDoor },
-      },
-      timeout: cdk.Duration.hours(1),
-      queuedTimeout: cdk.Duration.hours(8),
-      concurrentBuildLimit: 1,
-      logging: { cloudWatch: { logGroup: new logs.LogGroup(this, 'DeployLogs', { retention: logs.RetentionDays.THREE_MONTHS, removalPolicy: cdk.RemovalPolicy.DESTROY }) } },
+    const buildLogs = new logs.LogGroup(this, 'DeployLogs', { retention: logs.RetentionDays.THREE_MONTHS, removalPolicy: cdk.RemovalPolicy.DESTROY });
+    // No limit on builds at once: CodeBuild refuses a build over it rather than queueing it. The
+    // pipeline's stages do the taking of turns.
+    const step = (id: string, name: string, spec: string, minutes: number, role?: iam.IRole, env: Record<string, string> = {}) =>
+      new codebuild.PipelineProject(this, id, {
+        projectName: `games-drawer-${name}`,
+        description: `Games Drawer pipeline: ${name} (deploy/README.md)`,
+        role,
+        buildSpec: codebuild.BuildSpec.fromSourceFilename(`deploy/${spec}`),
+        // The small Ubuntu machine: the one CodeBuild's free monthly minutes cover.
+        environment: { buildImage: codebuild.LinuxBuildImage.STANDARD_7_0, computeType: codebuild.ComputeType.SMALL },
+        environmentVariables: Object.fromEntries(Object.entries(env).map(([k, value]) => [k, { value }])),
+        timeout: cdk.Duration.minutes(minutes),
+        logging: { cloudWatch: { logGroup: buildLogs } },
+      });
+    const deployEnv = { SITE_DOMAIN: props.domain, LAUNCH_TEMPLATE: LAUNCH_TEMPLATE_NAME, RELEASE_BUCKET: releases.bucketName, FRONT_DOOR: props.frontDoor };
+    const testProject = step('TestProject', 'test', 'buildspec.yml', 45);
+    // Long enough to wait out a release going live (pipeline.ts), then deploy.
+    const stagingProject = step('StagingProject', 'staging', 'buildspec.staging.yml', 100, deployRole, deployEnv);
+    const goLiveProject = step('GoLiveProject', 'go-live', 'buildspec.go-live.yml', 60, deployRole, { ...deployEnv, CANARY_PERCENT: '10', CANARY_MINUTES: '10' });
+
+    // What the stages hand each other. Not the releases bucket: the Test step writes here, and
+    // mustn't be able to write what the boxes run.
+    const handOver = new s3.Bucket(this, 'PipelineFiles', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      lifecycleRules: [{ expiration: cdk.Duration.days(60) }],
     });
-    // Fetch the repo (and watch it for pushes) through the GitHub connection.
-    (deployProject.node.defaultChild as codebuild.CfnProject).addPropertyOverride('Source.Auth', { Type: 'CODECONNECTIONS', Resource: props.githubConnectionArn });
+    const [owner, repo] = props.githubRepo.split('/');
+    const source = new codepipeline.Artifact('Source');
+    const tested = new codepipeline.Artifact('Release');
+    const fromGitHub = new actions.CodeStarConnectionsSourceAction({
+      actionName: 'GitHub',
+      variablesNamespace: 'Source',
+      connectionArn: props.githubConnectionArn,
+      owner,
+      repo,
+      branch: 'main',
+      triggerOnPush: true,
+      output: source,
+    });
+    const deployStep = (actionName: string, project: codebuild.IProject, runOrder?: number) =>
+      new actions.CodeBuildAction({
+        actionName,
+        runOrder,
+        project,
+        input: source,
+        extraInputs: [tested],
+        environmentVariables: { COMMIT: { value: fromGitHub.variables.commitId } },
+      });
+    const pipeline = new codepipeline.Pipeline(this, 'Pipeline', {
+      pipelineName: PIPELINE.name,
+      pipelineType: codepipeline.PipelineType.V2,
+      executionMode: codepipeline.ExecutionMode.SUPERSEDED,
+      artifactBucket: handOver,
+      crossAccountKeys: false,
+      usePipelineRoleForActions: true,
+      stages: [
+        { stageName: 'Source', actions: [fromGitHub] },
+        { stageName: 'Test', actions: [new actions.CodeBuildAction({ actionName: 'EveryTest', project: testProject, input: source, outputs: [tested] })] },
+        { stageName: 'Staging', actions: [deployStep('DeployToStaging', stagingProject)] },
+        {
+          // One stage, so nothing else can be going live between the approval and the deploy.
+          stageName: PIPELINE.production,
+          actions: [
+            new actions.ManualApprovalAction({
+              actionName: PIPELINE.approve,
+              runOrder: 1,
+              externalEntityLink: `https://staging.${props.domain}`,
+              additionalInformation: `Approve to put commit ${fromGitHub.variables.commitId} live: it's what is on staging. A newer push closes this and asks again.`,
+              timeout: cdk.Duration.days(30),
+            }),
+            deployStep('GoLive', goLiveProject, 2),
+          ],
+        },
+      ],
+    });
+    // As in github.ts, under both of the connection service's names (CDK grants only the older).
+    pipeline.addToRolePolicy(new iam.PolicyStatement({ actions: ['codeconnections:UseConnection'], resources: [props.githubConnectionArn] }));
+    // Staging sees what Production is doing, and closes the approval request of a release it
+    // replaces. (The ARN is spelled out: the pipeline itself depends on this role's policy.)
+    const pipelineArn = `arn:${this.partition}:codepipeline:${this.region}:${this.account}:${PIPELINE.name}`;
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['codepipeline:GetPipelineState'], resources: [pipelineArn] }));
+    deployRole.addToPrincipalPolicy(new iam.PolicyStatement({ actions: ['codepipeline:PutApprovalResult'], resources: [`${pipelineArn}/${PIPELINE.production}/${PIPELINE.approve}`] }));
     releases.grantPut(deployRole, 'releases/*');
     const ec2Arn = (what: string) => `arn:${this.partition}:ec2:${this.region}:${this.account}:${what}`;
     const ours = { StringEquals: { 'aws:ResourceTag/project': 'games-drawer' } };
@@ -326,7 +387,10 @@ export class GamesDrawerStack extends cdk.Stack {
     if (frontDoor) new cdk.CfnOutput(this, 'DistributionId', { value: frontDoor.distribution.distributionId });
     new cdk.CfnOutput(this, 'LaunchTemplateName', { value: LAUNCH_TEMPLATE_NAME });
     new cdk.CfnOutput(this, 'ReleaseBucket', { value: releases.bucketName });
-    new cdk.CfnOutput(this, 'DeployProject', { value: deployProject.projectName });
+    new cdk.CfnOutput(this, 'PipelinePage', {
+      value: `https://${this.region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${PIPELINE.name}/view?region=${this.region}`,
+      description: 'Where you approve a release to go live',
+    });
     new cdk.CfnOutput(this, 'SharedDiskId', { value: sharedDisk.fileSystemId });
   }
 }

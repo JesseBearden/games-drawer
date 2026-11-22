@@ -52,6 +52,25 @@ function fakeCloud(opts: { failOn?: RegExp; runFails?: (box: Box, command: strin
 const fleetOf = (f: ReturnType<typeof fakeCloud>, frontDoor: FrontDoor = 'cloudfront') => new Fleet(f.cloud, { domain: 'games.example', frontDoor });
 
 describe('the fleet tool', () => {
+  it('lets only what’s on staging go live', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f);
+    // Nothing is live: any release may bring the site up.
+    fleet.onStaging('aaaaaaa1');
+    await fleet.launch('aaaaaaa1');
+    await fleet.promote('aaaaaaa1');
+    expect(() => fleet.onStaging('aaaaaaa1')).toThrow('nothing new is on staging');
+
+    await fleet.launch('bbbbbbb2');
+    fleet.onStaging('bbbbbbb2');
+    // Approved, but staging moved on since.
+    await fleet.launch('ccccccc3');
+    expect(() => fleet.onStaging('bbbbbbb2')).toThrow('staging shows ccccccc');
+    fleet.onStaging('ccccccc3');
+    await fleet.rollback('ccccccc3');
+    expect(() => fleet.onStaging('ccccccc3')).toThrow('nothing new is on staging');
+  });
+
   it('first deploy: one box takes everything once promoted, and the front door points at it', async () => {
     const f = fakeCloud();
     const fleet = fleetOf(f);

@@ -8,7 +8,7 @@
  * Three stacks, all in the region from config.json. The first two each need you once, so they
  * come first, on their own: the domain's DNS zone (the registrar must point the domain at it
  * before the certificate can be issued) and the link to GitHub (approved on GitHub before the
- * deploy project can watch the repo). Then everything else. The account's organization keeps stacks to that region; the front door's
+ * pipeline can watch the repo). Then everything else. The account's organization keeps stacks to that region; the front door's
  * certificate, which CloudFront needs in us-east-1, is requested there from the main stack.
  * The domain comes from config.json; SITE_DOMAIN overrides it (e.g. for a test stack).
  */

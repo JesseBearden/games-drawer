@@ -52,13 +52,43 @@ start a deploy right away. Until the new box (set up for CloudFront) takes over,
 reaches a box still set up for direct traffic and the site doesn't load, so do it at a quiet
 time. It's a few minutes.
 
+## The pipeline
+
+Each push to main starts the `games-drawer` pipeline inside the AWS account (CodePipeline, built
+by [infra/lib/stack.ts](../infra/lib/stack.ts)); GitHub never signs in to AWS.
+
+| Stage | What happens |
+| --- | --- |
+| **Source** | Fetches the pushed commit. |
+| **Test** | Typecheck, unit tests, the release build, and every browser test on that build ([buildspec.yml](buildspec.yml)). A failure stops here: staging and the site don't change. |
+| **Staging** | The tested build goes on `staging.<domain>`, with smoke tests ([buildspec.staging.yml](buildspec.staging.yml)). |
+| **Production** | Waits up to 30 days for someone to approve. Then that same build goes live ([buildspec.go-live.yml](buildspec.go-live.yml)). |
+
+**To go live:** try it on staging, then open the pipeline (the AWS console, CodePipeline,
+`games-drawer`, in the site's region; the stack's `PipelinePage` output is the link). On
+**Approve** in Production, choose **Review**, then **Approve**. It shows the commit. It's live
+about 20 minutes later. To not ship it, choose **Reject**; it stays on staging until the next
+push, or until you take it down.
+
+- **Pushes while it's busy wait their turn.** If several do, only the newest goes on.
+- **The approval is always for what's on staging.** When a newer build is about to replace it,
+  the waiting request is closed (Production shows "Rejected", saying staging moved on) and the
+  newer build asks again once it's there ([pipeline.ts](pipeline.ts)). Going live refuses any
+  other commit. So an approval left for later goes away with the next good push.
+- **A push during a go-live** reaches staging after the go-live finishes.
+- **A push replaces the staging box**, ending any game being tried there.
+- **If going live fails**, the new box is removed, so staging is the live version again. The
+  approved build can't simply be retried: choose **Release change** in the pipeline to test
+  main's latest, put it on staging and ask again.
+- The tests run with a role that can't deploy. The approval is a guard against mistakes, though,
+  not a security boundary: whoever can push to main can change what the deploy steps do.
+- GitHub shows its own tests on each commit. How the pipeline went is in CodePipeline.
+
 ## How a deploy works
 
-Each push to main starts the `games-drawer-deploy` CodeBuild project inside the AWS account
-([buildspec.yml](buildspec.yml)); GitHub never signs in to AWS. It runs the typecheck and unit
-tests (GitHub Actions does too, side by side), builds the release bundle
-(`npm run release -- --tar`), uploads it to S3, then runs [deploy.sh](deploy.sh), which drives
-the fleet tool ([fleet.ts](fleet.ts)):
+[deploy.sh](deploy.sh) drives the fleet tool ([fleet.ts](fleet.ts)) for a release that's in S3.
+Staging is step 1 alone; going live first checks it's the release that staging shows, then does
+all of them:
 
 1. **launch**: a new box with the release, in a free slot. Its first boot installs the deploy
    command; the fleet tool then has it fetch the release, set itself up ([setup.sh](setup.sh)),
@@ -77,30 +107,36 @@ the fleet tool ([fleet.ts](fleet.ts)):
    it. (A table can hold a box for at most `DRAIN_MAX_MS`, 3 hours. Tables still there 10 minutes
    before then are told to start a new table, and at the cutoff they close with that reason,
    their puzzles saved.)
-5. If anything fails, or the deploy is stopped, **rollback** removes the new box and puts everything back on the current one.
+5. If any of those fails or is stopped, **rollback** removes the new box and puts everything back
+   on the current one. (A build AWS cuts off without warning can't clean up: check `fleet.ts status`.)
 
 The very first deploy (or one after every box is gone) has no current box: the new box takes
 the front door straight away.
 
-Pages loaded from one box ask for that release's build files, which may come back from
-another box. So a new box copies in the files of the release it replaces, and at the canary
-step the current box copies in the new release's.
+Pages loaded from one box ask for that release's files (build files, art, sounds, pictures),
+which may come back from another box. So a new box copies in the files it lacks from the release
+it replaces, and at the canary step the current box copies in the new release's.
 
 A box from an earlier deploy may still be finishing its games when the next deploy comes; it
 keeps its slot, and the new box takes a free one. If all four are taken, the oldest retiring
 box stops at once.
 
-## Trying a release on staging first
+## Staging
 
-`staging.<domain>` is the beta site (user, 2026-11-21). `STAGING_ONLY=1 bash deploy/deploy.sh
-<commit>` does step 1 only: a new box with that release, smoke tests against staging, and it
-stops there. Staging shows the new box; everyone on the site itself stays on the current box,
-and nobody is sent to the new one. Try it on staging from a phone and a computer, then either:
+`staging.<domain>` is the beta site (user, 2026-11-21). The pipeline puts each good push there.
+By hand, `bash deploy/deploy.sh <commit>` does the same: a new box with that release, smoke tests
+against staging, and it stops there. Staging shows the new box; everyone on the site itself
+stays on the current box, and nobody is sent to the new one. Try it on staging from a phone and a
+computer, then either:
 
-- **go live:** deploy the same commit again without `STAGING_ONLY` (its launch replaces the
-  staging box with a fresh one, then canary, checks and promote as usual), or
+- **go live:** approve it in the pipeline (or, for a release put there by hand,
+  `GO_LIVE=1 bash deploy/deploy.sh <commit>`: a fresh box replaces the staging box, then canary,
+  checks and promote as usual), or
 - **take it down:** `npx tsx deploy/fleet.ts rollback <commit>`; staging goes back to the
   current box.
+
+A hand staging deploy waits if the pipeline is going live, and closes a waiting approval, just as
+the pipeline does. Don't go live by hand while the pipeline is deploying.
 
 Any commit in the releases bucket can go to staging, pushed or not; only push and deploy pushed
 commits to the site itself, so GitHub matches what's live. While it's up, the staging box is a
@@ -112,12 +148,12 @@ AWS set-up as the site.
 ## The fleet tool by hand
 
 From the repo, with the `games-drawer` AWS profile (needs `AWS_REGION` and `LAUNCH_TEMPLATE`, as
-the deploy project sets them). The domain and the front door (`direct` while the site runs without
+the pipeline sets them). The domain and the front door (`direct` while the site runs without
 CloudFront) come from `infra/config.json`; `SITE_DOMAIN` and `FRONT_DOOR` may repeat them, and the
 tool refuses to run if they disagree. (A wrong front door would be bad: a promote would move only
 `origin.`, leaving the site on the old box, which then shuts itself down.)
-`bash deploy/deploy.sh <commit>` runs a whole
-deploy this way, for a release already in the bucket. On Windows (Git Bash), also set
+`bash deploy/deploy.sh <commit>` puts a
+release that's already in the bucket on staging, and with `GO_LIVE=1` runs the rest. On Windows (Git Bash), also set
 `MSYS_NO_PATHCONV=1` and `SKIP_BROWSER_INSTALL=1` (Playwright's `--with-deps` can't run there;
 the local browser works), and build the release from a clean copy of the commit
 (`git archive <commit>`, `origin/main` for the site itself) rather than the working folder:
@@ -237,6 +273,10 @@ fails. Three kinds of sender reach the relay, each with limits of its own:
 - **members**, who coturn gave a slot, so calls already up don't share a limit with anyone;
 - **players**, whose address has a real connection to this box's web server, in their own lane;
 - **everyone else**, in a smaller lane, only to ask for their address or a slot.
+
+Someone who gives a slot up stops being a member within seconds. Nothing bigger than one internet
+packet gets through either way, and nothing leaves in pieces (voice is never either, and the
+spending cap can only count whole packets).
 
 Out of the relay: only other relayed links' audio ports on this box, nothing to private addresses
 or over IPv6, and no new TCP connections. Three rules for changing it: limits stay on the way in

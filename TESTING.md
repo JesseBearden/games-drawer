@@ -117,6 +117,17 @@ Each has a unit test; none has been tried in a real browser or on a phone.
 - [ ] **Adding a photo for a puzzle** still works, one after another. (Limits are now counted
       the moment an upload starts, and a table can have two in the air at once.)
 
+## The pipeline (new; needs the AWS update and a push)
+
+- [ ] **A push goes to staging by itself:** in CodePipeline (`games-drawer`), Source, Test and
+      Staging go green, staging shows the push, and the site hasn't changed.
+- [ ] **Approve** is waiting in Production and names that commit. You can open and press it from
+      your phone.
+- [ ] **A second push before approving:** the first request closes ("staging is moving on"), and
+      once the new push is on staging a new request names it.
+- [ ] **Approve it:** about 20 minutes later the site runs that commit, and the old box shuts
+      itself down when its games are done.
+
 ## Pictures the browser keeps (new; needs a deploy)
 
 The felt, the cards and the puzzle pictures used to download again on every page load (about

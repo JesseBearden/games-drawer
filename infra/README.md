@@ -19,9 +19,10 @@ to that region):
     [deploy/README.md](../deploy/README.md#the-front-door-cloudfront-or-the-boxes-themselves-for-now).
   - **The game server boxes and what outlives them:** a launch template that deploys start
     boxes from, a shared disk for Jigsaw saves and logs (EFS), a bucket for release bundles.
-  - **The deploy project** (CodeBuild), which deploys each push to main from inside the
-    account. GitHub never signs in to AWS; the organization doesn't allow GitHub sign-in links
-    anyway. GitHub Actions still tests every push and pull request.
+  - **The pipeline** (CodePipeline, with three CodeBuild projects): each push to main gets every
+    test, goes to staging, and waits for approval to go live. It's all inside the account. GitHub
+    never signs in to AWS; the organization doesn't allow GitHub sign-in links anyway. GitHub
+    Actions still tests every push and pull request.
   - **The spending guardrails.**
 
 How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md).
@@ -36,7 +37,8 @@ How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md)
 | CloudFront | HTTPS, the front door that never changes | free up to 1 TB and 10 million requests a month |
 | A private bucket for release bundles | Deploys fetch releases from here | pennies |
 | Voice relayed through a box | | free for the first 100 GB a month, then $0.09/GB |
-| Deploys (CodeBuild) | Builds, tests and deploys each push to main | free for 100 minutes a month (a deploy takes about 15 to 20), then roughly a dime a deploy |
+| The pipeline (CodeBuild and CodePipeline) | Tests each push, deploys staging, then the site | free for 100 build minutes and 100 pipeline minutes a month, then about half a cent and a fifth of a cent a minute: roughly 25¢ a push that goes live |
+| A staging box | The release being tried, until it's live or taken down | about 1.4¢/hour |
 | Budgets, the kill switch, the GitHub connection | Guardrails and deploy access | free |
 
 No load balancer or NAT gateway: either one costs more than the server. Game traffic to players
@@ -65,9 +67,8 @@ The organization the account belongs to also has its own hard limit at $75; the 
 set lower so the boxes stop (and stop costing) before that locks the account.
 
 **If the kill switch fires:** the site goes down. Check the bill first. Then launch a fresh box,
-which takes the front door straight away (start the `games-drawer-deploy` project again in the
-CodeBuild console, or
-`npx tsx deploy/fleet.ts launch <commit>` then `promote <commit>`; see
+which takes the front door straight away
+(`npx tsx deploy/fleet.ts launch <commit>` then `promote <commit>`; see
 [deploy/README.md](../deploy/README.md#the-fleet-tool-by-hand)), and terminate the stopped ones
 in the EC2 console. Nothing is lost: saves and logs are on the shared disk.
 
@@ -133,16 +134,17 @@ Done once, from this computer, after the AWS account is ready.
    ```
 
    It takes 10 to 20 minutes (CloudFront and the certificate are the slow parts) and prints
-   `LaunchTemplateName`, `ReleaseBucket` and `DeployProject`. No box runs yet; the first deploy
+   `LaunchTemplateName`, `ReleaseBucket` and `PipelinePage`. No box runs yet; the first deploy
    starts one.
 
 7. Set the admin page's password hash ([deploy/README.md](../deploy/README.md#admin-page)).
 
-8. Push to `main` (or start the `games-drawer-deploy` project in the CodeBuild console). The
-   first deploy launches the first box, points the front door at it, and installs Node, Caddy
-   and coturn on it, which takes a few minutes. Each commit on GitHub shows the deploy's result
-   as a check; the full log is in the CodeBuild console. The canary's share and watch time are
-   `CANARY_PERCENT` and `CANARY_MINUTES` in the project (stack.ts).
+8. Push to `main` (or choose **Release change** in the pipeline, which also runs by itself when
+   it's created). The first deploy launches the first box and points the front door at it (with
+   no site yet, that's the Staging step), and installs Node, Caddy and coturn on it, which takes
+   a few minutes. Then approve it ([deploy/README.md](../deploy/README.md#the-pipeline)). Each
+   step's log is linked from the pipeline. The canary's share and watch time are
+   `CANARY_PERCENT` and `CANARY_MINUTES` on the go-live project (stack.ts).
 
 9. Optional: pin the machine image, so boxes keep the same Ubuntu image until you choose to
    move on. Put the launch template's image id into `config.json` as `"amiId"`, then deploy the

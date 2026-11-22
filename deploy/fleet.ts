@@ -1,6 +1,6 @@
 /**
- * The fleet tool: runs a deploy across game server boxes. deploy.sh runs it (in CodeBuild, with
- * the deploy project's role), and so can you, from the repo, with the games-drawer AWS profile:
+ * The fleet tool: runs a deploy across game server boxes. deploy.sh runs it (in the pipeline, with
+ * the deploy role), and so can you, from the repo, with the games-drawer AWS profile:
  *
  *   npx tsx deploy/fleet.ts launch <release>             a new box with this release (staging shows it)
  *   npx tsx deploy/fleet.ts canary <release> <percent>   send it that share of new tables
@@ -9,11 +9,12 @@
  *                                                        door; the old box finishes its games and
  *                                                        shuts down
  *   npx tsx deploy/fleet.ts rollback <release>           remove the new box; the current one keeps everything
+ *   npx tsx deploy/fleet.ts on-staging <release>         may it go live? (exit 1 unless it's what staging shows)
  *   npx tsx deploy/fleet.ts status                       the live boxes, and where the front door points
  *
  * Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (the stack's LaunchTemplateName output) in
- * the environment, and FRONT_DOOR (cloudfront, the default, or direct); the deploy project sets
- * them all. Needs the AWS CLI too. Boxes are EC2 instances tagged project=games-drawer; their
+ * the environment, and FRONT_DOOR (cloudfront, the default, or direct); the pipeline's projects
+ * set them all. Needs the AWS CLI too. Boxes are EC2 instances tagged project=games-drawer; their
  * gd:role tag says what each one is doing:
  *   candidate  the new release, on trial (staging, then maybe a canary share of new tables)
  *   current    takes new tables; the front door points at it: CloudFront's origin
@@ -192,6 +193,22 @@ export class Fleet {
     await this.cloud.waitForStaging(release);
     this.cloud.log(`CANARY_SLOT=${slot}`);
     return box;
+  }
+
+  /**
+   * Going live is only for what's on staging, so nobody approves one release and gets another.
+   * (With no box taking players the site is down, and any release may bring it back.)
+   */
+  onStaging(release: string) {
+    const boxes = this.cloud.boxes();
+    if (!currentBox(boxes)) return;
+    const shown = boxes.filter((b) => b.role === 'candidate').sort((a, b) => b.launchedAt.localeCompare(a.launchedAt))[0];
+    if (shown?.release === release) {
+      this.cloud.log(`${release.slice(0, 7)} is what's on staging.`);
+      return;
+    }
+    const now = shown ? `staging shows ${shown.release.slice(0, 7)}` : 'nothing new is on staging';
+    throw new Error(`Not going live with ${release.slice(0, 7)}: ${now}. The site is unchanged. ("Release change" in the pipeline puts main's latest on staging.)`);
   }
 
   async canary(release: string, percent: number) {
@@ -451,6 +468,8 @@ async function main() {
     case 'launch':
       await fleet.launch(needRelease());
       return;
+    case 'on-staging':
+      return fleet.onStaging(needRelease());
     case 'canary':
       return fleet.canary(needRelease(), Number(arg ?? 10));
     case 'check':
@@ -463,7 +482,7 @@ async function main() {
     case 'status':
       return fleet.status();
     default:
-      console.error('usage: fleet.ts launch|canary|check|promote|rollback <release> [percent] | status');
+      console.error('usage: fleet.ts launch|on-staging|canary|check|promote|rollback <release> [percent] | status');
       process.exitCode = 2;
   }
 }

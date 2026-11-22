@@ -3,6 +3,7 @@ import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
 import { GamesDrawerDnsStack } from '../lib/edge';
 import { GamesDrawerGitHubStack } from '../lib/github';
+import { PIPELINE } from '../../deploy/pipeline';
 import { bootScript, GamesDrawerStack, LAUNCH_TEMPLATE_NAME, type GamesDrawerProps } from '../lib/stack';
 
 function synth(over: Partial<GamesDrawerProps> = {}) {
@@ -113,23 +114,59 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     expect(policies).toMatch(/"ec2:StopInstances","Condition":\{"StringEquals":\{"aws:ResourceTag\/project":"games-drawer"\}\}/);
   });
 
-  it('deploys from inside the account: CodeBuild, on each push to main, reading the repo through the GitHub connection', () => {
-    t.hasResourceProperties('AWS::CodeBuild::Project', {
-      Name: 'games-drawer-deploy',
-      Source: Match.objectLike({
-        Type: 'GITHUB',
-        Location: 'https://github.com/owner/games-drawer.git',
-        BuildSpec: 'deploy/buildspec.yml',
-        Auth: { Type: 'CODECONNECTIONS', Resource: 'arn:aws:codeconnections:us-east-2:123456789012:connection/abc' },
-      }),
-      Triggers: { Webhook: true, FilterGroups: [[{ Type: 'EVENT', Pattern: 'PUSH' }, { Type: 'HEAD_REF', Pattern: 'refs/heads/main' }]] },
-      ConcurrentBuildLimit: 1,
-      Environment: Match.objectLike({ ComputeType: 'BUILD_GENERAL1_SMALL' }),
+  it('deploys from inside the account: a push gets every test, then staging; going live waits for approval', () => {
+    const pipelines = Object.values(t.findResources('AWS::CodePipeline::Pipeline')) as { Properties: any }[];
+    expect(pipelines).toHaveLength(1);
+    const p = pipelines[0].Properties;
+    expect(p).toMatchObject({ Name: PIPELINE.name, PipelineType: 'V2', ExecutionMode: 'SUPERSEDED' });
+    expect(p.Stages.map((s: any) => s.Name)).toEqual(['Source', 'Test', 'Staging', PIPELINE.production]);
+    const [from, test, staging, production] = p.Stages.map((s: any) => s.Actions);
+    expect(from[0].Configuration).toMatchObject({
+      ConnectionArn: 'arn:aws:codeconnections:us-east-2:123456789012:connection/abc',
+      FullRepositoryId: 'owner/games-drawer',
+      BranchName: 'main',
     });
+    expect(from[0].Configuration.DetectChanges ?? true).toBe(true);
+    expect(test[0].OutputArtifacts).toEqual([{ Name: 'Release' }]);
+    expect(staging).toHaveLength(1);
+    const [approve, goLive] = [...production].sort((a: any, b: any) => a.RunOrder - b.RunOrder);
+    expect(approve).toMatchObject({ Name: PIPELINE.approve, RunOrder: 1, ActionTypeId: { Category: 'Approval', Provider: 'Manual' }, TimeoutInMinutes: 30 * 24 * 60 });
+    expect(approve.Configuration.ExternalEntityLink).toBe('https://staging.games.example.com');
+    expect(approve.Configuration.CustomData).toContain('#{Source.CommitId}');
+    expect(approve.Configuration.CustomData.length).toBeLessThan(900);
+    expect(goLive).toMatchObject({ Name: 'GoLive', RunOrder: 2 });
+    for (const deploy of [staging[0], goLive]) {
+      expect(deploy.InputArtifacts).toEqual([{ Name: 'Source' }, { Name: 'Release' }]);
+      expect(deploy.Configuration.EnvironmentVariables).toContain('#{Source.CommitId}');
+    }
+
+    // A project for each step. None builds on a push by itself, and none has a limit on builds at
+    // once (CodeBuild refuses those over it, so a push would be lost).
+    const projects = Object.values(t.findResources('AWS::CodeBuild::Project')).map((r: any) => r.Properties);
+    expect(Object.fromEntries(projects.map((x) => [x.Name, x.Source.BuildSpec]))).toEqual({
+      'games-drawer-test': 'deploy/buildspec.yml',
+      'games-drawer-staging': 'deploy/buildspec.staging.yml',
+      'games-drawer-go-live': 'deploy/buildspec.go-live.yml',
+    });
+    for (const x of projects) {
+      expect(x.Source.Type).toBe('CODEPIPELINE');
+      expect(x.Triggers?.Webhook).toBeFalsy();
+      expect(x.ConcurrentBuildLimit).toBeUndefined();
+      expect(x.Environment.ComputeType).toBe('BUILD_GENERAL1_SMALL');
+    }
     // No GitHub sign-in link (the organization doesn't allow one); the project runs as the role
     // from the GitHub stack, which this stack gives the deploy permissions.
     t.resourceCountIs('AWS::IAM::OIDCProvider', 0);
-    t.hasResourceProperties('AWS::CodeBuild::Project', { ServiceRole: 'arn:aws:iam::123456789012:role/games-drawer-deploy' });
+    for (const name of ['games-drawer-staging', 'games-drawer-go-live']) {
+      t.hasResourceProperties('AWS::CodeBuild::Project', { Name: name, ServiceRole: 'arn:aws:iam::123456789012:role/games-drawer-deploy' });
+    }
+    // The step that runs the repo's tests can't deploy, approve, or write what the boxes run.
+    const byRole = (id: RegExp) => JSON.stringify(Object.entries(t.findResources('AWS::IAM::Policy')).filter(([key]) => id.test(key)));
+    const testing = byRole(/^TestProjectRole/);
+    expect(testing).toContain('PipelineFiles');
+    expect(testing).not.toMatch(/Releases|ec2:|ssm:|route53:|codepipeline:|iam:PassRole/);
+    const roles = JSON.stringify(Object.entries(t.findResources('AWS::IAM::Role')).filter(([key]) => /^TestProjectRole/.test(key)));
+    expect(roles).not.toContain('ManagedPolicyArns');
     t.hasResourceProperties('AWS::IAM::Policy', { Roles: ['games-drawer-deploy'], PolicyDocument: { Statement: Match.arrayWith([Match.objectLike({ Action: 'ec2:RunInstances' })]) } });
     const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
     // The boxes may read the admin password hash and their shared secrets, and no other parameter.
@@ -138,6 +175,9 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     // Deploys may only move the front door's origin record, and only end our own boxes.
     expect(policies).toContain('"route53:ChangeResourceRecordSetsNormalizedRecordNames":["origin.games.example.com"]');
     expect(policies).toMatch(/"ec2:TerminateInstances"\],"Condition":\{"StringEquals":\{"aws:ResourceTag\/project":"games-drawer"\}\}/);
+    // It may answer that one approval and no other.
+    expect(policies).toContain(':games-drawer/Production/Approve');
+    expect(byRole(/^PipelineRole/)).toContain('"codeconnections:UseConnection"');
     // Nothing broad: no wildcard actions anywhere.
     expect(policies).not.toMatch(/"Action":"\*"|"[a-z0-9-]+:\*"/);
   });

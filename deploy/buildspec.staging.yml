@@ -1,0 +1,23 @@
+# The pipeline's Staging step, for a build that passed every test: a new box shows it on
+# staging.<domain>, and the smoke tests run against it. The site itself doesn't change.
+#
+# The project sets SITE_DOMAIN, FRONT_DOOR, LAUNCH_TEMPLATE and RELEASE_BUCKET; the pipeline sets
+# COMMIT and hands over the tested build.
+version: 0.2
+
+env:
+  variables:
+    CI: 'true'
+  shell: bash
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 24
+    commands:
+      # This step may deploy, so packages' install scripts don't run in it.
+      - npm ci --ignore-scripts
+  pre_build:
+    commands:
+      - aws s3 cp "$CODEBUILD_SRC_DIR_Release/release.tar.gz" "s3://$RELEASE_BUCKET/releases/$COMMIT.tar.gz" --only-show-errors
+      - bash deploy/deploy.sh "$COMMIT"
