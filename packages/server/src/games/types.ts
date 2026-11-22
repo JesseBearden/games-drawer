@@ -3,6 +3,8 @@ import type { Device, GameId, GameInput, GameServerMessage, RoomKind, TablePhoto
 /** A client connection. `send` takes pre-serialised JSON so broadcasts serialise once. */
 export interface Conn {
   send(data: string): void;
+  /** The page asked for batches (see `hello`). */
+  batches?: boolean;
   close(code?: number, reason?: string): void;
 }
 
@@ -29,11 +31,26 @@ export interface Member {
  */
 export const BOT_TAKEOVER_MS = 20_000;
 
+/**
+ * Games that only watch timers (computer turns, pauses between tricks) look 10 times a second:
+ * their waits are 0.7 s and up.
+ */
+export const TIMER_GAME_TICKS = 6;
+
 /** Does a computer play this seat now: nobody's there, or they've been gone BOT_TAKEOVER_MS. */
 export function botPlays(m: Member | undefined, now: number): boolean {
   if (!m) return true;
   if (m.conn) return false;
   return m.awaySince == null || now - m.awaySince >= BOT_TAKEOVER_MS;
+}
+
+/** One of several messages going out together (GameHost.broadcastTogether). */
+export interface Outgoing {
+  msg: GameServerMessage;
+  /** Not for this session (it's their own move). */
+  except?: string;
+  /** Nothing new since the last one: pages that take batches can do without it. */
+  repeat?: boolean;
 }
 
 /** Services the room gives the game it's running. */
@@ -45,6 +62,8 @@ export interface GameHost {
   member(session: string): Member | undefined;
   send(to: Member, msg: GameServerMessage): void;
   broadcast(msg: GameServerMessage): void;
+  /** Send these in one frame to pages that take batches, one by one to the others. */
+  broadcastTogether(out: readonly Outgoing[]): void;
   /** A line in room chat (and its history). */
   systemChat(text: string): void;
   log(type: string, fields: Record<string, unknown>): void;
@@ -78,8 +97,10 @@ export interface ServerGame {
   /** Send everything this member needs to draw the game (after welcome, start, or resync). */
   sendInit(m: Member, reclaimed: boolean): void;
   handle(m: Member, input: GameInput): void;
-  /** Advance one tick (60 per second). */
+  /** Called every `tickEvery` ticks (there are 60 a second). */
   step(): void;
+  /** How often step needs calling, in ticks. Real-time games: every tick (the default). */
+  readonly tickEvery?: number;
   dispose(): void;
   stats(): Record<string, unknown>;
   /** The table's photos changed (someone added one). */

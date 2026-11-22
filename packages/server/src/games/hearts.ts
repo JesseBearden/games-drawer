@@ -11,7 +11,7 @@ import {
   type HandResult,
   type HeartsView,
 } from '@tank/shared';
-import { botPlays, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
 
 /** A finished trick stays on the table this long so everyone sees who took it. */
 export const TRICK_PAUSE_MS = 1400;
@@ -35,6 +35,7 @@ interface Seat {
  */
 export class HeartsGame implements ServerGame {
   readonly id = 'hearts' as const;
+  readonly tickEvery = TIMER_GAME_TICKS;
   readonly capacity = 4;
   seats: Seat[];
   round!: HeartsRound;

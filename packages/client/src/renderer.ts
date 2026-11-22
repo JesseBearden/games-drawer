@@ -1,7 +1,8 @@
 import { barrelTip, HELI_TANK_OFFSET, levelsForKill, spreadReady, spreadSize, TANK_COLORS, type GameConfig } from '@tank/shared';
 import type { Camera } from './camera';
 import type { Sprites } from './sprites';
-import { colorCss, type ClientTank, type Effect, type GameState } from './state';
+import { colorCss } from './html';
+import type { ClientTank, Effect, GameState } from './state';
 
 const DEG = Math.PI / 180;
 

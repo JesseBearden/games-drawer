@@ -3,6 +3,8 @@ import {
   heliDyns,
   Rng,
   randomSeed,
+  sameDyn,
+  STILL_STATE_TICKS,
   tankDyn,
   tankInfo,
   uniqueName,
@@ -11,10 +13,11 @@ import {
   type GameEvent,
   type Snapshot,
   type Tank,
+  type TankDyn,
   type TankInfo,
   type GameInput,
 } from '@tank/shared';
-import type { GameHost, Member, ServerGame } from './types';
+import type { GameHost, Member, Outgoing, ServerGame } from './types';
 
 /** A player may ask for a fresh snapshot at most this often. */
 const RESYNC_COOLDOWN_MS = 2000;
@@ -32,6 +35,11 @@ export class TanksGame implements ServerGame {
   private removed: number[] = [];
   private rng: Rng;
   private lastResync = new Map<string, number>();
+  /** The last state that went to everyone (skipped repeats don't count). */
+  private lastDyn: TankDyn[] = [];
+  private lastStateTick = 0;
+  /** How many states in a row have shown nothing moving. */
+  private stillStates = 0;
 
   constructor(
     private host: GameHost,
@@ -276,8 +284,9 @@ export class TanksGame implements ServerGame {
 
   private flush() {
     const w = this.world;
+    const out: Outgoing[] = [];
     if (this.removed.length) {
-      this.host.broadcast({ t: 'removed', tanks: this.removed });
+      out.push({ msg: { t: 'removed', tanks: this.removed } });
       this.removed = [];
     }
     const dirty: TankInfo[] = [];
@@ -287,12 +296,24 @@ export class TanksGame implements ServerGame {
         dirty.push(this.info(t));
       }
     }
-    if (dirty.length) this.host.broadcast({ t: 'info', tanks: dirty });
+    if (dirty.length) out.push({ msg: { t: 'info', tanks: dirty } });
     if (this.pending.length) {
-      this.host.broadcast({ t: 'events', tick: w.tick, events: this.pending });
+      out.push({ msg: { t: 'events', tick: w.tick, events: this.pending } });
       this.pending = [];
     }
-    this.host.broadcast({ t: 'state', tick: w.tick, dyn: [...w.tanks.values()].map(tankDyn), helis: heliDyns(w) });
+    const dyn = [...w.tanks.values()].map(tankDyn);
+    const helis = heliDyns(w);
+    // A still battlefield: nothing said, nothing in the air, nobody moving. Its first repeat goes
+    // out (that's how a page knows it's still), then one each STILL_STATE_TICKS.
+    const still = !out.length && !helis.length && !w.shells.length && w.match.state !== 'won' && sameDyn(dyn, this.lastDyn);
+    this.stillStates = still ? this.stillStates + 1 : 0;
+    const repeat = this.stillStates > 1 && w.tick - this.lastStateTick < STILL_STATE_TICKS;
+    if (!repeat) {
+      this.lastDyn = dyn;
+      this.lastStateTick = w.tick;
+    }
+    out.push({ msg: { t: 'state', tick: w.tick, dyn, helis }, repeat });
+    this.host.broadcastTogether(out);
   }
 
   dispose() {

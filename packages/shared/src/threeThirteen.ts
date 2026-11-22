@@ -238,6 +238,9 @@ export interface TTSeatResult {
   out: boolean;
 }
 
+/** Solved hands one round remembers (a computer's turn asks about 30 or so). */
+const SOLVED_HANDS_KEPT = 300;
+
 /** One round of Three Thirteen, from the deal to everyone's last turn. */
 export class ThreeThirteenRound {
   hands: TTCard[][];
@@ -286,6 +289,25 @@ export class ThreeThirteenRound {
     return seat;
   }
 
+  /** Solved hands this round, by their cards in any order. */
+  private solved = new Map<string, MeldPlan>();
+
+  /**
+   * bestMelds, remembered for the round. A computer's turn asks about the same hands again and
+   * again (take the discard? go out? what to throw?), as does everyone's view when someone only
+   * rearranges. Don't change what it returns: it's shared.
+   */
+  plan(cards: readonly TTCard[]): MeldPlan {
+    const key = [...cards].sort().join();
+    let plan = this.solved.get(key);
+    if (!plan) {
+      if (this.solved.size >= SOLVED_HANDS_KEPT) this.solved.clear();
+      plan = bestMelds([...cards], this.round);
+      this.solved.set(key, plan);
+    }
+    return plan;
+  }
+
   get discardTop(): TTCard | null {
     return this.discard.length ? this.discard[this.discard.length - 1] : null;
   }
@@ -322,7 +344,7 @@ export class ThreeThirteenRound {
     if (!hand.includes(card)) return false;
     const rest = [...hand];
     rest.splice(rest.indexOf(card), 1);
-    return bestMelds(rest, this.round).points === 0;
+    return this.plan(rest).points === 0;
   }
 
   /** A card this seat could throw away to go out right now, or null. */
@@ -376,7 +398,7 @@ export class ThreeThirteenRound {
     this.phase = 'done';
     this.turn = -1;
     this.result = this.hands.map((hand, s) => {
-      const plan = bestMelds(hand, this.round);
+      const plan = this.plan(hand);
       return { ...plan, out: s === this.outSeat };
     });
   }
@@ -413,7 +435,7 @@ export function ttBotDiscard(round: ThreeThirteenRound, seat: number): TTCard {
     if (c === round.tookFromDiscard) continue;
     const rest = [...hand];
     rest.splice(rest.indexOf(c), 1);
-    const plan = bestMelds(rest, round.round);
+    const plan = round.plan(rest);
     // Fewest loose points first; then keep promising cards; never throw a wild if avoidable.
     const score = plan.points * 10 + looseness(plan, round.round) + (isWild(c, round.round) ? 1000 : 0) - ttPoints(c) * 0.1;
     if (score < bestScore) {
@@ -430,7 +452,7 @@ export function ttBotTakesDiscard(round: ThreeThirteenRound, seat: number): bool
   if (!top) return false;
   if (isWild(top, round.round)) return true;
   const hand = round.hands[seat];
-  const now = bestMelds(hand, round.round);
+  const now = round.plan(hand);
   // With the discard: the best hand after throwing something else away. Worth it if the card
   // goes into a meld, or saves real points; swapping a King for a 9 isn't worth giving up a
   // blind draw that might make a meld.
@@ -438,7 +460,7 @@ export function ttBotTakesDiscard(round: ThreeThirteenRound, seat: number): bool
   for (const c of new Set(hand)) {
     const rest = [...withTop];
     rest.splice(rest.indexOf(c), 1);
-    const plan = bestMelds(rest, round.round);
+    const plan = round.plan(rest);
     if (plan.points < now.points && plan.melds.some((m) => m.includes(top))) return true;
     if (plan.points <= now.points - 6) return true;
   }

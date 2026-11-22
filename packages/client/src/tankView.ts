@@ -4,7 +4,9 @@ import { Camera } from './camera';
 import { Input } from './input';
 import { Renderer } from './renderer';
 import { tankSprites, tankSpritesNow, type Sprites } from './sprites';
-import { colorCss, escapeHtml, GameState, type TankInit } from './state';
+import { TANK_SOUNDS } from './audio';
+import { colorCss, escapeHtml } from './html';
+import { GameState, type TankInit } from './state';
 import type { ShellApi, View } from './views';
 import type { PadButton, PadPress } from './gamepad';
 import type { Action } from './input';
@@ -48,6 +50,7 @@ export class TankView implements View {
   private cleanups: (() => void)[] = [];
 
   constructor(private shell: ShellApi) {
+    shell.sfx.preloadSounds(TANK_SOUNDS);
     $('tank-view').hidden = false;
     // The control strip shows on every device (a computer can use it with the mouse, or the keys).
     $('touch').hidden = false;
@@ -443,7 +446,7 @@ export class TankView implements View {
     this.input.dispose();
     for (const c of this.cleanups) c();
     this.cleanups = [];
-    this.shell.sfx.setAmbience(0, 0);
+    this.shell.sfx.stopAmbience();
     clearTimeout(this.bannerTimer);
     $('scores').hidden = true;
     $('banner').hidden = true;

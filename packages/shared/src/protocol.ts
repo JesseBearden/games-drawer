@@ -121,7 +121,11 @@ export type GameInput = TankInput | HeartsInput | SpadesInput | DominoesInput | 
 
 export type ClientMessage =
   /** `deviceId`: a random number this browser keeps (localStorage), so the admin page counts devices, not tabs. */
-  | { t: 'hello'; v: number; session: string | null; name: string; room: RoomRequest; device: Device; deviceId?: string }
+  /**
+   * `batch`: this page takes several messages as one (`{t:'batch'}`), and doesn't mind Tanks
+   * leaving out repeats of a still battlefield. Pages from before it just don't ask.
+   */
+  | { t: 'hello'; v: number; session: string | null; name: string; room: RoomRequest; device: Device; deviceId?: string; batch?: boolean }
   | { t: 'chat'; text: string }
   | { t: 'name'; name: string }
   | { t: 'ping'; at: number }
@@ -358,6 +362,8 @@ export type ServerMessage =
   | { t: 'chat'; msg: ChatMessage }
   | { t: 'name'; name: string }
   | { t: 'pong'; at: number }
+  /** Several messages as one frame (fewer frames is most of the server's cost), in order. Only for pages that asked. */
+  | { t: 'batch'; msgs: ServerMessage[] }
   /** The room's chat filter changed. */
   | { t: 'filter'; mode: ChatFilterMode }
   /** Too many caught messages: your chat is paused this long. */
@@ -383,7 +389,18 @@ export type ErrorCode =
 
 // ------------------------------------------------------------------ encoders
 
-const r1 = (v: number) => Math.round(v * 10) / 10;
+/** A position to a tenth of a unit: as close as anyone can see, in far fewer bytes. */
+export const r1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * While nothing in a Tanks battle moves, pages that ask for batches get its state only this often
+ * (in ticks): the first repeat, then one each half second to keep their clocks right.
+ */
+export const STILL_STATE_TICKS = 30;
+
+export function sameDyn(a: readonly TankDyn[], b: readonly TankDyn[]): boolean {
+  return a.length === b.length && a.every((t, i) => t.every((v, k) => v === b[i][k]));
+}
 
 export function tankDyn(t: Tank): TankDyn {
   return [t.id, r1(t.x), r1(t.y), r1(t.angle), PHASES.indexOf(t.phase), Math.round(t.tilt * 100) / 100];
@@ -449,7 +466,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       else return null;
       // A device number that isn't one of ours is just left off (it only feeds the admin counts).
       const deviceId = typeof o.deviceId === 'string' && /^[0-9a-f]{32}$/.test(o.deviceId) ? o.deviceId : undefined;
-      return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device, ...(deviceId && { deviceId }) };
+      return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device, ...(deviceId && { deviceId }), ...(o.batch === true && { batch: true }) };
     }
     case 'leave':
       return { t: 'leave' };

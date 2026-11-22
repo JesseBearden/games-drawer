@@ -13,6 +13,30 @@ _Last updated: 2026-11-21_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## Speed-ups (new)
+
+Nothing should look or feel different, except quicker and easier on a phone's battery. These are
+the spots most likely to show it if something's off (an iPhone matters most: only Chrome has
+been tested).
+
+- [ ] **Jigsaw with someone else**: their pointer and the pieces they drag move as smoothly as
+      before, the pointer ends exactly where theirs stopped, and it still pulses when they talk.
+- [ ] **Jigsaw zoom and pan**: the felt table still zooms and slides with the puzzle.
+- [ ] **A piece in your hand**: on an iPhone or iPad, it still casts its soft picked-up shadow,
+      also in the magnifier, for a single piece and for a joined group (it's blurred once at
+      pickup now, not every frame).
+- [ ] **Tanks with 4 people, nobody touching anything** for 10 seconds, then someone drives or
+      fires: it starts at once, with no slide, jump or freeze. The wind and helicopter sounds
+      work, and are silent back at a card table.
+- [ ] **Card and domino hands**: play a card from the middle (the rest glide together). In Three
+      Thirteen, drag cards around: they stay where you dropped them, and wilds wear their star in
+      each new round.
+- [ ] **Talking bars** still bounce beside whoever's talking, on iPhone too.
+- [ ] **Switching games**: each game appears promptly the first time it's picked, also on
+      cellular.
+- [ ] **A controller** (if you have one handy): it wakes up on the first button press or the
+      second, including after being unplugged and plugged back in.
+
 ## Fixes from the code review (new)
 
 - [ ] **A locked phone keeps its turn**: at a Hearts, Spades, Dominoes or Three Thirteen table,

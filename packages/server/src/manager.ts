@@ -114,12 +114,32 @@ export class RoomManager {
     }
   }
 
-  /** Step every room. A room that throws is closed so it cannot take the others down. */
-  stepAll(): { maxMs: number; totalMs: number } {
+  /** The first tick after `tick` that a running game needs, or null if none is running. */
+  nextTick(tick: number): number | null {
+    let next: number | null = null;
+    for (const room of this.rooms.values()) {
+      const every = room.tickEvery;
+      if (every === null) continue;
+      const due = tick - (tick % every) + every;
+      if (next === null || due < next) next = due;
+      if (next === tick + 1) break;
+    }
+    return next;
+  }
+
+  /**
+   * Step the rooms: those whose game is due on this `tick`, or (no tick given) every one. A room
+   * that throws is closed so it cannot take the others down.
+   */
+  stepAll(tick?: number): { maxMs: number; totalMs: number } {
     let maxMs = 0;
     let totalMs = 0;
     for (const [code, room] of this.rooms) {
       try {
+        if (tick !== undefined) {
+          const every = room.tickEvery;
+          if (every === null || tick % every !== 0) continue;
+        }
         const ms = room.step();
         totalMs += ms;
         if (ms > maxMs) maxMs = ms;

@@ -254,24 +254,23 @@ export class Terrain {
   /** Marks spans not connected to bedrock. Returns null when nothing floats. */
   private findFloating(): (Uint8Array | null)[] | null {
     const W = this.width;
-    // Fast path: no column has more than one span, so nothing can float.
-    let anyMulti = false;
-    for (let x = 0; x < W; x++) {
-      if (this.cols[x].length > 2) {
-        anyMulti = true;
-        break;
-      }
-    }
-    if (!anyMulti) return null;
+    // Only columns with more than one span have anything that could float. Every other column is
+    // one span down to bedrock, so there's nothing to work out (or allocate) for it.
+    const split: number[] = [];
+    for (let x = 0; x < W; x++) if (this.cols[x].length > 2) split.push(x);
+    if (!split.length) return null;
 
-    // grounded[x][k] = 1 if span k of column x is connected to bedrock.
-    const grounded: Uint8Array[] = new Array(W);
-    for (let x = 0; x < W; x++) grounded[x] = new Uint8Array(this.cols[x].length >> 1);
+    // grounded[x][k] = 1 if span k of column x is connected to bedrock. (Split columns only.)
+    const grounded: (Uint8Array | undefined)[] = new Array(W);
+    for (const x of split) grounded[x] = new Uint8Array(this.cols[x].length >> 1);
+    // Where the search starts: each split column's own bottom span, and that of the solid column
+    // on either side of it.
     const stack: number[] = [];
-    for (let x = 0; x < W; x++) {
+    for (const x of split) {
       const k = (this.cols[x].length >> 1) - 1;
-      grounded[x][k] = 1;
+      grounded[x]![k] = 1;
       stack.push(x, k);
+      for (const nx of [x - 1, x + 1]) if (nx >= 0 && nx < W && !grounded[nx]) stack.push(nx, 0);
     }
     while (stack.length) {
       const k = stack.pop()!;
@@ -281,8 +280,9 @@ export class Terrain {
       const bottom = c[k * 2 + 1];
       for (const nx of [x - 1, x + 1]) {
         if (nx < 0 || nx >= W) continue;
-        const nc = this.cols[nx];
         const g = grounded[nx];
+        if (!g) continue; // solid to bedrock already
+        const nc = this.cols[nx];
         for (let j = 0; j < nc.length; j += 2) {
           if (nc[j] >= bottom) break;
           if (nc[j + 1] > top && !g[j >> 1]) {
@@ -294,8 +294,8 @@ export class Terrain {
     }
     let any = false;
     const result: (Uint8Array | null)[] = new Array(W).fill(null);
-    for (let x = 0; x < W; x++) {
-      const g = grounded[x];
+    for (const x of split) {
+      const g = grounded[x]!;
       let floatFlags: Uint8Array | null = null;
       for (let k = 0; k < g.length; k++) {
         if (!g[k]) {

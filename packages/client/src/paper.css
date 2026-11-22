@@ -493,7 +493,10 @@ body.pad-mode .pc-choice:has(input:focus) {
 }
 .pc-talk i {
   width: 3px;
-  height: 6px;
+  /* Full height, squashed to 6px: only the squash animates, so someone talking for hours never
+     makes the page lay itself out again (animating height did, every frame). */
+  height: 16px;
+  transform: scaleY(0.375);
   border-radius: 2px;
   background: var(--cobalt);
 }
@@ -515,7 +518,7 @@ body.pad-mode .pc-choice:has(input:focus) {
 }
 @keyframes pc-talk {
   to {
-    height: 16px;
+    transform: scaleY(1);
   }
 }
 

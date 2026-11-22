@@ -123,17 +123,17 @@ describe('the admin numbers', () => {
         fs.writeFileSync(path.join(root, box, 'events-2026-11-17.jsonl'), line(pid));
       }
       fs.writeFileSync(path.join(root, 'events-2026-11-17.jsonl'), line('p3'));
-      expect(logFolders([root]).sort()).toEqual([root, path.join(root, 'i-new'), path.join(root, 'i-old')].sort());
+      expect((await logFolders([root])).sort()).toEqual([root, path.join(root, 'i-new'), path.join(root, 'i-old')].sort());
       const { events } = await readLogs([root], ['2026-11-17']);
       expect(events.map((e) => e.pid).sort()).toEqual(['p1', 'p2', 'p3']);
       // A folder that isn't there yet is fine.
-      expect(logFolders([path.join(root, 'nope')])).toEqual([path.join(root, 'nope')]);
+      expect(await logFolders([path.join(root, 'nope')])).toEqual([path.join(root, 'nope')]);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
 
-  it('deletes logs more than 30 days old, from every box, and a shut-down box’s empty folder', () => {
+  it('deletes logs more than 30 days old, from every box, and a shut-down box’s empty folder', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-logs-'));
     try {
       const now = Date.parse('2026-12-31T12:00:00Z');
@@ -149,13 +149,13 @@ describe('the admin numbers', () => {
         'notes.txt': true,
       };
       for (const f of Object.keys(files)) fs.writeFileSync(path.join(root, f), '{}\n');
-      expect(pruneLogs([path.join(root, 'i-new'), root], { now, keepDir: path.join(root, 'i-new') })).toBe(4);
+      expect(await pruneLogs([path.join(root, 'i-new'), root], { now, keepDir: path.join(root, 'i-new') })).toBe(4);
       for (const [f, kept] of Object.entries(files)) expect(fs.existsSync(path.join(root, f)), f).toBe(kept);
       // The old box's folder is empty now and goes; this box's own folder stays even if empty.
       expect(fs.existsSync(path.join(root, 'i-old'))).toBe(false);
       expect(fs.existsSync(path.join(root, 'i-new'))).toBe(true);
       // Nothing there, or a folder that isn't there, is fine.
-      expect(pruneLogs([path.join(root, 'nope')], { now })).toBe(0);
+      expect(await pruneLogs([path.join(root, 'nope')], { now })).toBe(0);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

@@ -46,10 +46,12 @@ function watchPuzzle(page: Page): Seen {
   page.on('websocket', (ws) =>
     ws.on('framereceived', (f) => {
       if (typeof f.payload !== 'string' || !f.payload.includes('"pz-')) return;
-      const msg = JSON.parse(f.payload);
-      if (msg.t !== 'g') return;
-      if (msg.m.t === 'pz-state') seen.state = msg.m.state;
-      if (msg.m.t === 'pz-moved' && seen.state) for (const [i, x, y, g] of msg.m.pieces) Object.assign(seen.state.pieces[i], { x, y, g });
+      const frame = JSON.parse(f.payload);
+      for (const msg of frame.t === 'batch' ? frame.msgs : [frame]) {
+        if (msg.t !== 'g') continue;
+        if (msg.m.t === 'pz-state') seen.state = msg.m.state;
+        if (msg.m.t === 'pz-moved' && seen.state) for (const [i, x, y, g] of msg.m.pieces) Object.assign(seen.state.pieces[i], { x, y, g });
+      }
     }),
   );
   return seen;
@@ -137,6 +139,8 @@ test('Jigsaw in a private room: build it together, put it away and pick it up ag
   await expect(view.locator('.pz-saves')).toContainText('54 pieces · 4% done');
   await page.screenshot({ path: info.outputPath('continue.png') });
   await view.locator('[data-resume]').click();
+  // (The server reads the save first: until it answers, the canvas has no size to look at.)
+  await expect(view.locator('.pz-canvas')).toBeVisible();
   await expect(view.locator('.pz-loading')).toBeHidden();
   await expect.poll(() => opaqueAt(page, to.x, to.y)).toBe(true);
   await expect(view.locator('.pz-pct')).toHaveText('4%');

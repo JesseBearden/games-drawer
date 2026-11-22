@@ -1,5 +1,6 @@
 import { canPlayPrivately, choosesPlayers, GAMES, SEAT_FILL_ORDER, gameInfo, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
-import { escapeHtml } from './state';
+import { patchHtml } from './dom';
+import { escapeHtml } from './html';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -56,6 +57,10 @@ export class LobbyView implements View {
 
   onMembers(members: MemberInfo[]) {
     this.members = members;
+    this.render();
+  }
+
+  onVoiceChanged() {
     this.render();
   }
 
@@ -119,8 +124,8 @@ export class LobbyView implements View {
     // Redrawn whenever anyone moves: keep the keyboard or controller on the same button.
     const focused = document.activeElement as HTMLElement | null;
     const key = focused && this.el.contains(focused) ? focusKey(focused) : null;
-    this.el.innerHTML = html;
-    if (key) this.el.querySelector<HTMLElement>(key)?.focus({ preventScroll: true });
+    patchHtml(this.el, html);
+    if (key && !this.el.contains(document.activeElement)) this.el.querySelector<HTMLElement>(key)?.focus({ preventScroll: true });
   }
 
   /** The seats around a little table: tap one to sit there. */

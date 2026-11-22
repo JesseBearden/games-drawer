@@ -34,8 +34,9 @@ import { RoomApp, type EntryChoice } from './shell';
 import type { Device } from './views';
 import { Sfx } from './audio';
 import { Gamepads, moveFocus, watchPadMode } from './gamepad';
+import { reloadForUpdate } from './reload';
 import { Net } from './net';
-import { escapeHtml } from './state';
+import { escapeHtml } from './html';
 import { MIC_CONSTRAINTS, voiceSupported } from './voice';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -468,23 +469,6 @@ function tapAudioContext(): AudioContext | null {
 }
 
 /** Join or open a table. `from` is what was tapped: if it doesn't work out, the reason shows there. */
-/**
- * The site was updated and this page is the old one. A page opened from the home screen has no
- * reload button, so reload it ourselves, once (if the new page still doesn't match, say so instead).
- */
-function reloadForUpdate(): boolean {
-  const KEY = 'gd.reloadedForUpdate';
-  try {
-    const last = Number(sessionStorage.getItem(KEY) ?? 0);
-    if (Date.now() - last < 60_000) return false;
-    sessionStorage.setItem(KEY, String(Date.now()));
-  } catch {
-    return false;
-  }
-  location.reload();
-  return true;
-}
-
 async function start(room: RoomRequest, opts: { mic: boolean; name: string; resumed?: boolean }, from?: HTMLElement) {
   // Called from a button tap, so sound is allowed to start (required on iPhone).
   sfx.unlock();

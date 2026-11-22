@@ -1,6 +1,7 @@
 import { CARD_SOUNDS } from './audio';
 import { suitOf, type Card, type GameServerMessage, type HeartsView as TableView, type PassDir } from '@tank/shared';
-import { escapeHtml } from './state';
+import { patchHtml, syncKeyed } from './dom';
+import { escapeHtml } from './html';
 import { cardFaceSvg, suitSvg, SUIT_NAME, type Rank, type Suit } from './paperArt';
 import type { PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
@@ -21,20 +22,23 @@ export function cardHtml(c: Card, extra = '') {
 const cardClass = (c: Card, extra: string) => `card s-${suitOf(c)} ${extra}`;
 
 /**
- * Put a hand on screen. When it's the same cards as before (a pick, a lift, a cursor move),
- * only their classes change: rebuilding every card face (and its portrait image) each time made
- * every tap and controller press slow.
+ * Put a hand on screen. Each card keeps its element (so a pick, a lift, a card played from the
+ * middle only changes what it has to): rebuilding every card face (and its portrait image) each
+ * time made every tap and controller press slow.
  */
 export function showHand(hand: HTMLElement, cards: Card[], classes: (c: Card) => string) {
-  const els = [...hand.children] as HTMLElement[];
-  if (els.length === cards.length && els.every((el, i) => el.dataset.card === cards[i])) {
-    els.forEach((el, i) => {
-      const cls = cardClass(cards[i], classes(cards[i]));
-      if (el.className !== cls) el.className = cls;
-    });
-    return;
+  syncKeyed(hand, cards.map((c) => ({ key: c, className: cardClass(c, classes(c)), make: () => cardHtml(c) })));
+}
+
+/** The cards in the middle, each toward whoever played it. */
+export function showTrick(root: HTMLElement, trick: readonly { seat: number; card: Card }[], winner: number | null, pos: (seat: number) => number) {
+  for (let p = 0; p < 4; p++) {
+    const here = trick.filter((t) => pos(t.seat) === p);
+    syncKeyed(
+      root.querySelector(`.ht-slot-${p}`)!,
+      here.map((t) => ({ key: t.card, className: cardClass(t.card, `played ${winner === t.seat ? 'winner' : ''}`), make: () => cardHtml(t.card) })),
+    );
   }
-  hand.innerHTML = cards.map((c) => cardHtml(c, classes(c))).join('');
 }
 
 /** A seat's name tag: talking bars, the name, and words for computer players and people who are away. */
@@ -257,6 +261,7 @@ export class HeartsTable implements View {
     const q = <T extends HTMLElement>(sel: string) => this.el.querySelector(sel) as T;
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
+    let tagsChanged = false;
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
@@ -264,21 +269,18 @@ export class HeartsTable implements View {
       const taken = s.taken ? ` <span class="ht-taken">+${s.taken}<span class="ht-long"> this hand</span></span>` : '';
       // No count of the others' cards: everyone holds about the same number in a trick game, so the
       // tag keeps just the name and score (the user, 2026-11-20).
-      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
-        <div class="ht-score">${s.score} pts${taken}${status}</div>`;
+      const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
+        <div class="ht-score">${s.score} pts${taken}${status}</div>`);
+      tagsChanged ||= changed;
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
-    fitSeatText(this.el);
+    if (tagsChanged) fitSeatText(this.el);
 
     // Trick: each card sits toward the player who played it.
-    for (let p = 0; p < 4; p++) q<HTMLElement>(`.ht-slot-${p}`).innerHTML = '';
-    for (const t of v.trick) {
-      const win = v.trickWinner === t.seat ? 'winner' : '';
-      q<HTMLElement>(`.ht-slot-${this.pos(t.seat)}`).innerHTML = cardHtml(t.card, `played ${win}`);
-    }
+    showTrick(this.el, v.trick, v.trickWinner, (seat) => this.pos(seat));
     q<HTMLElement>('.ht-trick').dataset.taker = v.trickWinner !== null ? String(this.pos(v.trickWinner)) : '';
 
     // Status line and the one action button.
@@ -307,7 +309,7 @@ export class HeartsTable implements View {
       text = 'Next hand coming up…';
     }
     if (v.heartsBroken && v.phase === 'playing') text += ` <span class="ht-broken">${suitSvg('H')} broken</span>`;
-    status.innerHTML = text;
+    patchHtml(status, text);
 
     this.renderHand();
     this.renderOverlay();
@@ -376,7 +378,7 @@ export class HeartsTable implements View {
       html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }
     html += '</div></div>';
-    box.innerHTML = html;
+    patchHtml(box, html);
     fitScoreTable(box);
   }
 

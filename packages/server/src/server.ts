@@ -27,6 +27,7 @@ import type { PhotoChecker } from './photoCheck';
 import { photoRoutes } from './photos';
 import { serveStatic } from './static';
 import { createAdmin } from './admin';
+import { startGameClock, type GameClock } from './gameClock';
 
 export interface Limits {
   /** Open WebSockets per IP. */
@@ -60,6 +61,9 @@ export const DEFAULT_LIMITS: Limits = {
   helloTimeoutMs: 10_000,
   heartbeatMs: 15_000,
 };
+
+/** Closing waits this long at most for the last puzzle saves to reach the shared disk. */
+const SAVES_FINISH_MS = 5000;
 
 /** How long before a draining server's cutoff the tables still on it are warned. */
 export const UPDATE_WARNING_MS = 10 * 60_000;
@@ -124,7 +128,11 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   const limits: Limits = { ...DEFAULT_LIMITS, ...o.limits };
   const signer = new SessionSigner(o.sessionSecret);
   const puzzles = new PuzzleStore(o.puzzleDir ?? null);
-  puzzles.sweep(Date.now());
+  // Set once the server ticks (see "tick loop"): connections nudge it when a game may have started.
+  let clock: GameClock | undefined;
+  const sweepPuzzles = (which: 'all' | 'old') =>
+    void puzzles.sweep(Date.now(), undefined, which).catch((err) => o.log.event('puzzle_sweep_failed', { error: String(err) }));
+  sweepPuzzles('all');
   const manager = new RoomManager({
     now: () => Date.now(),
     log: o.log,
@@ -154,6 +162,8 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     wsErrors: 0,
     tickOverruns: 0,
     maxTickMs: 0,
+    /** The worst the game clock has woken late: slow work outside the games' own steps shows here. */
+    maxLateMs: 0,
     started: new Date().toISOString(),
   };
   const openPerIp = new Map<string, number>();
@@ -379,16 +389,20 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           const lookup = manager.resolve(req, session);
           if (!lookup.ok) return fail(lookup.code, lookup.message);
           if (req.kind === 'create-private') privateCreates.add(ip, now);
+          conn.batches = msg.batch === true;
           const result = lookup.room.join(conn, session, msg.name || randomName(), msg.device, msg.deviceId);
           if (!result.ok) return fail(result.code, result.message);
           room = lookup.room;
+          clock?.wake();
           clearTimeout(helloTimer);
           // Welcome, who's in voice, then the game's own start-up message.
           room.sendWelcome(session, result);
           return;
         }
         if (room.closed) return;
+        const pace = room.tickEvery;
         room.handle(session!, msg);
+        if (room.tickEvery !== pace) clock?.wake(); // a game started
       } catch (err) {
         counters.handlerErrors++;
         o.log.event('handler_error', { error: String(err) });
@@ -403,7 +417,10 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       if (n <= 0) openPerIp.delete(ip);
       else openPerIp.set(ip, n);
       try {
-        if (room && session && !room.closed) room.disconnect(session, conn, 'disconnect');
+        if (room && session && !room.closed) {
+          room.disconnect(session, conn, 'disconnect');
+          clock?.wake(); // with them gone, everyone still here may be ready
+        }
       } catch (err) {
         counters.handlerErrors++;
         console.error('Disconnect error:', err);
@@ -418,44 +435,36 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
 
   const timers: NodeJS.Timeout[] = [];
   if (o.autoTick !== false) {
-    // Fixed timestep. Windows timers fire every ~15ms, so step as many ticks as are due.
     const tickMs = 1000 / DEFAULT_CONFIG.tickRate;
-    let last = performance.now();
-    let acc = 0;
-    let lastHousekeeping = Date.now();
     // Old jigsaw saves go every 6 hours, not just at start-up: the privacy page promises 30 days
     // even if a box runs for months.
     let lastSweep = Date.now();
-    timers.push(
-      setInterval(() => {
-        const now = performance.now();
-        acc += now - last;
-        last = now;
-        if (acc > tickMs * 10) acc = tickMs * 10; // don't spiral after a stall
-        while (acc >= tickMs) {
-          acc -= tickMs;
-          const { maxMs } = manager.stepAll();
-          if (maxMs > counters.maxTickMs) counters.maxTickMs = Math.round(maxMs * 100) / 100;
-          if (maxMs > tickMs) counters.tickOverruns++;
+    clock = startGameClock(DEFAULT_CONFIG.tickRate, {
+      step: (tick) => {
+        const { maxMs } = manager.stepAll(tick);
+        if (maxMs > counters.maxTickMs) counters.maxTickMs = Math.round(maxMs * 100) / 100;
+        if (maxMs > tickMs) counters.tickOverruns++;
+      },
+      nextTick: (tick) => manager.nextTick(tick),
+      housekeeping: () => {
+        manager.housekeeping();
+        const t = Date.now();
+        connects.sweep(t);
+        privateCreates.sweep(t);
+        failedJoins.sweep(t);
+        if (t - lastSweep >= PUZZLE_SWEEP_MS) {
+          lastSweep = t;
+          sweepPuzzles('old');
         }
-        if (Date.now() - lastHousekeeping >= 1000) {
-          lastHousekeeping = Date.now();
-          manager.housekeeping();
-          const t = Date.now();
-          connects.sweep(t);
-          privateCreates.sweep(t);
-          failedJoins.sweep(t);
-          if (t - lastSweep >= PUZZLE_SWEEP_MS) {
-            lastSweep = t;
-            try {
-              puzzles.sweep(t);
-            } catch (err) {
-              o.log.event('puzzle_sweep_failed', { error: String(err) });
-            }
-          }
-        }
-      }, 4),
-    );
+      },
+      late: (ms) => {
+        if (ms > counters.maxLateMs) counters.maxLateMs = Math.round(ms * 100) / 100;
+      },
+      error: (err) => {
+        o.log.event('clock_error', { error: String(err) });
+        console.error('Game clock error:', err);
+      },
+    });
   }
 
   try {
@@ -468,6 +477,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     });
   } catch (err) {
     for (const t of timers) clearInterval(t);
+    clock?.stop();
     wss.close();
     throw err;
   }
@@ -506,11 +516,13 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     close: () =>
       new Promise<void>((resolve) => {
         for (const t of timers) clearInterval(t);
+        clock?.stop();
         // Tables close properly (puzzles saved, play time logged, people told) before the sockets go.
         manager.closeAll('update');
+        const saved = Promise.race([puzzles.flush(), new Promise<void>((r) => setTimeout(r, SAVES_FINISH_MS).unref())]);
         for (const c of wss.clients) c.terminate();
         wss.close();
-        server.close(() => resolve());
+        server.close(() => void saved.then(() => resolve()));
         server.closeAllConnections?.();
       }),
   };

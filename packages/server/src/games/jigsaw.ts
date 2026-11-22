@@ -6,6 +6,7 @@ import {
   puzzleImage,
   puzzleProgress,
   puzzleUntouched,
+  r1,
   tableBounds,
   type GameInput,
   type PieceSpot,
@@ -14,8 +15,15 @@ import {
   type PuzzleState,
 } from '@tank/shared';
 import type { PuzzleStore } from '../puzzleStore';
-import type { GameHost, Member, ServerGame } from './types';
+import type { GameHost, Member, Outgoing, ServerGame } from './types';
 
+/** 15 times a second: as often as a browser sends a drag, so batching costs no smoothness. */
+const JIGSAW_TICKS = 4;
+/**
+ * Pointers and drags go out together at most this often, each person's newest only. (A little
+ * under JIGSAW_TICKS' gap, so a tick that comes a millisecond early still sends.)
+ */
+const LIVE_GAP_MS = 60;
 /** Saves wait this long after a change, so a busy table writes a few times a minute at most. */
 const SAVE_DELAY_MS = 4000;
 /** How close (as a fraction of a piece's short side) two pieces must be to snap together. */
@@ -54,6 +62,7 @@ function slotLines(lo: number, hi: number, size: number, min: number, max: numbe
 export class JigsawGame implements ServerGame {
   readonly id = 'jigsaw' as const;
   readonly capacity = 4;
+  readonly tickEvery = JIGSAW_TICKS;
   phase: PuzzlePhase = 'setup';
   state: PuzzleState | null = null;
   /** group -> session holding it */
@@ -61,9 +70,16 @@ export class JigsawGame implements ServerGame {
   /** session -> the group and piece they picked up */
   private holding = new Map<string, { g: number; piece: number }>();
   private saveAt: number | null = null;
+  /** Newest pointer and drag of each session, until they next go out together. */
+  private cursors = new Map<string, PuzzleServerMessage>();
+  private drags = new Map<string, PuzzleServerMessage>();
+  private liveSentAt = -Infinity;
   /** When this table started or brought back a puzzle, over the last hour. */
   private starts: number[] = [];
   private savesAskedAt = new Map<string, number>();
+  /** A saved puzzle is being read from the disk. */
+  private loading = false;
+  private disposed = false;
 
   constructor(
     private host: GameHost,
@@ -207,6 +223,8 @@ export class JigsawGame implements ServerGame {
   private letGo(session: string) {
     const h = this.holding.get(session);
     if (!h) return;
+    // Everyone needs where it was last dragged to before hearing it's been let go.
+    if (this.drags.has(session)) this.sendLive();
     this.holding.delete(session);
     this.held.delete(h.g);
     this.host.broadcast({ t: 'pz-held', g: h.g, by: null });
@@ -228,13 +246,11 @@ export class JigsawGame implements ServerGame {
         if (last !== undefined && now - last < SAVES_ASK_GAP_MS) return;
         this.savesAskedAt.set(m.session, now);
         const ids = [...new Set(input.ids)].slice(0, SAVES_ASK_MAX);
-        const saves = ids.flatMap((id) => this.store.summary(id) ?? []);
-        const found = new Set(saves.map((s) => s.id));
-        this.host.send(m, { t: 'pz-saves', saves, gone: ids.filter((id) => !found.has(id)) });
+        this.sendSaves(m, ids).catch((err) => this.host.log('jigsaw_saves_failed', { error: String(err) }));
         return;
       }
       case 'pz-cursor':
-        for (const o of this.host.members()) if (o.session !== m.session && o.conn) this.host.send(o, { t: 'pz-cursor', by: m.alias, x: input.x, y: input.y });
+        this.cursors.set(m.session, { t: 'pz-cursor', by: m.alias, x: r1(input.x), y: r1(input.y) });
         return;
       case 'pz-grab':
         return this.grab(m, input.piece);
@@ -284,10 +300,32 @@ export class JigsawGame implements ServerGame {
   }
 
   private resume(m: Member, id: string) {
-    if (this.phase === 'playing' && this.state?.id === id) return;
-    if (this.phase === 'playing') return;
+    if (this.phase === 'playing' || this.loading) return;
     if (!this.mayStart(m)) return;
-    const s = this.store.load(id);
+    this.loading = true;
+    const before = this.state;
+    this.store
+      .load(id)
+      .then((s) => {
+        this.loading = false;
+        // Someone may have started another, or the table moved on, while the disk was read.
+        if (this.disposed || this.phase === 'playing' || this.state !== before) return;
+        this.resumed(m, id, s);
+      })
+      .catch((err) => {
+        this.loading = false;
+        this.host.log('jigsaw_load_failed', { error: String(err) });
+      });
+  }
+
+  private async sendSaves(m: Member, ids: string[]) {
+    const saves = (await Promise.all(ids.map((id) => this.store.summary(id)))).flatMap((s) => s ?? []);
+    if (this.disposed) return;
+    const found = new Set(saves.map((s) => s.id));
+    this.host.send(m, { t: 'pz-saves', saves, gone: ids.filter((id) => !found.has(id)) });
+  }
+
+  private resumed(m: Member, id: string, s: PuzzleState | null) {
     if (!s) {
       this.host.send(m, { t: 'pz-saves', saves: [], gone: [id] });
       return;
@@ -336,6 +374,8 @@ export class JigsawGame implements ServerGame {
     this.phase = phase;
     this.held.clear();
     this.holding.clear();
+    this.cursors.clear();
+    this.drags.clear();
     this.broadcastState();
   }
 
@@ -362,23 +402,30 @@ export class JigsawGame implements ServerGame {
     const to = this.clamp(x, y);
     const anchor = s.pieces[h.piece];
     this.moveGroup(h.g, to.x - anchor.x, to.y - anchor.y);
+    // Their pointer rides along with the piece, so an older one waiting to go out is out of date.
+    this.cursors.delete(m.session);
     if (!drop) {
-      for (const o of this.host.members()) if (o.session !== m.session && o.conn) this.host.send(o, { t: 'pz-drag', g: h.g, piece: h.piece, x: to.x, y: to.y, by: m.alias });
+      this.drags.set(m.session, { t: 'pz-drag', g: h.g, piece: h.piece, x: r1(to.x), y: r1(to.y), by: m.alias });
       return;
     }
+    this.drags.delete(m.session); // the drop says where it really is
     const { g, touched, snapped } = this.snap(h.g);
     this.holding.delete(m.session);
     this.held.delete(h.g);
     this.held.delete(g);
     this.changed();
-    this.host.broadcast({
-      t: 'pz-moved',
-      pieces: touched.map((i) => [i, s.pieces[i].x, s.pieces[i].y, s.pieces[i].g]),
-      locked: [...s.locked],
-      by: m.alias,
-      snapped,
-    });
-    this.host.broadcast({ t: 'pz-held', g: h.g, by: null });
+    this.host.broadcastTogether([
+      {
+        msg: {
+          t: 'pz-moved',
+          pieces: touched.map((i) => [i, s.pieces[i].x, s.pieces[i].y, s.pieces[i].g]),
+          locked: [...s.locked],
+          by: m.alias,
+          snapped,
+        },
+      },
+      { msg: { t: 'pz-held', g: h.g, by: null } },
+    ]);
     if (snapped) this.host.log('jigsaw_snap', { by: m.pid });
     this.checkDone();
   }
@@ -472,10 +519,24 @@ export class JigsawGame implements ServerGame {
   // ------------------------------------------------------------------ time
 
   step() {
-    if (this.saveAt !== null && this.host.now() >= this.saveAt) this.saveNow();
+    const now = this.host.now();
+    if ((this.cursors.size || this.drags.size) && now - this.liveSentAt >= LIVE_GAP_MS) this.sendLive();
+    if (this.saveAt !== null && now >= this.saveAt) this.saveNow();
+  }
+
+  /** Everybody else's newest pointer or drag, in one frame each. */
+  private sendLive() {
+    this.liveSentAt = this.host.now();
+    const out: Outgoing[] = [];
+    for (const waiting of [this.drags, this.cursors]) {
+      for (const [session, msg] of waiting) out.push({ msg, except: session });
+      waiting.clear();
+    }
+    this.host.broadcastTogether(out);
   }
 
   dispose() {
+    this.disposed = true;
     if (this.state) this.saveNow();
   }
 

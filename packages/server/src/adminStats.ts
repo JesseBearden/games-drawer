@@ -92,12 +92,12 @@ async function readJsonl(file: string, keep: (line: string) => boolean, into: Ro
  * writes to its own folder on the shared disk (logs/<instance>), so the admin page on any box
  * adds up every box's logs, including ones that have since shut down.
  */
-export function logFolders(dirs: string[]): string[] {
+export async function logFolders(dirs: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const dir of dirs) {
     out.push(dir);
     try {
-      for (const d of fs.readdirSync(dir, { withFileTypes: true })) if (d.isDirectory()) out.push(path.join(dir, d.name));
+      for (const d of await fs.promises.readdir(dir, { withFileTypes: true })) if (d.isDirectory()) out.push(path.join(dir, d.name));
     } catch {
       /* not there (yet) */
     }
@@ -110,10 +110,10 @@ export async function readLogs(dirs: string[], days: string[]): Promise<{ events
   const events: Row[] = [];
   const chats: Row[] = [];
   const wanted = new Set(days);
-  for (const dir of logFolders(dirs)) {
+  for (const dir of await logFolders(dirs)) {
     let files: string[];
     try {
-      files = fs.readdirSync(dir);
+      files = await fs.promises.readdir(dir);
     } catch {
       continue;
     }

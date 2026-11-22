@@ -41,7 +41,7 @@ export type SoundName =
   | 'handEnd'
   | 'lobbyJoin';
 
-/** Sounds of the tank game: their samples load as soon as audio unlocks (the default `preload`). */
+/** Sounds of the tank game: the Tanks screen loads their samples when it opens. */
 export const TANK_SOUNDS: SoundName[] = [
   'fire',
   'explosion',
@@ -80,6 +80,9 @@ export const CARD_SOUNDS: SoundName[] = [
 ];
 
 export const SOUND_NAMES: SoundName[] = [...TANK_SOUNDS, ...CARD_SOUNDS];
+
+/** What any table can play: the only samples that load as soon as audio unlocks (the default `preload`). */
+export const SHARED_SOUNDS: SoundName[] = ['chat', 'win'];
 
 /** The looping ambience beds, whose loudness `Sfx.setAmbience` drives. */
 export type AmbienceName = 'rotor' | 'wind';
@@ -449,7 +452,7 @@ export class Sfx {
   muted = false;
 
   constructor(opts: SfxOptions = {}) {
-    this.preload = opts.preload ?? TANK_SOUNDS;
+    this.preload = opts.preload ?? SHARED_SOUNDS;
     this.picks = loadPicks();
     try {
       const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? 'null');
@@ -491,7 +494,6 @@ export class Sfx {
       this.ctx = ctx;
       this.master = master;
       this.synth = new Synth(ctx, master);
-      this.amb = this.buildAmbience(ctx, master, this.synth.noise);
       for (const name of this.preload) {
         const c = resolvePick(name, this.picks);
         if (c) void this.load(c.file);
@@ -530,7 +532,10 @@ export class Sfx {
 
   /** rotor, wind: 0..1 loudness for the looping ambience. */
   setAmbience(rotor: number, wind: number) {
-    if (!this.amb || !this.ctx) return;
+    if (!this.ctx) return;
+    // Nothing runs until there's something to hear: card and puzzle tables never build it.
+    if (!this.amb && (rotor > 0 || wind > 0)) this.ensureAmbience();
+    if (!this.amb) return;
     if (!this.ambienceRequested) {
       // Only games that use ambience pay for downloading its loops.
       this.ambienceRequested = true;
@@ -539,6 +544,20 @@ export class Sfx {
     const t = this.ctx.currentTime;
     this.amb.rotor.level.gain.setTargetAtTime(Math.max(0, Math.min(1, rotor)) * 0.22, t, 0.15);
     this.amb.wind.level.gain.setTargetAtTime(0.012 + Math.max(0, Math.min(1, wind)) * 0.05, t, 0.6);
+  }
+
+  /** Leaving the game that had ambience: silence (not the faint wind of a calm day), loops stopped. */
+  stopAmbience() {
+    if (!this.amb || !this.ctx) return;
+    this.ambienceRequested = false;
+    for (const name of AMBIENCE_NAMES) {
+      this.amb[name].level.gain.setTargetAtTime(0, this.ctx.currentTime, 0.15);
+      this.stopLoop(this.amb[name]);
+    }
+  }
+
+  private ensureAmbience() {
+    if (this.ctx && this.master && this.synth) this.amb ??= this.buildAmbience(this.ctx, this.master, this.synth.noise);
   }
 
   setVolume(v: number) {
@@ -594,6 +613,7 @@ export class Sfx {
 
   /** Make an ambience bed play a specific version (or null to go back to its pick) without saving. */
   auditionAmbience(slot: AmbienceName, id: string | null) {
+    this.ensureAmbience();
     if (!this.amb) return;
     this.ambienceRequested = true;
     this.amb[slot].audition = id;

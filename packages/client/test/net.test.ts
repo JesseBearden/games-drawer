@@ -134,6 +134,14 @@ describe('Net (the connection to a table)', () => {
     expect(old.sent.map((m) => m.t)).not.toContain('leave');
   });
 
+  it('asks for batches, and takes one as the messages in it, in order', async () => {
+    const { seen } = await makeNet();
+    expect(latest().sent[0]).toMatchObject({ t: 'hello', batch: true });
+    const had = seen.messages;
+    latest().receive({ t: 'batch', msgs: [{ t: 'pong', at: 1 }, { t: 'pong', at: 2 }, { t: 'pong', at: 3 }] });
+    expect(seen.messages - had).toBe(3);
+  });
+
   it('leaving a table normally says "leave"', async () => {
     const { net } = await makeNet();
     const s = latest();

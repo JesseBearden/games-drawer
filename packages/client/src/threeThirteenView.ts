@@ -2,10 +2,17 @@ import { CARD_SOUNDS } from './audio';
 import { isJoker, isWild, ttSuit, type GameServerMessage, type TTCard, type ThreeThirteenView } from '@tank/shared';
 import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml } from './heartsView';
 import { cardFaceSvg, feltBackHtml, type Rank, type Suit } from './paperArt';
-import { escapeHtml } from './state';
+import { patchHtml, syncKeyed } from './dom';
+import { escapeHtml } from './html';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** The same card is drawn differently in a round where it's wild (it wears a star). */
+const cardKey = (c: TTCard, round: number) => `${c}${!isJoker(c) && isWild(c, round) ? '*' : ''}`;
+const cardClass = (c: TTCard, extra: string) => `card s-${ttSuit(c)}${isJoker(c) ? ' tt-joker' : ''} ${extra}`;
+/** How long to wait for the server to show a rearranged hand before believing it instead. */
+const ARRANGE_ECHO_MS = 1500;
 
 /** How far a press has to move before it's a drag rather than a tap. */
 const DRAG_PX = 8;
@@ -48,6 +55,8 @@ export class ThreeThirteenTable implements View {
   private speaking = new Set<string>();
   /** A press on a card in your hand: a tap, or (once it moves) a drag to rearrange. */
   private press: { id: number; card: TTCard; x: number; y: number; dragging: boolean; target: number } | null = null;
+  /** The order you just dropped your cards into, until the server's answer shows it. */
+  private arranged: { order: TTCard[]; until: number } | null = null;
   private handObserver = new ResizeObserver(() => {
     this.layoutHand();
     fitSeatText(this.el);
@@ -88,12 +97,23 @@ export class ThreeThirteenTable implements View {
     const prev = this.view;
     this.view = m.view;
     this.pending = false;
+    this.keepArrangement(m.view);
     if (m.view.phase !== 'roundEnd') this.readySent = false;
     if (this.lifted && (!m.view.cards.includes(this.lifted) || m.view.step !== 'discard' || m.view.turn !== m.view.seat)) this.lifted = null;
     this.sounds(prev, m.view);
     // Mid-drag, keep the hand still: the drop sends its own order.
     if (this.press?.dragging) this.renderTable();
     else this.render();
+  }
+
+  /** An update that set out before your rearrange landed has the old order: don't jump back to it. */
+  private keepArrangement(v: ThreeThirteenView) {
+    const a = this.arranged;
+    if (!a) return;
+    const landed = a.order.join() === v.cards.join();
+    const sameCards = a.order.length === v.cards.length && a.order.every((c) => v.cards.includes(c));
+    if (landed || !sameCards || performance.now() > a.until) this.arranged = null;
+    else v.cards = [...a.order];
   }
 
   onSpeaking(aliases: Set<string>) {
@@ -132,11 +152,13 @@ export class ThreeThirteenTable implements View {
     const q = <T extends HTMLElement>(sel: string) => this.el.querySelector(sel) as T;
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
+    let tagsChanged = false;
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
       const detail = s.out ? '<b class="tt-went-out">Went out</b>' : `${s.cards} card${s.cards === 1 ? '' : 's'}`;
-      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}<div class="ht-score">${s.score} pts · ${detail}</div>`;
+      const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}<div class="ht-score">${s.score} pts · ${detail}</div>`);
+      tagsChanged ||= changed;
       el.classList.toggle('turn', v.turn === seat);
       // A seat not in play (the table chose fewer players) keeps its place but shows nothing.
       el.style.visibility = s.playing ? '' : 'hidden';
@@ -144,9 +166,9 @@ export class ThreeThirteenTable implements View {
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
-    fitSeatText(this.el);
+    if (tagsChanged) fitSeatText(this.el);
 
-    q<HTMLElement>('.tt-round').innerHTML = `Round ${v.round} of ${v.rounds} · <b>${wildName(v.wild)} are wild</b>`;
+    patchHtml(q<HTMLElement>('.tt-round'), `Round ${v.round} of ${v.rounds} · <b>${wildName(v.wild)} are wild</b>`);
     const mine = this.myTurn();
     const stock = q<HTMLButtonElement>('.tt-stock');
     stock.classList.toggle('can-take', mine && v.step === 'draw');
@@ -158,7 +180,12 @@ export class ThreeThirteenTable implements View {
       back.innerHTML = feltBackHtml(v.back);
     }
     const discard = q<HTMLButtonElement>('.tt-discard');
-    discard.innerHTML = v.discardTop ? ttCardHtml(v.discardTop, v.round, 'tt-top') : '<span class="tt-empty"></span>';
+    const top = v.discardTop;
+    syncKeyed(discard, [
+      top
+        ? { key: cardKey(top, v.round), className: cardClass(top, 'tt-top'), make: () => ttCardHtml(top, v.round) }
+        : { key: 'empty', className: 'tt-empty', make: () => '<span></span>' },
+    ]);
     discard.classList.toggle('can-take', mine && v.step === 'draw' && !!v.discardTop);
     discard.classList.toggle('can-drop', mine && v.step === 'discard' && !!this.lifted);
     discard.setAttribute('aria-label', mine && v.step === 'discard' ? 'Throw the lifted card away' : 'Take the top discard');
@@ -185,7 +212,7 @@ export class ThreeThirteenTable implements View {
         else text += 'tap a card to throw away.';
       } else if (v.turn !== null) text += `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>’s turn${lastTurn}`;
     } else if (v.phase === 'roundEnd') text = `Round ${v.round} done`;
-    q<HTMLElement>('.ht-status').innerHTML = text;
+    patchHtml(q<HTMLElement>('.ht-status'), text);
   }
 
   private renderHand() {
@@ -202,15 +229,7 @@ export class ThreeThirteenTable implements View {
       return cls.join(' ');
     };
     const cards = v.phase === 'playing' ? v.cards : [];
-    const els = [...hand.children] as HTMLElement[];
-    if (els.length === cards.length && els.every((el, i) => el.dataset.card === cards[i])) {
-      els.forEach((el, i) => {
-        const cls = `card s-${ttSuit(cards[i])}${isJoker(cards[i]) ? ' tt-joker' : ''} ${classes(cards[i])}`;
-        if (el.className !== cls) el.className = cls;
-      });
-    } else {
-      hand.innerHTML = cards.map((c) => ttCardHtml(c, v.round, classes(c))).join('');
-    }
+    syncKeyed(hand, cards.map((c) => ({ key: cardKey(c, v.round), className: cardClass(c, classes(c)), make: () => ttCardHtml(c, v.round) })));
     hand.classList.toggle('my-turn', this.myTurn());
     this.layoutHand();
   }
@@ -299,6 +318,7 @@ export class ThreeThirteenTable implements View {
     order.splice(p.target, 0, p.card);
     if (order.join() !== v.cards.join()) {
       v.cards = order;
+      this.arranged = { order, until: performance.now() + ARRANGE_ECHO_MS };
       this.shell.sendGame({ t: 'tt-arrange', cards: order });
       // Rebuild in the new order (the moved card is now where it was dropped).
       this.renderHand();
@@ -307,6 +327,8 @@ export class ThreeThirteenTable implements View {
 
   private onCancel = (e: PointerEvent) => {
     if (!this.press || e.pointerId !== this.press.id) return;
+    const el = this.el.querySelector<HTMLElement>(`.tt-hand .card[data-card="${this.press.card}"]`);
+    if (el) el.style.transform = '';
     this.press = null;
     this.el.querySelector('.tt-hand')!.classList.remove('tt-dragging');
     this.renderHand();
@@ -424,7 +446,7 @@ export class ThreeThirteenTable implements View {
       html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }
     html += '</div></div>';
-    box.innerHTML = html;
+    patchHtml(box, html);
     fitScoreTable(box);
   }
 

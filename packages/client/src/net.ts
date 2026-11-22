@@ -112,16 +112,9 @@ export class Net {
     ws.onopen = () => {
       this.lastHeard = Date.now();
       const deviceId = getDeviceId();
-      this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device, ...(deviceId && { deviceId }) });
+      this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device, batch: true, ...(deviceId && { deviceId }) });
     };
-    ws.onmessage = (ev) => {
-      this.lastHeard = Date.now();
-      let msg: ServerMessage;
-      try {
-        msg = JSON.parse(ev.data as string);
-      } catch {
-        return;
-      }
+    const take = (msg: ServerMessage) => {
       if (msg.t === 'welcome') {
         welcomed = true;
         this.retry = 0;
@@ -142,6 +135,18 @@ export class Net {
         }
       }
       this.h.onMessage(msg);
+    };
+    ws.onmessage = (ev) => {
+      this.lastHeard = Date.now();
+      let frame: ServerMessage;
+      try {
+        frame = JSON.parse(ev.data as string);
+      } catch {
+        return;
+      }
+      if (frame.t !== 'batch') return take(frame);
+      // Several at once: exactly as if they'd come one after another.
+      for (const msg of frame.msgs) take(msg);
     };
     ws.onclose = () => this.lost(ws);
   }

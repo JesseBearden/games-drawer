@@ -9,7 +9,7 @@ import {
   type DominoesView,
   type GameInput,
 } from '@tank/shared';
-import { botPlays, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS } from './hearts';
 
 /** Bots (and bots covering for disconnected players) think this long. */
@@ -33,6 +33,7 @@ interface Seat {
  */
 export class DominoesGame implements ServerGame {
   readonly id = 'dominoes' as const;
+  readonly tickEvery = TIMER_GAME_TICKS;
   readonly capacity = 4;
   seats: Seat[];
   round!: DominoesRound;

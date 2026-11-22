@@ -42,7 +42,7 @@ import { ThreeThirteenGame } from './games/threeThirteen';
 import { JigsawGame } from './games/jigsaw';
 import { PuzzleStore } from './puzzleStore';
 import { TanksGame } from './games/tanks';
-import type { Conn, GameHost, Member, ServerGame } from './games/types';
+import type { Conn, GameHost, Member, Outgoing, ServerGame } from './games/types';
 import type { TablePhoto } from './photos';
 
 export type { Conn } from './games/types';
@@ -303,6 +303,7 @@ export class Room {
         if (p?.conn && p.welcomed) p.conn.send(JSON.stringify({ t: 'g', m: msg } satisfies ServerMessage));
       },
       broadcast: (msg: GameServerMessage) => this.broadcast({ t: 'g', m: msg }),
+      broadcastTogether: (out) => this.broadcastTogether(out),
       systemChat: (text) => this.systemChat(text),
       log: (type, fields) => room.log(type, { game: room.game?.id, ...fields }),
       randomInt: (n) => (this.deps.randomInt ?? randomInt)(n),
@@ -1136,6 +1137,27 @@ export class Room {
   private broadcast(msg: ServerMessage) {
     const data = JSON.stringify(msg);
     for (const p of this.players.values()) if (p.conn && p.welcomed) p.conn.send(data);
+  }
+
+  /** Several game messages at once: each is turned into JSON once, however many get it. */
+  private broadcastTogether(out: readonly Outgoing[]) {
+    const json: string[] = [];
+    for (const [session, p] of this.players) {
+      const conn = p.conn;
+      if (!conn || !p.welcomed) continue;
+      const mine: string[] = [];
+      for (let i = 0; i < out.length; i++) {
+        if (out[i].except === session || (conn.batches && out[i].repeat)) continue;
+        mine.push((json[i] ??= JSON.stringify({ t: 'g', m: out[i].msg } satisfies ServerMessage)));
+      }
+      if (conn.batches && mine.length > 1) conn.send(`{"t":"batch","msgs":[${mine.join(',')}]}`);
+      else for (const data of mine) conn.send(data);
+    }
+  }
+
+  /** How many ticks apart this room's game needs stepping, or null with no game running. */
+  get tickEvery(): number | null {
+    return this.game ? (this.game.tickEvery ?? 1) : null;
   }
 
   private log(type: string, fields: Record<string, unknown>) {

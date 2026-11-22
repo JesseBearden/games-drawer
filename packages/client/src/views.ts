@@ -26,6 +26,8 @@ export interface ShellApi {
   setReady(ready: boolean): void;
   toLobby(): void;
   toast(text: string): void;
+  /** They're still here, though they've sent nothing (the table stays open). Cheap to call often. */
+  stillHere(): void;
   share(): void;
   /** Play a sound, ignoring names this build doesn't have. */
   play(name: SoundName | string, opts?: PlayOptions): void;
@@ -57,6 +59,8 @@ export interface View {
   readonly helpHtml: string;
   onGameMessage?(m: GameServerMessage): void;
   onMembers?(members: MemberInfo[]): void;
+  /** Your own mic went on or off, or couldn't. */
+  onVoiceChanged?(): void;
   /** The table's pick, seats or readiness changed (between games). */
   onTable?(table: TableSetup): void;
   /** Aliases of people talking in voice right now. */

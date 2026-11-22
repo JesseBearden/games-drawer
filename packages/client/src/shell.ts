@@ -1,14 +1,11 @@
-import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
+import { CHAT_FILTER_LABELS, checkChat, GAME_NAMES, gameInfo, type ChatFilterMode, type ChatMessage, type GameId, type GameServerMessage, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
-import { SpadesTable } from './spadesView';
-import { DominoesTable } from './dominoesView';
-import { ThreeThirteenTable } from './threeThirteenView';
-import { JigsawTable } from './jigsawView';
-import { HeartsTable } from './heartsView';
+import { fetchGameView, gameViewNow } from './gameViews';
 import { LobbyView } from './lobby';
 import type { Net } from './net';
-import { colorCss, escapeHtml } from './state';
-import { TankView } from './tankView';
+import { patchHtml } from './dom';
+import { colorCss, escapeHtml } from './html';
+import { reloadForUpdate } from './reload';
 import type { Device, ShellApi, View } from './views';
 import { Voice } from './voice';
 import { moveFocus, type Gamepads, type PadButton, type PadPress } from './gamepad';
@@ -42,6 +39,10 @@ type Sheet = (typeof SHEETS)[number];
 export class RoomApp {
   view: View | null = null;
   gameId: GameId | null = null;
+  /** The game's messages that came while its screen was still downloading, for when it's here. */
+  private waitingForView: GameServerMessage[] = [];
+  /** Counts changes of screen, so a download that finishes late doesn't put up the wrong one. */
+  private screen = 0;
   voice: Voice;
   private alias: string;
   private room: Welcome['room'];
@@ -136,6 +137,7 @@ export class RoomApp {
       setReady: (ready) => this.net.send({ t: 'ready', ready }),
       toLobby: () => this.net.send({ t: 'lobby' }),
       toast: (t) => this.toast(t),
+      stillHere: () => this.markActive(),
       share: () => void this.share(),
       play: (name, opts) => this.play(name, opts),
       voice: {
@@ -167,27 +169,62 @@ export class RoomApp {
     this.view?.dispose();
     this.view = null;
     this.gameId = id;
+    const screen = ++this.screen;
+    this.waitingForView = [];
     const gameEl = $('game');
-    if (id === 'tanks') this.view = new TankView(this.api);
-    else if (id === 'hearts') this.view = new HeartsTable(this.api);
-    else if (id === 'spades') this.view = new SpadesTable(this.api);
-    else if (id === 'dominoes') this.view = new DominoesTable(this.api);
-    else if (id === 'threethirteen') this.view = new ThreeThirteenTable(this.api);
-    else if (id === 'jigsaw') this.view = new JigsawTable(this.api);
-    else this.view = new LobbyView(this.api);
-    gameEl.classList.toggle('landscape-only', this.view.landscape);
+    gameEl.classList.remove('landscape-only');
     gameEl.dataset.view = id ?? 'lobby';
     this.setBarOpen(false);
-    this.view.onMembers?.(this.membersList);
-    this.view.onSpeaking?.(this.speaking);
     // Help: how to play what's on screen (the game picker has its own few words).
     $('help-title').textContent = id ? `How to play ${gameInfo(id).name}` : 'At the table';
-    $('help-body').innerHTML = this.view.helpHtml;
+    $('help-body').innerHTML = '';
     $('menu-lobby').hidden = !(this.room.kind === 'private' && id !== null);
     if (!$('menu').hidden) this.openSheet(null);
     this.updateRoomInfo();
     document.title = id ? `${gameInfo(id).title} · Games Drawer` : `Table ${this.room.code} · Games Drawer`;
+    if (id === null) {
+      this.mountView(new LobbyView(this.api));
+      this.fetchPicked();
+      return;
+    }
+    const ready = gameViewNow(id);
+    if (ready) this.mountView(new ready(this.api));
+    else this.fetchView(id, screen);
+  }
+
+  private mountView(view: View) {
+    this.view = view;
+    $('game').classList.toggle('landscape-only', view.landscape);
+    view.onMembers?.(this.membersList);
+    view.onSpeaking?.(this.speaking);
+    $('help-body').innerHTML = view.helpHtml;
+    // (The menu may have been opened while it downloaded.)
+    if (!$('menu').hidden) view.setPaused?.(true);
+    for (const m of this.waitingForView.splice(0)) view.onGameMessage?.(m);
     requestAnimationFrame(() => this.view?.resize?.());
+  }
+
+  /** Download a game's screen. One that won't come is tried again; if it's gone (an update), reload. */
+  private fetchView(id: GameId, screen: number, tries = 0) {
+    fetchGameView(id).then(
+      (ViewClass) => {
+        if (screen === this.screen) this.mountView(new ViewClass(this.api));
+      },
+      () => {
+        if (screen !== this.screen) return;
+        if (tries && navigator.onLine && reloadForUpdate()) return;
+        if (tries === 1) this.toast(`${gameInfo(id).name} is taking a while to load. Check your internet connection.`);
+        window.setTimeout(() => {
+          if (screen === this.screen) this.fetchView(id, screen, tries + 1);
+        }, Math.min(10_000, 1000 * 2 ** tries));
+      },
+    );
+  }
+
+  /** Once a game's picked, its screen downloads while everyone's getting ready. */
+  private fetchPicked() {
+    const pick = this.tableState.pick;
+    if (pick) void fetchGameView(pick).catch(() => {}); // (starting it tries again)
   }
 
   // ------------------------------------------------------------------ messages
@@ -201,7 +238,8 @@ export class RoomApp {
         if (msg.game !== this.gameId) this.showGame(msg.game);
         return;
       case 'g':
-        this.view?.onGameMessage?.(msg.m);
+        if (this.view) this.view.onGameMessage?.(msg.m);
+        else this.waitingForView.push(msg.m);
         return;
       case 'members':
         this.membersList = msg.members;
@@ -209,6 +247,7 @@ export class RoomApp {
         return;
       case 'table':
         this.tableState = msg.table;
+        this.fetchPicked();
         this.view?.onTable?.(msg.table);
         return;
       case 'voice':
@@ -331,7 +370,7 @@ export class RoomApp {
     btn.classList.toggle('pc-btn-main', v.inVoice && !v.selfMuted);
     btn.classList.toggle('pc-btn-alert', !v.inVoice || v.selfMuted);
     // The lobby shows mic state too.
-    this.view?.onMembers?.(this.membersList);
+    this.view?.onVoiceChanged?.();
     const others = v.peers.filter((p) => p.id !== v.alias);
     let html = '<h3 class="pc-h3">Mic</h3>';
     if (!v.supported) {
@@ -358,7 +397,7 @@ export class RoomApp {
       html += '<p class="pc-small">Headphones keep game sounds out of your mic.</p>';
       if (v.relayOnly) html += '<p class="pc-small">Relay test mode: all voice goes through the relay server.</p>';
     }
-    part.innerHTML = html;
+    patchHtml(part, html);
   }
 
   private onMicMenuClick = (e: Event) => {
@@ -955,6 +994,7 @@ export class RoomApp {
   }
 
   dispose() {
+    this.screen++;
     this.view?.dispose();
     this.view = null;
     this.voice.teardown();

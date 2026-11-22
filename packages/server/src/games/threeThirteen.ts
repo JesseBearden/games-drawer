@@ -1,5 +1,4 @@
 import {
-  bestMelds,
   CARD_BACK_COUNT,
   freshBotName,
   SEAT_FILL_ORDER,
@@ -12,7 +11,7 @@ import {
   type GameInput,
   type ThreeThirteenView,
 } from '@tank/shared';
-import { botPlays, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS } from './hearts';
 
 /** Computer players (and computers covering for disconnected players) think this long. */
@@ -35,6 +34,7 @@ interface Seat {
  */
 export class ThreeThirteenGame implements ServerGame {
   readonly id = 'threethirteen' as const;
+  readonly tickEvery = TIMER_GAME_TICKS;
   readonly capacity = TT_SEATS;
   seats: Seat[];
   round!: ThreeThirteenRound;
@@ -321,7 +321,7 @@ export class ThreeThirteenGame implements ServerGame {
         };
       }),
       cards: mine ? [...mine] : [],
-      plan: mine ? bestMelds(mine, r.round) : null,
+      plan: mine ? r.plan(mine) : null,
       turn: playing ? r.turn : null,
       step: r.step,
       stock: r.stock.length,

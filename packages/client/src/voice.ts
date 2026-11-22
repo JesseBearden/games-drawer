@@ -446,9 +446,13 @@ export class Voice {
 
   // ---------------------------------------------------------------- levels
 
+  private samples: Float32Array<ArrayBuffer> | null = null;
+
   private level(a: AnalyserNode | null): number {
     if (!a) return 0;
-    const buf = new Float32Array(a.fftSize);
+    // One buffer for every meter (they run 16 times a second, for hours).
+    if (this.samples?.length !== a.fftSize) this.samples = new Float32Array(a.fftSize);
+    const buf = this.samples;
     a.getFloatTimeDomainData(buf);
     let sum = 0;
     for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];

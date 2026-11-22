@@ -29,7 +29,7 @@ import {
 } from '@tank/shared';
 import { loupeZoom } from './loupe';
 import { getSession } from './net';
-import { colorCss, escapeHtml } from './state';
+import { colorCss, escapeHtml } from './html';
 import type { SafariGesture, ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -214,6 +214,18 @@ interface TableLook {
   pattern: CanvasPattern | null;
 }
 
+/** A held group this big or smaller casts the picked-up shadow (as many of its pieces as show). */
+const HELD_SHADOW_PIECES = 40;
+/**
+ * The most canvas pixels the picked-up shadow may keep (iPhones limit canvas memory). Past it (a
+ * big group, zoomed far in) the shadow is blurred as it's drawn, every frame.
+ */
+const HELD_SHADOW_PX = 8_000_000;
+
+/** Your pointer goes to the others at most this often, and only after moving this many screen pixels. */
+const CURSOR_SEND_MS = 120;
+const CURSOR_SEND_PX = 4;
+
 export class JigsawTable implements View {
   readonly landscape = false;
   readonly helpHtml =
@@ -301,7 +313,23 @@ export class JigsawTable implements View {
   /** Where the mouse or trackpad pointer last was over the board (a pinch zooms around it). */
   private hoverAt: { x: number; y: number } | null = null;
   private lastDragSent = 0;
+  private dragSentAt: Pt | null = null;
   private lastCursorSent = 0;
+  private cursorSentAt: Pt | null = null;
+  /** Where the pointer is now, waiting its turn to be sent. */
+  private cursorNext: { clientX: number; clientY: number } | null = null;
+  private cursorSendTimer: number | undefined;
+  private cursorRaf = 0;
+  /** The colours held pieces are outlined in: the table only redraws for members when they change. */
+  private heldColors = '';
+  /** Where things are on screen, measured again only when one of them changes size. */
+  private boxes: { hud: { top: number; bottom: number; side: number }; felt: Pt } | null = null;
+  private boxObserver = new ResizeObserver(() => (this.boxes = null));
+  /**
+   * The held group's picked-up shadow, already blurred: one for the table and one for the
+   * magnifier (it has its own zoom). `at` is its corner, measured from the group's `first` piece.
+   */
+  private heldShadows = new Map<CanvasRenderingContext2D, { key: string; canvas: HTMLCanvasElement; first: number; at: Pt }>();
   /** Where the dragging finger (or mouse) is, for scrolling while it holds still at an edge. */
   private dragPointer: { clientX: number; clientY: number } | null = null;
   private edgeRaf = 0;
@@ -347,6 +375,9 @@ export class JigsawTable implements View {
     this.canvas.addEventListener('gestureend', this.onGestureEnd);
     this.observer = new ResizeObserver(() => this.resizeCanvas());
     this.observer.observe(this.canvas);
+    for (const el of [this.canvas.closest('#game'), this.el.querySelector('.pz-status'), this.el.querySelector('.pz-tools')]) {
+      if (el) this.boxObserver.observe(el);
+    }
     shell.sfx.preloadSounds(CARD_SOUNDS);
     // Pictures that live only on this computer (the git-ignored local-puzzles folder, served by
     // the dev server). A real build drops this whole block, so the hosted site never asks.
@@ -436,7 +467,7 @@ export class JigsawTable implements View {
       }
       case 'pz-cursor':
         this.cursors.set(m.by, { x: m.x, y: m.y, at: performance.now() });
-        this.invalidate();
+        this.scheduleCursors();
         return;
       case 'pz-saves': {
         // Puzzles that no longer exist (nothing placed, or not played for 30 days) leave the list,
@@ -460,7 +491,13 @@ export class JigsawTable implements View {
   }
 
   onMembers() {
-    this.invalidate();
+    // Pointers are page elements; the table itself only shows people in held pieces' outlines.
+    const members = this.shell.members();
+    const colors = [...this.held.values()].map((by) => members.find((m) => m.id === by)?.color ?? 0).join();
+    if (colors !== this.heldColors) {
+      this.heldColors = colors;
+      this.invalidate();
+    } else this.scheduleCursors();
   }
 
   onSpeaking(aliases: Set<string>) {
@@ -471,7 +508,7 @@ export class JigsawTable implements View {
       if (c && !aliases.has(alias)) c.at = now;
     }
     this.speaking = aliases;
-    this.invalidate();
+    this.scheduleCursors();
   }
 
   resize() {
@@ -485,6 +522,7 @@ export class JigsawTable implements View {
     const play = this.el.querySelector('.pz-play') as HTMLElement;
     setup.hidden = this.phase !== 'setup';
     play.hidden = this.phase === 'setup';
+    this.boxes = null;
     this.el.dataset.phase = this.phase;
     if (this.phase === 'setup') {
       // Opening the setup screen deals the pictures out in a new order (see setupBuilt).
@@ -830,6 +868,7 @@ export class JigsawTable implements View {
   // ------------------------------------------------------------------ camera
 
   private resizeCanvas() {
+    this.boxes = null;
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
@@ -855,12 +894,23 @@ export class JigsawTable implements View {
    * (the strip wraps onto two rows on phones), plus a little air. HUD is the least it allows.
    */
   private hud() {
+    return this.measure().hud;
+  }
+
+  /** The hud, and how far the canvas sits from the game's corner (for the cloth). */
+  private measure() {
+    if (this.boxes) return this.boxes;
     const c = this.canvas.getBoundingClientRect();
+    const game = this.canvas.closest('#game')?.getBoundingClientRect();
+    const felt: Pt = game ? [c.left - game.left, c.top - game.top] : [0, 0];
     const status = this.el.querySelector('.pz-status')?.getBoundingClientRect();
     const tools = this.el.querySelector('.pz-tools')?.getBoundingClientRect();
     const top = status?.height ? Math.max(HUD.top, status.bottom - c.top + 10) : HUD.top;
     const bottom = tools?.height ? Math.max(HUD.bottom, c.bottom - tools.top + 10) : HUD.bottom;
-    return { top, bottom, side: HUD.side };
+    const boxes = { hud: { top, bottom, side: HUD.side }, felt };
+    // (Not on screen yet: nothing worth remembering.)
+    if (c.width) this.boxes = boxes;
+    return boxes;
   }
 
   /** The zoom that shows the whole table between the status tag and the tools. */
@@ -945,6 +995,15 @@ export class JigsawTable implements View {
 
   // ------------------------------------------------------------------ drawing
 
+  /** Move the pointers without redrawing the table. (A redraw that's coming moves them anyway.) */
+  private scheduleCursors() {
+    if (this.raf || this.cursorRaf) return;
+    this.cursorRaf = requestAnimationFrame(() => {
+      this.cursorRaf = 0;
+      this.placeCursors();
+    });
+  }
+
   private invalidate() {
     if (this.raf) return;
     this.raf = requestAnimationFrame(() => {
@@ -969,11 +1028,10 @@ export class JigsawTable implements View {
       this.feltKey = '';
       return;
     }
-    const g = game.getBoundingClientRect();
-    const c = this.canvas.getBoundingClientRect();
+    const [left, top] = this.measure().felt;
     const zoom = this.cam.s / this.fitScale();
-    const x = c.left - g.left - this.cam.x * this.cam.s;
-    const y = c.top - g.top - this.cam.y * this.cam.s;
+    const x = left - this.cam.x * this.cam.s;
+    const y = top - this.cam.y * this.cam.s;
     const key = `${zoom.toFixed(4)} ${x.toFixed(1)} ${y.toFixed(1)}`;
     if (key === this.feltKey) return;
     this.feltKey = key;
@@ -1022,6 +1080,7 @@ export class JigsawTable implements View {
     const dpr = this.canvas.width / Math.max(1, this.canvas.clientWidth);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (!this.dragging) this.freeHeldShadows();
     this.drawLoupe(dpr);
     this.placeCursors();
     if (!s || this.phase === 'setup') {
@@ -1149,17 +1208,8 @@ export class JigsawTable implements View {
       if (!list?.length) continue;
       // The piece in your hand casts a soft shadow, so it looks picked up. (Shadows first, then
       // the pieces, so a group's shadows don't fall across its own seams.)
-      if (this.dragging?.g === g && list.length <= 40) {
-        ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-        ctx.shadowBlur = 14 * dpr;
-        ctx.shadowOffsetY = 6 * dpr;
-        for (const i of list) {
-          const p = s.pieces[i];
-          const a = this.art[i];
-          ctx.drawImage(a.canvas, p.x - this.pad, p.y - this.pad, a.w, a.h);
-        }
-        ctx.restore();
+      if (this.dragging?.g === g && list.length <= HELD_SHADOW_PIECES) {
+        this.drawHeldShadow(ctx, g, list, zoom * dpr, dpr);
       } else if (!locked.has(g)) {
         // Loose pieces cast a small shadow on the felt (pieces locked into the frame lie flat in it).
         for (const i of list) {
@@ -1217,6 +1267,75 @@ export class JigsawTable implements View {
     const cy = fy - LOUPE_GAP - r;
     const p = s.pieces[d.piece];
     return { cx, cy, r, bx: p.x + pw / 2, by: p.y + ph / 2, zoom };
+  }
+
+  /**
+   * The soft shadow under what's in your hand. Blurring is the costly part, so it's done once, as
+   * it's picked up, and that picture then moves with the group (its pieces can't move among
+   * themselves while held). It's blurred again only if the zoom changes, or, for a group too big
+   * to keep whole, as pieces come on or off the screen. `k` is canvas pixels per board unit.
+   */
+  private drawHeldShadow(ctx: CanvasRenderingContext2D, g: number, showing: number[], k: number, dpr: number) {
+    const all = this.groups.get(g)!;
+    // Far enough out for the blur (3 sigma, 21) and the drop (6).
+    const margin = 32 * dpr;
+    const bounds = (pieces: number[]) => {
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      for (const i of pieces) {
+        const x = this.state!.pieces[i].x - this.pad;
+        const y = this.state!.pieces[i].y - this.pad;
+        x0 = Math.min(x0, x);
+        y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x + this.art[i].w);
+        y1 = Math.max(y1, y + this.art[i].h);
+      }
+      const w = Math.ceil((x1 - x0) * k + margin * 2);
+      const h = Math.ceil((y1 - y0) * k + margin * 2);
+      return { pieces, x: x0 - margin / k, y: y0 - margin / k, w, h, fits: w * h <= HELD_SHADOW_PX };
+    };
+    let box = bounds(all.length <= HELD_SHADOW_PIECES ? all : showing);
+    if (!box.fits && box.pieces !== showing) box = bounds(showing);
+    if (!box.fits) return this.paintHeldShadow(ctx, showing, dpr);
+
+    const key = `${g} ${k} ${dpr} ${box.pieces.join()}`;
+    let kept = this.heldShadows.get(ctx);
+    if (kept?.key !== key) {
+      const canvas = kept?.canvas ?? document.createElement('canvas');
+      canvas.width = box.w; // (also wipes it)
+      canvas.height = box.h;
+      const c = canvas.getContext('2d');
+      // (Out of canvas memory.)
+      if (!c) return this.paintHeldShadow(ctx, showing, dpr);
+      c.setTransform(k, 0, 0, k, -box.x * k, -box.y * k);
+      this.paintHeldShadow(c, box.pieces, dpr);
+      const first = this.state!.pieces[box.pieces[0]];
+      kept = { key, canvas, first: box.pieces[0], at: [box.x - first.x, box.y - first.y] };
+      this.heldShadows.set(ctx, kept);
+    }
+    const p = this.state!.pieces[kept.first];
+    ctx.drawImage(kept.canvas, p.x + kept.at[0], p.y + kept.at[1], kept.canvas.width / k, kept.canvas.height / k);
+  }
+
+  private paintHeldShadow(ctx: CanvasRenderingContext2D, pieces: number[], dpr: number) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = 14 * dpr;
+    ctx.shadowOffsetY = 6 * dpr;
+    for (const i of pieces) {
+      const p = this.state!.pieces[i];
+      const a = this.art[i];
+      ctx.drawImage(a.canvas, p.x - this.pad, p.y - this.pad, a.w, a.h);
+    }
+    ctx.restore();
+  }
+
+  private freeHeldShadows() {
+    // (Emptied, not just dropped: Safari is slow to give canvas memory back.)
+    for (const { canvas } of this.heldShadows.values()) canvas.width = canvas.height = 0;
+    this.heldShadows.clear();
   }
 
   private drawLoupe(dpr: number) {
@@ -1379,12 +1498,43 @@ export class JigsawTable implements View {
       this.clampCam();
       this.invalidate();
     }
-    if (now - this.lastCursorSent > 120 && this.phase === 'playing') {
-      this.lastCursorSent = now;
-      const [bx, by] = this.toBoard(e);
-      this.shell.sendGame({ t: 'pz-cursor', x: bx, y: by });
-    }
+    if (this.phase === 'playing') this.pointAt(e);
   };
+
+  /** Nobody else at the table to show pointers and drags to. */
+  private alone() {
+    const me = this.shell.alias;
+    return !this.shell.members().some((m) => m.id !== me && m.connected);
+  }
+
+  /** Tell the others where your pointer is: not too often, not for a twitch, always where it stopped. */
+  private pointAt(e: { clientX: number; clientY: number }) {
+    if (this.alone()) {
+      // Nobody to show. Moving it still counts as being here (which keeps the table open).
+      this.shell.stillHere();
+      return;
+    }
+    this.cursorNext = { clientX: e.clientX, clientY: e.clientY };
+    if (this.cursorSendTimer !== undefined) return;
+    const wait = this.lastCursorSent + CURSOR_SEND_MS - performance.now();
+    if (wait <= 0) this.sendCursor();
+    else this.cursorSendTimer = window.setTimeout(() => this.sendCursor(), wait);
+  }
+
+  private sendCursor() {
+    clearTimeout(this.cursorSendTimer);
+    this.cursorSendTimer = undefined;
+    const at = this.cursorNext;
+    this.cursorNext = null;
+    // (While dragging, your pointer rides along with the piece.)
+    if (!at || this.dragging || this.phase !== 'playing') return;
+    const [x, y] = this.toBoard(at);
+    const was = this.cursorSentAt;
+    if (was && Math.hypot(x - was[0], y - was[1]) * this.cam.s < CURSOR_SEND_PX) return;
+    this.lastCursorSent = performance.now();
+    this.cursorSentAt = [x, y];
+    this.shell.sendGame({ t: 'pz-cursor', x, y });
+  }
 
   /**
    * How far to lift a piece picked up by a finger: enough that its bottom (tabs and all) sits
@@ -1422,8 +1572,11 @@ export class JigsawTable implements View {
     const p = this.state.pieces[d.piece];
     this.moveGroup(d.g, bx - d.offX - p.x, by - d.offY - p.y);
     const now = performance.now();
-    if (now - this.lastDragSent > 66) {
+    const was = this.dragSentAt;
+    // (Alone, the drop says where it ended up. And holding still says nothing new.)
+    if (now - this.lastDragSent > 66 && (!was || was[0] !== p.x || was[1] !== p.y) && !this.alone()) {
       this.lastDragSent = now;
+      this.dragSentAt = [p.x, p.y];
       this.shell.sendGame({ t: 'pz-drag', x: p.x, y: p.y });
     }
     this.invalidate();
@@ -1485,6 +1638,8 @@ export class JigsawTable implements View {
       const p = this.state.pieces[this.dragging.piece];
       // The server answers with where it ended up (snapped to neighbours if it fits).
       this.shell.sendGame({ t: 'pz-drop', x: p.x, y: p.y });
+      this.dragSentAt = null;
+      this.cursorSentAt = null; // theirs followed the piece: the next move is news
     }
     this.stopEdgeScroll();
     if (this.dragging) this.invalidate(); // the magnifier and the shadow go away
@@ -1650,6 +1805,10 @@ export class JigsawTable implements View {
   }
 
   dispose() {
+    this.freeHeldShadows();
+    this.boxObserver.disconnect();
+    clearTimeout(this.cursorSendTimer);
+    cancelAnimationFrame(this.cursorRaf);
     cancelAnimationFrame(this.raf);
     clearTimeout(this.cursorTimer);
     this.cursorEls.clear();

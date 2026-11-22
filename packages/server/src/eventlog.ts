@@ -21,16 +21,17 @@ const LOG_FILE = /^[a-z]+-(\d{4}-\d{2}-\d{2})\.jsonl$/;
  * Delete log files whose day is more than `keepDays` days before `now`, in each folder and the
  * folders directly inside it (on AWS, one per box on the shared disk, so a replaced box's logs go
  * too). Folders left empty go as well, except `keepDir` (the one this server is writing to).
- * Returns how many files were deleted. Never throws: a file another box deleted first is fine.
+ * Resolves to how many files were deleted. Never rejects: a file another box deleted first is fine.
+ * (Async: the folders are on the shared disk, which mustn't hold up the games.)
  */
-export function pruneLogs(dirs: string[], opts: { now?: number; keepDays?: number; keepDir?: string } = {}): number {
+export async function pruneLogs(dirs: string[], opts: { now?: number; keepDays?: number; keepDir?: string } = {}): Promise<number> {
   const cutoff = new Date((opts.now ?? Date.now()) - (opts.keepDays ?? LOG_KEEP_DAYS) * 86_400_000).toISOString().slice(0, 10);
   const keep = opts.keepDir ? path.resolve(opts.keepDir) : null;
   const folders = new Set<string>();
   for (const dir of dirs) {
     folders.add(path.resolve(dir));
     try {
-      for (const d of fs.readdirSync(dir, { withFileTypes: true })) if (d.isDirectory()) folders.add(path.resolve(dir, d.name));
+      for (const d of await fs.promises.readdir(dir, { withFileTypes: true })) if (d.isDirectory()) folders.add(path.resolve(dir, d.name));
     } catch {
       /* no such folder yet */
     }
@@ -39,7 +40,7 @@ export function pruneLogs(dirs: string[], opts: { now?: number; keepDays?: numbe
   for (const folder of folders) {
     let names: string[];
     try {
-      names = fs.readdirSync(folder);
+      names = await fs.promises.readdir(folder);
     } catch {
       continue;
     }
@@ -47,7 +48,7 @@ export function pruneLogs(dirs: string[], opts: { now?: number; keepDays?: numbe
       const day = LOG_FILE.exec(name)?.[1];
       if (!day || day >= cutoff) continue;
       try {
-        fs.rmSync(path.join(folder, name), { force: true });
+        await fs.promises.rm(path.join(folder, name), { force: true });
         deleted++;
       } catch {
         /* gone already, or busy: next time */
@@ -55,7 +56,7 @@ export function pruneLogs(dirs: string[], opts: { now?: number; keepDays?: numbe
     }
     if (folder !== keep && !dirs.some((d) => path.resolve(d) === folder)) {
       try {
-        if (fs.readdirSync(folder).length === 0) fs.rmdirSync(folder);
+        if ((await fs.promises.readdir(folder)).length === 0) await fs.promises.rmdir(folder);
       } catch {
         /* not empty after all, or gone */
       }

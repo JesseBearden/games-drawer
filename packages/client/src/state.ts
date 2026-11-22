@@ -4,7 +4,8 @@ import {
   generateTerrain,
   perks,
   PHASES,
-  TANK_COLORS,
+  sameDyn,
+  STILL_STATE_TICKS,
   Terrain,
   type GameConfig,
   type GameEvent,
@@ -15,6 +16,7 @@ import {
   type TankPhase,
 } from '@tank/shared';
 import type { PlayOptions, SoundName } from './audio';
+import { colorCss, escapeHtml } from './html';
 import { TerrainRenderer } from './terrainRenderer';
 
 /** The tank game's start-up message: config plus a full snapshot. */
@@ -109,6 +111,12 @@ export class GameState {
   private snapshotTick: number;
   latencyMs = 0;
   private nukeStarted = false;
+  private lastDyn: TankInit['snapshot']['dyn'];
+  /**
+   * The last state was a repeat of the one before, with nothing in the air. The server then sends
+   * one only every STILL_STATE_TICKS, so time may run that far past the newest one.
+   */
+  private still = false;
   /** Tanks whose players are talking in voice chat right now (set by the voice module). */
   speaking = new Set<number>();
   /** Touch-screen player (set by the app); changes control hints. */
@@ -129,6 +137,7 @@ export class GameState {
     this.wind = snap.wind;
     this.match = snap.match;
     for (const info of snap.tanks) this.tanks.set(info.id, newTank(info));
+    this.lastDyn = snap.dyn;
     this.applyDyn(snap.tick, snap.dyn);
     this.applyHelis(snap.tick, snap.helis);
     for (const s of snap.shells) {
@@ -150,6 +159,8 @@ export class GameState {
     switch (msg.t) {
       case 'state':
         this.observeTick(msg.tick);
+        this.still = !msg.helis.length && sameDyn(msg.dyn, this.lastDyn);
+        this.lastDyn = msg.dyn;
         this.applyDyn(msg.tick, msg.dyn);
         this.applyHelis(msg.tick, msg.helis);
         return;
@@ -186,6 +197,10 @@ export class GameState {
     for (const [id, x, y, angle, phase, tilt] of dyn) {
       const t = this.tanks.get(id);
       if (!t) continue;
+      // States left out were repeats: it stood where it was until a state ago, not sliding here all along.
+      const last = t.samples.at(-1);
+      const before = tick - this.cfg.stateEvery;
+      if (last && before > last.tick) t.samples.push({ ...last, tick: before });
       t.samples.push({ tick, x, y, angle, phase: PHASES[phase], tilt });
       if (t.samples.length > 40) t.samples.splice(0, t.samples.length - 40);
     }
@@ -214,7 +229,9 @@ export class GameState {
     // Ease render time toward its target so clock corrections never jump.
     const step = target - this.renderTick;
     this.renderTick += Math.abs(step) > 20 ? step : step * 0.2 + 0;
-    if (this.renderTick > this.serverTick) this.renderTick = this.serverTick;
+    const quiet = this.still && !this.shells.size && !this.queue.length && this.match.state !== 'won';
+    const newest = this.serverTick + (quiet ? STILL_STATE_TICKS : 0);
+    if (this.renderTick > newest) this.renderTick = newest;
     const rt = this.renderTick;
 
     this.queue.sort((a, b) => a.tick - b.tick);
@@ -440,14 +457,6 @@ export class GameState {
     }
     this.effects.push({ kind: 'debris', parts, t0: now, dur: 1100 });
   }
-}
-
-export function colorCss(i: number) {
-  return TANK_COLORS[i]?.css ?? '#fff';
-}
-
-export function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
 function newTank(info: TankInfo): ClientTank {

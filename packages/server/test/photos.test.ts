@@ -270,7 +270,8 @@ describe('your own photos at a table', () => {
   it('a puzzle of a photo is never saved, and says so when put away', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-photos-'));
     try {
-      const t = await table({ deps: { puzzles: new PuzzleStore(dir) } });
+      const store = new PuzzleStore(dir);
+      const t = await table({ deps: { puzzles: store } });
       const { image } = (await t.upload(await photo(900, 600))).body;
       t.send('b', { t: 'pz-new', image, pieces: 20 });
       const s = t.game.state!;
@@ -283,9 +284,11 @@ describe('your own photos at a table', () => {
         t.clock.now += 50;
         t.mgr.stepAll();
       }
+      await store.flush();
       expect(fs.readdirSync(dir)).toEqual([]);
       t.send('b', { t: 'pz-setup' });
       expect(chats(t.a.conn).at(-1)).toBe("bbbb put the puzzle away. Puzzles of your own photos aren't saved.");
+      await store.flush();
       expect(fs.readdirSync(dir)).toEqual([]);
       // A photo the table doesn't have can't be puzzled.
       t.send('b', { t: 'pz-new', image: 'photo-AAAAAAAAAAAAAAAAAAAAAA', pieces: 20 });
@@ -347,7 +350,8 @@ describe('finished puzzles', () => {
   it('are deleted from disk once the table finishes one', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-done-'));
     try {
-      const t = await table({ deps: { puzzles: new PuzzleStore(dir) } });
+      const store = new PuzzleStore(dir);
+      const t = await table({ deps: { puzzles: store } });
       t.send('a', { t: 'pz-new', image: 'dog', pieces: 6 });
       const s = t.game.state!;
       const pw = s.width / s.cols;
@@ -361,9 +365,11 @@ describe('finished puzzles', () => {
         t.clock.now += 50;
         t.mgr.stepAll();
       }
+      await store.flush();
       expect(fs.readdirSync(dir)).toEqual([`${s.id}.json`]);
       for (let i = 1; i < s.pieces.length; i++) place(i);
       expect(t.game.phase).toBe('done');
+      await store.flush();
       expect(fs.readdirSync(dir)).toEqual([]);
       t.send('a', { t: 'pz-setup' });
       expect(chats(t.a.conn).at(-1)).toBe('aaaa put the finished puzzle away.');
@@ -372,7 +378,7 @@ describe('finished puzzles', () => {
     }
   });
 
-  it('old finished saves are swept away', () => {
+  it('old finished saves are swept away', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-done-'));
     try {
       const store = new PuzzleStore(dir);
@@ -393,8 +399,9 @@ describe('finished puzzles', () => {
         doneAt: Date.now(),
       };
       store.save(s);
+      await store.flush();
       expect(fs.readdirSync(dir)).toHaveLength(1);
-      store.sweep(Date.now());
+      await store.sweep(Date.now());
       expect(fs.readdirSync(dir)).toHaveLength(0);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

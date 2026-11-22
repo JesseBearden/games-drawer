@@ -261,6 +261,21 @@ body *::after {
 #game .dm-mine.raised svg {
   filter: drop-shadow(0 3px 0 #d3c9b9) drop-shadow(0 6px 5px rgb(var(--shade) / 0.4)) drop-shadow(0 14px 16px rgb(var(--shade) / 0.25));
 }
+/* The cloth's zoom and position belong to #game alone. Not inherited, so moving the cloth (every
+   frame of a pan or pinch) restyles that one element, not everything inside it, chat and all. */
+@property --felt-zoom {
+  syntax: '*';
+  inherits: false;
+}
+@property --felt-x {
+  syntax: '*';
+  inherits: false;
+}
+@property --felt-y {
+  syntax: '*';
+  inherits: false;
+}
+
 /* The green card table, for every card and tile game (the user, 2026-11-20). */
 #game[data-view='dominoes'],
 #game[data-view='threethirteen'],

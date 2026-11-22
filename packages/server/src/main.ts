@@ -70,7 +70,7 @@ const log = new FileLog(logDir);
 const adminLogDirs = env.ADMIN_LOG_DIRS ? env.ADMIN_LOG_DIRS.split(',').map((s) => s.trim()).filter(Boolean) : [logDir];
 // Logs are kept LOG_KEEP_DAYS (30) days: older ones go now and every 6 hours, from every box's
 // folder (a replaced box's too). The privacy page promises this.
-const pruneOldLogs = () => pruneLogs([...new Set([logDir, ...adminLogDirs])], { keepDir: logDir });
+const pruneOldLogs = () => void pruneLogs([...new Set([logDir, ...adminLogDirs])], { keepDir: logDir });
 pruneOldLogs();
 setInterval(pruneOldLogs, 6 * 3_600_000).unref();
 const adminPasswordHash = env.ADMIN_PASSWORD_HASH?.trim() || undefined;

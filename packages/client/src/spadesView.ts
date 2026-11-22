@@ -1,8 +1,9 @@
 import { CARD_SOUNDS } from './audio';
 import { suitOf, type Card, type GameServerMessage, type SpadesView } from '@tank/shared';
-import { cardHtml, fitSeatText, scoreSheetHtml, seatNameHtml, showHand } from './heartsView';
+import { patchHtml } from './dom';
+import { fitSeatText, scoreSheetHtml, seatNameHtml, showHand, showTrick } from './heartsView';
 import { suitSvg, SUIT_NAME, type Suit } from './paperArt';
-import { escapeHtml } from './state';
+import { escapeHtml } from './html';
 import { focusForPad, type PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
 
@@ -158,32 +159,31 @@ export class SpadesTable implements View {
     const q = <T extends HTMLElement>(sel: string) => this.el.querySelector(sel) as T;
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
+    let tagsChanged = false;
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
       const bid = s.bid === null ? (v.phase === 'bidding' ? '<span class="sp-bid pending">Bidding…</span>' : '') : `<span class="sp-bid${s.bid === 0 ? ' nil' : ''}">${s.bid === 0 ? 'Nil' : `Bid ${s.bid}`}</span>`;
       const won = v.phase === 'playing' || v.phase === 'handEnd' ? ` · ${s.tricks} won` : '';
-      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
-        <div class="ht-score">${bid}${won}</div>`;
+      const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
+        <div class="ht-score">${bid}${won}</div>`);
+      tagsChanged ||= changed;
       el.classList.toggle('turn', v.turn === seat);
       el.classList.toggle('sp-us', s.team === this.myTeam());
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
-    fitSeatText(this.el);
+    if (tagsChanged) fitSeatText(this.el);
 
     // Team scores, with this hand's bid and tricks once bidding is done.
     const us = v.teams[this.myTeam()];
     const them = v.teams[1 - this.myTeam()];
     const line = (label: string, t: (typeof v.teams)[number]) =>
       `<span><b>${label} ${t.score}</b>${v.phase === 'playing' ? ` <small>${t.tricks} of ${t.bid} tricks</small>` : ''}${t.bags ? ` <small>${t.bags} bag${t.bags === 1 ? '' : 's'}</small>` : ''}</span>`;
-    q<HTMLElement>('.sp-score').innerHTML = `${line('Us', us)}${line('Them', them)}`;
+    patchHtml(q<HTMLElement>('.sp-score'), `${line('Us', us)}${line('Them', them)}`);
 
-    for (let p = 0; p < 4; p++) q<HTMLElement>(`.ht-slot-${p}`).innerHTML = '';
-    for (const t of v.trick) {
-      q<HTMLElement>(`.ht-slot-${this.pos(t.seat)}`).innerHTML = cardHtml(t.card, `played ${v.trickWinner === t.seat ? 'winner' : ''}`);
-    }
+    showTrick(this.el, v.trick, v.trickWinner, (seat) => this.pos(seat));
     q<HTMLElement>('.ht-trick').dataset.taker = v.trickWinner !== null ? String(this.pos(v.trickWinner)) : '';
 
     // Bidding: my turn shows the picker; the hint says what partner bid.
@@ -194,7 +194,7 @@ export class SpadesTable implements View {
       const partnerBid = v.seats[(v.seat! + 2) % 4].bid;
       let html = '';
       for (let n = 0; n <= 13; n++) html += `<button class="pc-btn ${n === 0 ? 'pc-btn-plain' : 'pc-btn-main'}" type="button" data-bid="${n}"${this.pending ? ' disabled' : ''}>${n === 0 ? 'Nil' : n}</button>`;
-      bids.innerHTML = html;
+      patchHtml(bids, html);
       bids.dataset.partner = partnerBid === null ? '' : partnerBid === 0 ? 'Partner bid nil' : `Partner bid ${partnerBid}`;
     }
 
@@ -211,7 +211,7 @@ export class SpadesTable implements View {
       else if (v.turn !== null) text = `<span class="pc-nw">${escapeHtml(this.name(v.turn))}</span>'s turn`;
       if (v.spadesBroken) text += ` <span class="ht-broken">${suitSvg('S')} broken</span>`;
     } else if (v.phase === 'handEnd') text = 'Next hand coming up…';
-    q<HTMLElement>('.ht-status').innerHTML = text;
+    patchHtml(q<HTMLElement>('.ht-status'), text);
 
     this.renderHand();
     this.renderOverlay();
@@ -291,7 +291,7 @@ export class SpadesTable implements View {
       html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }
     html += '</div></div>';
-    box.innerHTML = html;
+    patchHtml(box, html);
   }
 
   private sounds(prev: SpadesView | null, v: SpadesView) {

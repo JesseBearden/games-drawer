@@ -2,7 +2,8 @@ import { CARD_SOUNDS } from './audio';
 import { DOMINOES_RULES, type DominoesView, type GameServerMessage, type Move, type TileId } from '@tank/shared';
 import { bounds, ghostSpot, layoutSpots, limitsFor, tileSvg, type TileSpot } from './dominoLayout';
 import { focusForPad, type PadPress } from './gamepad';
-import { escapeHtml } from './state';
+import { patchHtml, syncKeyed, type KeyedItem } from './dom';
+import { escapeHtml } from './html';
 import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml, seatRows } from './heartsView';
 import type { SafariGesture, ShellApi, View } from './views';
 
@@ -143,17 +144,19 @@ export class DominoesTable implements View {
     const q = <T extends HTMLElement>(sel: string) => this.el.querySelector(sel) as T;
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
+    let tagsChanged = false;
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
-      el.innerHTML = `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
-        <div class="ht-score"><i>${s.score} pts ·</i> <i>${s.tiles} tile${s.tiles === 1 ? '' : 's'}</i></div>`;
+      const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
+        <div class="ht-score"><i>${s.score} pts ·</i> <i>${s.tiles} tile${s.tiles === 1 ? '' : 's'}</i></div>`);
+      tagsChanged ||= changed;
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
-    this.fitSeats();
+    if (tagsChanged) this.fitSeats();
 
     const myTurn = v.phase === 'playing' && v.turn === v.seat && v.seat !== null;
     let text = '';
@@ -166,7 +169,7 @@ export class DominoesTable implements View {
       text = `Hand ${v.hand} is over.`;
       if (v.seat !== null && waiting.length === 1 && waiting[0] === v.seat) text += ' Everyone else is ready.';
     } else if (v.phase === 'gameOver') text = 'Game over.';
-    q<HTMLElement>('.ht-status').innerHTML = text;
+    patchHtml(q<HTMLElement>('.ht-status'), text);
     // With every tile dealt there's no boneyard to mention.
     q<HTMLElement>('.dm-info').textContent = v.phase === 'playing' ? `Ends add up to ${v.count}${v.boneyard ? ` · Boneyard: ${v.boneyard}` : ''}` : '';
 
@@ -190,13 +193,24 @@ export class DominoesTable implements View {
     const v = this.view!;
     const hand = this.el.querySelector('.dm-hand') as HTMLElement;
     hand.classList.toggle('my-turn', myTurn);
-    hand.innerHTML = `<div class="dm-hand-tiles">${v.tiles
-      .map((t) => {
+    let row = hand.querySelector<HTMLElement>('.dm-hand-tiles');
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'dm-hand-tiles';
+      hand.append(row);
+    }
+    syncKeyed(
+      row,
+      v.tiles.map((t) => {
         const playable = v.moves.some((m) => m.tile === t);
         const cls = ['dm-tile', 'dm-mine', myTurn ? (playable ? 'legal' : 'illegal') : '', this.selected === t ? 'raised' : '', this.cursor === t ? 'pad-cursor' : ''].filter(Boolean).join(' ');
-        return `<button type="button" class="${cls}" data-tile="${t}" aria-label="${t[0]} and ${t[2]}">${tileSvg(Number(t[0]), Number(t[2]), false)}</button>`;
-      })
-      .join('')}</div>`;
+        return {
+          key: t,
+          className: cls,
+          make: () => `<button type="button" data-tile="${t}" aria-label="${t[0]} and ${t[2]}">${tileSvg(Number(t[0]), Number(t[2]), false)}</button>`,
+        };
+      }),
+    );
   }
 
   /** Lay the board out to fit the space it has, with glowing spots for the selected tile. */
@@ -233,15 +247,23 @@ export class DominoesTable implements View {
     // under the tile below it, as if they lay flat side by side. In play order, a line growing
     // up drew each new tile over the last one, shadow and all (user, 2026-11-20).
     const byRow = [...spots].sort((a, b) => a.y - b.y || a.x - b.x);
-    let html = byRow.map((s) => `<div class="dm-tile dm-placed${s.tile === last ? ' dm-last' : ''}" style="${placeStyle(s)}">${tileSvg(s.first, s.second, s.horizontal)}</div>`).join('');
-    html += ghosts
-      .map(
-        (g, i) =>
-          `<button type="button" class="dm-ghost${g.spot.horizontal ? ' h' : ''}${i === this.ghostIndex ? ' pad-cursor' : ''}" style="${placeStyle(g.spot)}" data-arm="${g.move.arm}" aria-label="Play here">${tileSvg(g.spot.first, g.spot.second, g.spot.horizontal)}</button>`,
-      )
-      .join('');
-    if (!spots.length && !ghosts.length) html = '<p class="dm-empty">The first tile goes here.</p>';
-    (board.querySelector('.dm-layout') as HTMLElement).innerHTML = html;
+    const items: KeyedItem[] = byRow.map((s) => ({
+      // (Keyed by how it lies too: the board re-folds when its space changes.)
+      key: `${s.tile} ${s.first} ${s.second} ${s.horizontal}`,
+      className: `dm-tile dm-placed${s.tile === last ? ' dm-last' : ''}`,
+      style: placeStyle(s),
+      make: () => `<div>${tileSvg(s.first, s.second, s.horizontal)}</div>`,
+    }));
+    ghosts.forEach((g, i) =>
+      items.push({
+        key: `spot ${g.move.arm} ${g.spot.first} ${g.spot.second} ${g.spot.horizontal}`,
+        className: `dm-ghost${g.spot.horizontal ? ' h' : ''}${i === this.ghostIndex ? ' pad-cursor' : ''}`,
+        style: placeStyle(g.spot),
+        make: () => `<button type="button" data-arm="${g.move.arm}" aria-label="Play here">${tileSvg(g.spot.first, g.spot.second, g.spot.horizontal)}</button>`,
+      }),
+    );
+    if (!items.length) items.push({ key: 'empty', className: 'dm-empty', make: () => '<p>The first tile goes here.</p>' });
+    syncKeyed(board.querySelector('.dm-layout')!, items);
     this.applyZoom();
     this.revealSpots(board);
   }
@@ -504,7 +526,7 @@ export class DominoesTable implements View {
       html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }
     html += '</div></div>';
-    box.innerHTML = html;
+    patchHtml(box, html);
     fitScoreTable(box);
   }
 

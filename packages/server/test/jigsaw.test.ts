@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 import { PIECE_COUNTS, PUZZLE_IMAGES, Rng, tableBounds, type ServerMessage, type GameId } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
@@ -88,14 +88,17 @@ function started(over: Partial<RoomDeps> = {}) {
   return { ...r, s, pw: s.width / s.cols, ph: s.height / s.rows };
 }
 
-function withDir(fn: (dir: string) => void) {
+async function withDir(fn: (dir: string) => Promise<void>) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-puzzles-'));
   try {
-    fn(dir);
+    await fn(dir);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
+
+/** The table's answer to "which saves are left?" comes once the disk has been read. */
+const savesAnswers = (c: FakeConn, n: number) => vi.waitFor(() => expect(pz(c, 'pz-saves')).toHaveLength(n));
 
 describe('jigsaw in a room', () => {
   it('starts on the picker, then deals a puzzle with every piece off the frame', () => {
@@ -145,7 +148,7 @@ describe('jigsaw in a room', () => {
   });
 
   it('lets one person hold a piece at a time', () => {
-    const { a, b, send, s } = started();
+    const { a, b, send, s, mgr, clock } = started();
     send('a', { t: 'pz-grab', piece: 5 });
     expect(pz(b.conn, 'pz-held').at(-1)).toEqual({ t: 'pz-held', g: 5, by: aliasOf(a.conn) });
     const before = { ...s.pieces[5] };
@@ -156,6 +159,7 @@ describe('jigsaw in a room', () => {
     expect(s.pieces[5]).toEqual(before);
     // A's drags show up for B as they happen (and aren't echoed back to A).
     send('a', { t: 'pz-drag', x: -300, y: -200 });
+    run(mgr, clock, 100); // drags go out together, 15 times a second
     expect(pz(b.conn, 'pz-drag').at(-1)).toMatchObject({ g: 5, piece: 5, x: -300, y: -200, by: aliasOf(a.conn) });
     expect(pz(a.conn, 'pz-drag')).toHaveLength(0);
     // Dropping lets go.
@@ -262,25 +266,29 @@ describe('jigsaw in a room', () => {
   });
 
   it('saves to disk as you go, and anyone can bring it back later', () =>
-    withDir((dir) => {
-      const first = started({ puzzles: new PuzzleStore(dir) });
+    withDir(async (dir) => {
+      const firstStore = new PuzzleStore(dir);
+      const first = started({ puzzles: firstStore });
       const id = first.s.id;
       first.send('a', { t: 'pz-grab', piece: 1 });
       first.send('a', { t: 'pz-drop', x: first.s.pieces[0].x + first.pw, y: first.s.pieces[0].y });
       // Saved a few seconds after the change (not on every move).
       run(first.mgr, first.clock, 5_000);
+      await firstStore.flush();
       const saved = JSON.parse(fs.readFileSync(path.join(dir, `${id}.json`), 'utf8'));
       expect(saved.pieces[1].g).toBe(saved.pieces[0].g);
 
       // A different room, another day, picks it up again.
-      const later = jigsawRoom({ puzzles: new PuzzleStore(dir) });
+      const laterStore = new PuzzleStore(dir);
+      const later = jigsawRoom({ puzzles: laterStore });
       later.send('b', { t: 'pz-saves', ids: [id, 'zzzzzzzzzzzzzzzz'] });
+      await savesAnswers(later.b.conn, 1);
       const saves = pz(later.b.conn, 'pz-saves').at(-1)!.saves;
       expect(saves).toHaveLength(1);
       expect(saves[0]).toMatchObject({ id, image: 'dog', pieces: 54, done: false });
       expect(saves[0].progress).toBeCloseTo(2 / 54);
       later.send('b', { t: 'pz-resume', id });
-      expect(later.game.phase).toBe('playing');
+      await vi.waitFor(() => expect(later.game.phase).toBe('playing'));
       expect(later.game.state!.pieces).toEqual(saved.pieces);
       expect(lastChat(later.a.conn)).toContain('brought back a puzzle');
 
@@ -290,13 +298,15 @@ describe('jigsaw in a room', () => {
       const spot = { ...later.game.state!.pieces[30] };
       later.send('a', { t: 'pz-setup' });
       expect(later.game.phase).toBe('setup');
+      await laterStore.flush();
       const again = JSON.parse(fs.readFileSync(path.join(dir, `${id}.json`), 'utf8'));
       expect(again.pieces[30]).toEqual(spot);
     }));
 
   it('starts at most 20 puzzles an hour at one table, and answers "which saves are left?" every few seconds at most', () =>
-    withDir((dir) => {
-      const r = jigsawRoom({ puzzles: new PuzzleStore(dir) });
+    withDir(async (dir) => {
+      const store = new PuzzleStore(dir);
+      const r = jigsawRoom({ puzzles: store });
       for (let i = 0; i < 20; i++) {
         r.send('a', { t: 'pz-new', image: 'dog', pieces: 50 });
         expect(r.game.phase).toBe('playing');
@@ -314,91 +324,104 @@ describe('jigsaw in a room', () => {
       const asked = () => pz(r.b.conn, 'pz-saves').length;
       const ids = Array.from({ length: 40 }, () => 'zzzzzzzzzzzzzzzz');
       r.send('b', { t: 'pz-saves', ids });
-      expect(asked()).toBe(1);
+      await savesAnswers(r.b.conn, 1);
       // Asked twice in the same moment (and with the same id 40 times): one answer, one look.
       expect(pz(r.b.conn, 'pz-saves')[0].gone).toEqual(['zzzzzzzzzzzzzzzz']);
       r.send('b', { t: 'pz-saves', ids });
+      await new Promise((res) => setTimeout(res, 50));
       expect(asked()).toBe(1);
       r.clock.now += 3_000;
       r.send('b', { t: 'pz-saves', ids });
-      expect(asked()).toBe(2);
+      await savesAnswers(r.b.conn, 2);
+      await store.flush();
     }));
 
   it('sweeps away saves nobody has played in 30 days', () =>
-    withDir((dir) => {
+    withDir(async (dir) => {
       const store = new PuzzleStore(dir);
       const { s, send, pw, mgr, clock } = started({ puzzles: store });
       send('a', { t: 'pz-grab', piece: 1 });
       send('a', { t: 'pz-drop', x: s.pieces[0].x + pw, y: s.pieces[0].y });
       run(mgr, clock, 5_000);
+      await store.flush();
       const file = path.join(dir, `${s.id}.json`);
-      expect(store.sweep(Date.now())).toBe(0);
+      expect(await store.sweep(Date.now())).toBe(0);
       const recent = new Date(Date.now() - 29 * 86_400_000);
       fs.utimesSync(file, recent, recent);
-      expect(store.sweep(Date.now())).toBe(0);
+      expect(await store.sweep(Date.now())).toBe(0);
       const old = new Date(Date.now() - 31 * 86_400_000);
       fs.utimesSync(file, old, old);
-      expect(store.sweep(Date.now())).toBe(1);
+      expect(await store.sweep(Date.now(), undefined, 'old')).toBe(1); // the 6-hourly sweep
       expect(fs.existsSync(file)).toBe(false);
     }));
 
   it('does not keep a puzzle with nothing placed in it', () =>
-    withDir((dir) => {
-      const { a, s, send, mgr, clock, game } = started({ puzzles: new PuzzleStore(dir) });
+    withDir(async (dir) => {
+      const store = new PuzzleStore(dir);
+      const { a, s, send, mgr, clock, game } = started({ puzzles: store });
       const file = path.join(dir, `${s.id}.json`);
       // Moving pieces around isn't placing them.
       send('a', { t: 'pz-grab', piece: 4 });
       send('a', { t: 'pz-drop', x: s.width / 2, y: s.height / 2 });
       run(mgr, clock, 5_000);
+      await store.flush();
       expect(fs.existsSync(file)).toBe(false);
       send('b', { t: 'pz-setup' });
       expect(game.phase).toBe('setup');
+      await store.flush();
       expect(fs.existsSync(file)).toBe(false);
       expect(lastChat(a.conn)).toContain("wasn't kept");
       // Asking about it says it's gone (so the browser forgets it); so does trying to continue it.
       send('a', { t: 'pz-saves', ids: [s.id] });
+      await savesAnswers(a.conn, 1);
       expect(pz(a.conn, 'pz-saves').at(-1)).toEqual({ t: 'pz-saves', saves: [], gone: [s.id] });
       send('a', { t: 'pz-resume', id: s.id });
+      await savesAnswers(a.conn, 2);
       expect(game.phase).toBe('setup');
       expect(pz(a.conn, 'pz-saves').at(-1)!.gone).toEqual([s.id]);
     }));
 
   it('keeps a puzzle once one piece is in the frame, even with nothing joined', () =>
-    withDir((dir) => {
-      const { a, s, send } = started({ puzzles: new PuzzleStore(dir) });
+    withDir(async (dir) => {
+      const store = new PuzzleStore(dir);
+      const { a, s, send } = started({ puzzles: store });
       send('a', { t: 'pz-grab', piece: 0 });
       send('a', { t: 'pz-drop', x: 3, y: 3 });
       expect(s.locked).toHaveLength(1);
       send('a', { t: 'pz-setup' });
+      await store.flush();
       expect(fs.existsSync(path.join(dir, `${s.id}.json`))).toBe(true);
       expect(lastChat(a.conn)).toContain("it's saved");
       send('a', { t: 'pz-saves', ids: [s.id] });
+      await savesAnswers(a.conn, 1);
       expect(pz(a.conn, 'pz-saves').at(-1)!.saves.map((x) => x.id)).toEqual([s.id]);
     }));
 
   it('clears out old saves with nothing placed when the server starts', () =>
-    withDir((dir) => {
-      const keep = started({ puzzles: new PuzzleStore(dir) });
+    withDir(async (dir) => {
+      const keepStore = new PuzzleStore(dir);
+      const keep = started({ puzzles: keepStore });
       keep.send('a', { t: 'pz-grab', piece: 1 });
       keep.send('a', { t: 'pz-drop', x: keep.s.pieces[0].x + keep.pw, y: keep.s.pieces[0].y });
       keep.send('a', { t: 'pz-setup' });
+      await keepStore.flush();
       // A save from before untouched puzzles stopped being kept.
       const stale = { ...keep.s, id: 'abcdefgh01234567', pieces: keep.s.pieces.map((p, i) => ({ ...p, g: i })), locked: [] };
       fs.writeFileSync(path.join(dir, `${stale.id}.json`), JSON.stringify(stale));
       const store = new PuzzleStore(dir);
-      expect(store.sweep(Date.now())).toBe(1);
-      expect(store.load(stale.id)).toBeNull();
-      expect(store.load(keep.s.id)).not.toBeNull();
+      expect(await store.sweep(Date.now())).toBe(1);
+      expect(await store.load(stale.id)).toBeNull();
+      expect(await store.load(keep.s.id)).not.toBeNull();
     }));
 
   it('will not load a save that has been tampered with', () =>
-    withDir((dir) => {
+    withDir(async (dir) => {
       const store = new PuzzleStore(dir);
       fs.writeFileSync(path.join(dir, 'abcdefgh01234567.json'), JSON.stringify({ id: 'abcdefgh01234567', cols: 1000, rows: 1000 }));
       fs.writeFileSync(path.join(dir, 'abcdefgh01234568.json'), 'not json');
-      expect(store.load('abcdefgh01234567')).toBeNull();
-      expect(store.load('abcdefgh01234568')).toBeNull();
-      expect(store.load('../../etc/passwd')).toBeNull();
+      expect(await store.load('abcdefgh01234567')).toBeNull();
+      expect(await store.load('abcdefgh01234568')).toBeNull();
+      expect(await store.load('../../etc/passwd')).toBeNull();
     }));
 
   it('has every picture on disk at the size the list says, with a thumbnail', async () => {

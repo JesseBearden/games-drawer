@@ -40,6 +40,13 @@ export interface PadHandlers {
   connected?(name: string): void;
 }
 
+const LOOK_FOR_PAD_MS = 1000;
+
+function connectedPads(): Gamepad[] {
+  if (typeof navigator.getGamepads !== 'function') return [];
+  return [...navigator.getGamepads()].filter((p): p is Gamepad => !!p?.connected);
+}
+
 export class Gamepads {
   state: PadState = { lx: 0, ly: 0, held: new Set() };
   /** Which held directions come from the stick (so games can tell them apart). */
@@ -47,15 +54,29 @@ export class Gamepads {
   private repeatAt = new Map<PadButton, number>();
   private raf = 0;
   private seen = false;
+  private lookTimer: number;
 
   constructor(private h: PadHandlers) {
     window.addEventListener('gamepadconnected', this.onConnect);
-    const loop = (now: number) => {
-      this.poll(now);
-      this.raf = requestAnimationFrame(loop);
-    };
-    this.raf = requestAnimationFrame(loop);
+    // Read every frame only while there's a controller to read. Most phones never have one, so
+    // just look now and then (in case a browser doesn't announce one).
+    this.lookTimer = window.setInterval(this.look, LOOK_FOR_PAD_MS);
+    this.look();
   }
+
+  private look = () => {
+    if (!this.raf && connectedPads().length) this.watch();
+  };
+
+  private watch() {
+    if (!this.raf) this.raf = requestAnimationFrame(this.frame);
+  }
+
+  private frame = (now: number) => {
+    this.raf = 0;
+    // (The frame that finds it unplugged also lets go of whatever it held.)
+    if (this.poll(now)) this.watch();
+  };
 
   /** True once any controller has been used on this page. */
   get active() {
@@ -65,16 +86,17 @@ export class Gamepads {
   private onConnect = (e: Event) => {
     this.seen = true;
     this.h.connected?.((e as GamepadEvent).gamepad.id);
+    this.watch();
   };
 
-  poll(now: number) {
-    const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+  /** Read the controllers. False if there are none. */
+  poll(now: number): boolean {
+    const pads = connectedPads();
     const held = new Set<PadButton>();
     const stickDirs = new Set<PadButton>();
     let lx = 0;
     let ly = 0;
     for (const p of pads) {
-      if (!p || !p.connected) continue;
       STANDARD.forEach((name, i) => {
         const b = p.buttons[i];
         if (b && (b.pressed || b.value > 0.5)) held.add(name);
@@ -117,6 +139,7 @@ export class Gamepads {
     }
     this.fromStick = stickDirs;
     this.state = { lx, ly, held };
+    return pads.length > 0;
   }
 
   /** Whether a held direction is coming from the stick rather than the d-pad. */
@@ -125,6 +148,7 @@ export class Gamepads {
   }
 
   dispose() {
+    clearInterval(this.lookTimer);
     cancelAnimationFrame(this.raf);
     window.removeEventListener('gamepadconnected', this.onConnect);
   }
