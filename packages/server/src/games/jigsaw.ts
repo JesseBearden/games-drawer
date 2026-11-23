@@ -41,6 +41,11 @@ const LOAD_MAX_MS = 10_000;
  * line in Messages, and tapped again straight away it has nothing new to do.
  */
 const TIDY_GAP_MS = 3000;
+/**
+ * "That's a lot of puzzles for one hour" is said at most this often at a table. It goes to
+ * everyone there, and asking again straight away wouldn't change the answer.
+ */
+const TOO_MANY_GAP_MS = 10_000;
 /** After "Continue" found nothing, the next one waits this long (each is a file read). */
 const MISS_GAP_MS = 1000;
 
@@ -84,6 +89,7 @@ export class JigsawGame implements ServerGame {
   private loading: { at: number; name: string } | null = null;
   private missedAt = -Infinity;
   private tidiedAt = -Infinity;
+  private toldTooManyAt = -Infinity;
   private disposed = false;
 
   constructor(
@@ -357,9 +363,12 @@ export class JigsawGame implements ServerGame {
     this.host.log('jigsaw_resume', { id: s.id, by: m.pid });
   }
 
-  /** Room for one more puzzle this hour? (If not, the person who asked is told.) */
+  /** Room for one more puzzle this hour? (If not, the person who asked is told, now and then.) */
   private mayStart(m: Member): boolean {
     if (this.host.mayStartPuzzle(m)) return true;
+    const now = this.host.now();
+    if (now - this.toldTooManyAt < TOO_MANY_GAP_MS) return false;
+    this.toldTooManyAt = now;
     this.host.systemChat(`That's a lot of puzzles for one hour, ${m.name}. Try again in a few minutes.`);
     return false;
   }

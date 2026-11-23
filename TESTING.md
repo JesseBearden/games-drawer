@@ -79,6 +79,9 @@ The fixes have automatic tests. The items below still need a real phone, tablet 
       seconds now instead of 2).
 - [ ] **Jigsaw Tidy tapped a few times quickly**: the pieces spread out once, with one line in
       Messages. After 3 seconds it works again, for whoever taps it.
+- [ ] **Too many puzzles in an hour** (20 at one table): asking again and again shows "That's a
+      lot of puzzles for one hour" once, then again only after 10 seconds. (Hard to reach by
+      hand, and it has a test: skip it unless it comes up.)
 
 ## Your decisions from the review (new)
 

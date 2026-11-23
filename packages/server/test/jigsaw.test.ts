@@ -347,6 +347,28 @@ describe('jigsaw in a room', () => {
     expect(lastChat(a.conn)).toContain('tidied up');
   });
 
+  it('"a lot of puzzles" is said once every few seconds, however often people ask', () => {
+    const { a, b, send, clock } = jigsawRoom();
+    for (let i = 0; i < 20; i++) {
+      send('a', { t: 'pz-new', image: 'dog', pieces: 50 });
+      send('a', { t: 'pz-setup' });
+      clock.now += 10_000;
+    }
+    const said = (c: FakeConn) => c.of('chat').filter((m) => m.msg.text.includes('a lot of puzzles')).length;
+    for (let i = 0; i < 30; i++) {
+      send('a', { t: 'pz-new', image: 'dog', pieces: 50 });
+      send('b', { t: 'pz-resume', id: 'abcdefgh01234567' });
+    }
+    expect([said(a.conn), said(b.conn)]).toEqual([1, 1]);
+    clock.now += 9900;
+    send('b', { t: 'pz-new', image: 'dog', pieces: 50 });
+    expect(said(b.conn)).toBe(1);
+    clock.now += 100;
+    send('b', { t: 'pz-new', image: 'dog', pieces: 50 });
+    expect(said(b.conn)).toBe(2);
+    expect(lastChat(b.conn)).toContain(', bbbb.'); // the one asking this time is the one named
+  });
+
   it('finishes when every piece is in one group', () => {
     const { a, b, send, s, pw, ph, game } = started();
     for (let i = 0; i < s.pieces.length; i++) {
