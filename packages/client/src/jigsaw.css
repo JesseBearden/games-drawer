@@ -21,7 +21,7 @@
   border-radius: 18px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-2);
+  box-shadow: var(--laid);
   color: var(--ink);
 }
 #game .pz-setup-card h2,
@@ -127,7 +127,7 @@
   border-radius: 12px;
   --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
   color: var(--ink);
   font: 600 0.95rem/1.4 var(--font);
 }
@@ -234,7 +234,7 @@
   --fc: var(--white);
   background: var(--white) var(--white-img) 0 0 / var(--paper-size);
   border-radius: 12px;
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
   color: var(--ink);
   /* One row, even on a phone (user, 2026-11-20): the picture, the words, Continue and the bin.
      The words take what's left and wrap; the buttons keep their size. */
@@ -306,7 +306,7 @@
   padding: 6px 14px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
   color: var(--ink);
   font-weight: 400;
 }
@@ -330,7 +330,7 @@
   border-radius: 16px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-2);
+  box-shadow: var(--laid);
 }
 #game .pz-tools .pz-btn {
   min-height: 48px;

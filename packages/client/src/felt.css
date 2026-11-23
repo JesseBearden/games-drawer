@@ -65,6 +65,41 @@
   --cut-in: inset 0 2px 4px rgb(var(--shade) / 0.32), inset 0 0 0 1.5px rgb(var(--shade) / 0.4);
 }
 
+/* Each person's own felt (personFelt in felts.ts): their name tag on Your table, their seat there
+   and their name tag in a game set data-felt, and use --own and --own-img. */
+[data-felt='sky'] {
+  --own: var(--sky);
+  --own-img: var(--sky-img);
+}
+[data-felt='lilac'] {
+  --own: var(--lilac);
+  --own-img: var(--lilac-img);
+}
+[data-felt='peach'] {
+  --own: var(--peach);
+  --own-img: var(--peach-img);
+}
+[data-felt='mint'] {
+  --own: var(--mint);
+  --own-img: var(--mint-img);
+}
+[data-felt='blush'] {
+  --own: var(--blush);
+  --own-img: var(--blush-img);
+}
+[data-felt='kraft'] {
+  --own: var(--kraft);
+  --own-img: var(--kraft-img);
+}
+[data-felt='white'] {
+  --own: var(--white);
+  --own-img: var(--white-img);
+}
+[data-felt='dove'] {
+  --own: var(--dove);
+  --own-img: var(--dove-img);
+}
+
 /* Each element softens its own outline with fibres of its own colour (--fc, named beside each
    piece's background), so the shadows below are set per element. */
 body,
@@ -75,6 +110,13 @@ body *::after {
   /* A piece lying on the felt, as in the mock: no visible side, just a dark shadow hugging it
      (strongest right under its bottom edge, a little at the sides), fading within a few px, and a
      soft wider shade. That shadow is what makes it look thick and laid on top. */
+  /* Laid down: felt that isn't a button (name tags; user, 2026-11-22). A thin piece of felt lying
+     on the one under it: no rounded, lit edge like a button's, just a faint light along its top, a
+     fine dark line where it meets the felt below and a little shade. Buttons stand up off the
+     table; everything else lies on it. */
+  --laid:
+    inset 0 1px 0 rgb(255 255 255 / 0.22), inset 0 -1px 1px 0 rgb(var(--shade) / 0.12), 0 0 1px 0.4px var(--fuzz),
+    0 0 1px 0 rgb(var(--shade) / 0.4), 0 1px 1.5px 0 rgb(var(--shade) / 0.4), 0 2px 5px 0 rgb(var(--shade) / 0.16);
   /* Pressed: pushed flat into the felt under it. */
   --lift-0:
     var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 1.5px 0 rgb(var(--shade) / 0.35), 0 1px 1.5px 0 rgb(var(--shade) / 0.4);

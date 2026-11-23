@@ -442,10 +442,8 @@ body.pad-mode .pc-choice:has(input:focus) {
   border-radius: var(--radius);
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
-  transition:
-    transform 0.25s var(--settle),
-    box-shadow 0.25s;
+  /* A name tag isn't a button: it lies flat (user, 2026-11-22). */
+  box-shadow: var(--laid, var(--lift-1));
 }
 .pc-tag b {
   display: flex;
@@ -468,12 +466,10 @@ body.pad-mode .pc-choice:has(input:focus) {
   font-weight: 800;
   color: var(--ink-soft);
 }
-/* Whose turn it is: sunflower paper, lifted off the mat. */
+/* Whose turn it is: sunflower, still lying flat (the colour says it). */
 .pc-tag.is-turn {
   --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
-  transform: translateY(-3px);
-  box-shadow: var(--lift-2);
 }
 .pc-tag.is-turn span,
 .pc-tag.is-turn .pc-note {
@@ -610,7 +606,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   border-radius: 16px;
   --fc: var(--sky);
   background: var(--sky) var(--sky-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
 }
 .pc-note-list {
   display: grid;
@@ -623,7 +619,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   border-radius: 4px var(--radius) var(--radius) var(--radius);
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
   overflow-wrap: anywhere;
 }
 .pc-msg b {
@@ -650,7 +646,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
   color: #fff;
   font-weight: 800;
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
 }
 .pc-alert .pc-btn-plain {
   color: var(--tomato);

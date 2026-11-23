@@ -1,5 +1,6 @@
 import { canPlayPrivately, choosesPlayers, GAMES, SEAT_FILL_ORDER, gameInfo, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
 import { patchHtml } from './dom';
+import { personFelt } from './felts';
 import { escapeHtml } from './html';
 import type { ShellApi, View } from './views';
 
@@ -95,7 +96,8 @@ export class LobbyView implements View {
     for (const m of this.members) {
       const isReady = t.pick && ready.has(m.id);
       const notes = [m.id === s.alias ? 'You' : '', m.connected ? '' : 'Away', isReady ? 'Ready' : ''].filter(Boolean).join(' · ');
-      html += `<li data-alias="${escapeHtml(m.id)}" class="pc-tag${m.connected ? '' : ' is-away'}${isReady ? ' is-ready' : ''}${this.speaking.has(m.id) ? ' is-talking' : ''}"><b><span class="pc-talk"><i></i><i></i><i></i></span><span class="pc-nm">${escapeHtml(m.name)}</span></b>${notes ? `<span class="pc-note">${notes}</span>` : ''}</li>`;
+      // In their own felt, the colour their name has in the game too.
+      html += `<li data-alias="${escapeHtml(m.id)}" data-felt="${personFelt(m.color)}" class="pc-tag${m.connected ? '' : ' is-away'}${isReady ? ' is-ready' : ''}${this.speaking.has(m.id) ? ' is-talking' : ''}"><b><span class="pc-talk"><i></i><i></i><i></i></span><span class="pc-nm">${escapeHtml(m.name)}</span></b>${notes ? `<span class="pc-note">${notes}</span>` : ''}</li>`;
     }
     html += '</ul><button class="pc-btn pc-btn-plain tb-invite" data-act="invite" type="button">Invite someone</button></section>';
 
@@ -160,7 +162,10 @@ export class LobbyView implements View {
       const note = off ? 'Not playing' : !who ? 'Tap to sit' : [mine ? 'You' : '', away.has(who) ? 'Away' : '', ready.has(who) ? 'Ready' : ''].filter(Boolean).join(' · ');
       const cls = `tb-seat ${SEAT_PLACE[seat]}${!who ? ' is-open' : ''}${off ? ' is-off' : ''}${mine ? ' is-mine' : ''}${who && ready.has(who) ? ' is-ready' : ''}`;
       const label = off ? 'Empty' : !who ? 'Open seat' : name;
-      html += `<button class="${cls}" data-seat="${seat}" type="button"${who && !mine ? ' aria-disabled="true"' : ''}><span class="pc-nm">${escapeHtml(label)}</span>${note ? `<small>${note}</small>` : ''}</button>`;
+      // A taken seat is in its person's own felt.
+      const color = who ? this.members.find((m) => m.id === who)?.color : undefined;
+      const felt = color !== undefined ? ` data-felt="${personFelt(color)}"` : '';
+      html += `<button class="${cls}" data-seat="${seat}"${felt} type="button"${who && !mine ? ' aria-disabled="true"' : ''}><span class="pc-nm">${escapeHtml(label)}</span>${note ? `<small>${note}</small>` : ''}</button>`;
     }
     html += `<div class="tb-mat" aria-hidden="true"><img src="/art/games/${game}.webp" alt="" width="52" height="52" /></div></div>`;
 

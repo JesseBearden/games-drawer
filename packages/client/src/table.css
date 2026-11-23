@@ -46,7 +46,7 @@
   padding: calc(8px + var(--safe-t)) calc(10px + var(--safe-r)) 8px calc(10px + var(--safe-l));
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
 }
 /* Buttons grow to share the bar but keep room for their words (five fit a 360 px phone). */
 #game .toolbar.pc-toolbar .pc-btn {
@@ -98,7 +98,7 @@
   #game:not(.phone)[data-view='tanks'].bar-open .toolbar.pc-toolbar {
     transform: none;
     visibility: visible;
-    box-shadow: var(--lift-2);
+    box-shadow: var(--laid);
     transition: transform 0.22s var(--settle);
   }
   #game:not(.phone)[data-view='tanks'] .bar-tab {
@@ -389,7 +389,7 @@
   border-radius: 4px var(--radius) var(--radius) var(--radius);
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
   color: var(--ink);
 }
 /* A note: name and time on top, the message under them. Names in ink (player colours aren't all
@@ -562,15 +562,32 @@
   gap: 12px;
   justify-items: start;
 }
-/* Ready: mint felt, lifted, so you can see who's set to go at a glance. */
-.pc-tag.is-ready {
-  --fc: var(--mint);
-  background: var(--mint) var(--mint-img) 0 0 / var(--paper-size);
-  transform: translateY(-2px);
-  box-shadow: var(--lift-2);
+/* Each person's name tag is their own felt (felts.ts), lying flat: it isn't a button. */
+.pc-tag[data-felt] {
+  --fc: var(--own);
+  background: var(--own) var(--own-img) 0 0 / var(--paper-size);
 }
-.pc-tag.is-ready .pc-note::before {
-  content: '✓ ';
+.pc-tag[data-felt] .pc-note {
+  color: var(--ink);
+}
+/* Ready: a cobalt tick on the tag's corner (as on the picked game), so you can see who's set to
+   go at a glance. (It used to turn the tag mint, which is now someone's own colour.) */
+.pc-tag.is-ready,
+.tb-seat.is-ready {
+  position: relative;
+}
+.pc-tag.is-ready::after,
+.tb-seat.is-ready::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--cobalt)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 17px no-repeat;
 }
 /* The picked game: lifted, with its tick (as on home). */
 .lobby-games .pc-choice.is-picked {
@@ -617,7 +634,7 @@
   border-radius: 18px;
   --fc: var(--baize);
   background: var(--baize) var(--baize-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-2);
+  box-shadow: var(--laid);
 }
 .tb-mat img {
   width: 58%;
@@ -669,12 +686,24 @@
 .tb-seat.s-right {
   grid-area: right;
 }
-/* An empty seat lies flat in the page (the computer will play it): tap it to sit. */
+/* An empty seat is a button (tap it to sit there), so it stands up off the page like one: white
+   felt with cobalt words. A taken seat isn't one: it lies flat in its person's own felt. */
 .tb-seat.is-open {
-  --fc: var(--paper);
-  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-0);
+  color: var(--cobalt);
+}
+.tb-seat.is-open small {
   color: var(--ink-soft);
+}
+.tb-seat.is-open:active {
+  box-shadow: var(--lift-0);
+}
+.tb-seat[data-felt] {
+  --fc: var(--own);
+  background: var(--own) var(--own-img) 0 0 / var(--paper-size);
+  box-shadow: var(--laid);
+}
+.tb-seat[data-felt] small {
+  color: var(--ink);
 }
 /* A seat not in play (the table chose fewer players): faded, but you can still sit there. */
 .tb-seat.is-off {
@@ -693,21 +722,6 @@
 }
 .tb-count .pc-btn:disabled {
   opacity: 0.45;
-}
-.tb-seat.is-ready {
-  --fc: var(--mint);
-  background: var(--mint) var(--mint-img) 0 0 / var(--paper-size);
-}
-/* Your seat: sunflower, lifted. */
-.tb-seat.is-mine {
-  --fc: var(--sunflower);
-  background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
-  transform: translateY(-2px);
-  box-shadow: var(--lift-2);
-}
-.tb-seat.is-mine small,
-.tb-seat.is-ready small {
-  color: var(--ink);
 }
 @media (hover: hover) {
   .tb-seat.is-open:hover {

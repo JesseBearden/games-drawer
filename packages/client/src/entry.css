@@ -135,7 +135,7 @@
   background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
   color: #fff;
   font-weight: 800;
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
 }
 /* "Joining…": a quiet note, not an alarm. */
 .entry-error.pending {

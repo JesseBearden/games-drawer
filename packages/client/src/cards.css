@@ -37,18 +37,14 @@
   padding: 7px 12px 8px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  /* A name tag isn't a button: it lies flat on the table (user, 2026-11-22). */
+  box-shadow: var(--laid);
   color: var(--ink);
-  transition:
-    transform 0.25s var(--settle),
-    box-shadow 0.25s;
 }
-/* Whose turn: sunflower paper, lifted off the mat. */
+/* Whose turn: sunflower felt, still lying flat (the colour says it). */
 #game .ht-seat.turn {
   --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
-  transform: translateY(-3px);
-  box-shadow: var(--lift-2);
 }
 /* Talking bars only while that person talks. */
 #game .ht-seat .pc-talk {
@@ -357,7 +353,7 @@ body.pad-mode #game .card.pad-cursor {
   border-radius: 10px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-0);
+  box-shadow: var(--laid);
 }
 #game .sp-score b {
   color: var(--ink);
@@ -658,6 +654,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .ht-mine {
     align-items: stretch;
     align-self: center;
+    gap: 7px;
     margin-top: 10px;
   }
   #game .dominoes-view .ht-mine > .ht-seat.ht-pos-0 {
@@ -669,9 +666,10 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .ht-pos-0 .dm-tiles {
     display: none;
   }
-  /* Your name and Scores together are as tall as a tile. */
+  /* Your name and Scores together are as tall as a tile (with room between for the yellow ring
+     round your name on your turn). */
   #game .dominoes-view .ht-scores-btn {
-    min-height: 34px;
+    min-height: 32px;
     padding: 4px 8px;
     font-size: 0.8125rem;
   }
@@ -944,13 +942,79 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .dm-side .dm-info {
     grid-area: info;
     justify-self: center;
-    margin: 0;
+    margin: 0 0 4px;
   }
   /* The marks are pictures, which sideways writing leaves standing up: turn them a quarter too
      (the left one's piece is already turned over, which finishes the job). */
   #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) :is(.pc-talk, .ht-cpu) {
     writing-mode: horizontal-tb;
     transform: rotate(90deg);
+  }
+}
+
+/* ------------------------------------------------------------------ Dominoes: a colour each (2026-11-22)
+   A trial (the user's idea): each player's name tag is their own light felt, the one their name
+   has on Your table (felts.ts). Whose turn it is: the tag keeps its colour and sits on a band of
+   sunflower felt a little bigger than it, its shadow falling on the yellow. Talking: rings of the
+   tag's own colour ripple out from it, as round someone's dot in Jigsaw. */
+#game .dominoes-view .ht-seat[data-felt],
+#game .dominoes-view .ht-seat.turn[data-felt] {
+  --fc: var(--own);
+  --ring-w: 0px;
+  background: var(--own) var(--own-img) 0 0 / var(--paper-size);
+}
+/* On coloured felt the softer ink is too faint: points, tiles and the computer mark go full ink. */
+#game .dominoes-view .ht-seat[data-felt] :is(.ht-score, .ht-tag, .ht-cpu) {
+  color: var(--ink);
+}
+/* (Both lie flat, like every name tag: the tag's thin shadow falls on the yellow, the yellow's on
+   the table.) */
+#game .dominoes-view .ht-seat.turn[data-felt] {
+  --ring-w: 5px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 -1px 1px 0 rgb(var(--shade) / 0.12),
+    0 0 1px 0.4px var(--fuzz),
+    0 1px 1.5px 0 rgb(var(--shade) / 0.4),
+    0 0 0 var(--ring-w) var(--sunflower),
+    0 0 1px calc(var(--ring-w) + 0.4px) color-mix(in oklab, var(--sunflower) 50%, transparent),
+    0 0 1px var(--ring-w) rgb(var(--shade) / 0.4),
+    0 1px 1.5px var(--ring-w) rgb(var(--shade) / 0.4),
+    0 2px 5px var(--ring-w) rgb(var(--shade) / 0.16);
+}
+#game .dominoes-view .ht-seat[data-felt].speaking::before,
+#game .dominoes-view .ht-seat[data-felt].speaking::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  outline: 3px solid var(--own);
+  outline-offset: var(--ring-w);
+  pointer-events: none;
+  animation: dm-talk 1.4s ease-out infinite;
+}
+#game .dominoes-view .ht-seat[data-felt].speaking::after {
+  animation-delay: 0.7s;
+}
+@keyframes dm-talk {
+  from {
+    outline-offset: var(--ring-w);
+    opacity: 0.95;
+  }
+  to {
+    outline-offset: calc(var(--ring-w) + 14px);
+    opacity: 0;
+  }
+}
+/* Less motion: one steady ring instead of ripples. */
+@media (prefers-reduced-motion: reduce) {
+  #game .dominoes-view .ht-seat[data-felt].speaking::before {
+    animation: none;
+    outline-offset: calc(var(--ring-w) + 3px);
+    opacity: 0.9;
+  }
+  #game .dominoes-view .ht-seat[data-felt].speaking::after {
+    display: none;
   }
 }
 
@@ -1033,7 +1097,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   color: var(--ink);
   font: 800 12px var(--font);
   text-shadow: none;
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
 }
 #game .tt-empty {
   display: block;
@@ -1059,7 +1123,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   font-size: 0.9rem;
   text-shadow: none;
   white-space: nowrap;
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
 }
 #game .tt-loose:empty {
   display: none;

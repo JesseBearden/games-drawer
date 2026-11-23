@@ -13,6 +13,20 @@ _Last updated: 2026-11-22_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## Only buttons stand up; colours that stay with the name (new, 2026-11-22)
+
+- [ ] **Flat felt:** anything you can't tap lies flat on the table or page (a thin shadow, no
+      rounded lit edge): name tags in every card game, the people and taken seats on Your table,
+      the red "Your mic is off" strip, messages in Messages, Jigsaw's "how far along" chip and
+      tools strip, Tanks' score panels, Three Thirteen's counters. Buttons still stand up. Does
+      anything that IS a button now look flat, or the other way round?
+- [ ] **Whose turn** no longer lifts the tag in Hearts, Spades and Three Thirteen (it just turns
+      yellow). Still easy to spot?
+- [ ] **Your table, two tabs:** each person's name tag at the top is in their own colour, and
+      the seat they pick turns that colour too. Open seats are white buttons that stand up.
+      "Ready" is a blue tick on the tag's corner (not mint any more). Start Dominoes: each
+      person's tag in the game is the same colour as on Your table.
+
 ## Coming back to your own table in a new tab (new)
 
 - [ ] At a table of four, copy the link, close your tab and open the link again in a new one. For
@@ -591,6 +605,11 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       The computer mark and the talking bars turn with the writing, and whoever's turn it is
       still goes yellow. Is it easy enough to read, and is the board (a little narrower now) still
       comfortable late in a hand?
+- [ ] **A colour each** (a trial, 2026-11-22): every player's tag is their own light felt (sky,
+      lilac, peach, mint), the same colour their name has on Your table; the computers take the
+      ones nobody has. Whose turn it is: a band of yellow round that tag (it no longer turns the
+      whole tag yellow). Talking: rings of their colour ripple out from the tag. Too busy, or
+      nice? Try it with two people: each keeps their colour from Your table into the game.
 - [ ] **One line for everyone** (same trial): the player across and your own tag are one line
       too, and all four tags are the same length. Yours says just your points (no tile count, since
       your tiles are right below). "Ends add up to …" now sits just above your name and Scores,

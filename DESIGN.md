@@ -16,10 +16,17 @@ first.
   shadow that shows what it sits on.
   - Don't use flat boxes, gradients, glows, frosted glass, or outlines drawn as thin lines.
 - **Light comes from above.** Shadows fall downward and are tinted ink, never black. A piece sits at
-  one of four heights:
+  one of five heights:
+  - **Laid down** (`--laid`): felt that isn't a button (user, 2026-11-22): name tags, taken
+    seats, the red "mic is off" strip, messages, status and score chips, the strips that hold
+    buttons, the little green table on Your table. A thin piece of felt lying on what's under it:
+    no rounded, lit edge, just a fine dark line where it meets the felt below. Only buttons
+    stand up off the table (an open seat is a button: tap it to sit), so you can tell what to
+    tap. Whose turn it is shows by colour, not by lifting the tag. Things that pop up over
+    everything else (sheets, notices, Messages, the Ready strip) are still held up.
   - **Pressed** (`--lift-0`): a button while it's being pressed.
-  - **Lying flat** (`--lift-1`): buttons, name tags, cards, tiles.
-  - **Lifted** (`--lift-2`): whose turn it is, the thing you picked, hover.
+  - **Resting** (`--lift-1`): buttons, cards, tiles.
+  - **Lifted** (`--lift-2`): the thing you picked, hover.
   - **Held** (`--lift-3`): a card or piece you're dragging, and pop-up panels.
 - **A piece shouldn't sit on its own color.** It needs to differ from what's under it, not just by
   its shadow, because the same color stacked on itself reads oddly. Treat this as a strong habit,
@@ -86,8 +93,15 @@ lighter papers: paper, white and mat.
   ratio of at least 4.5:1, and the light tints above all pass.
 - **One cobalt main button per screen.** Everything else is an ivory button with a cobalt outline.
 - **Player colors.** In games where you tell people apart on the board (Tanks, Jigsaw hands),
-  players are cobalt, tomato, sunflower and grass, in seat order. Turn-based games don't use player
-  colors, so sunflower never means two things on one screen.
+  players are cobalt, tomato, sunflower and grass, in seat order.
+- **Each person's own felt** (a trial, user 2026-11-22; `felts.ts`): a light felt that stays with
+  the name. Their name tag on Your table, the seat they pick there, and their name tag in
+  Dominoes are all in it; the computers take the colors nobody has. They're sky, lilac, peach and
+  mint first, then blush, kraft, white and dove. Never sunflower or butter (whose turn it is),
+  tomato (something's off), cobalt (a button) or grass (it vanishes into the green table). So
+  sunflower still never means two things: in Dominoes whose turn it is shows as a band of
+  sunflower round that person's tag, and while someone talks rings of their own color ripple
+  out from it. Ready on Your table is a cobalt tick on the tag's corner, not mint.
 - **Playing cards are ivory card stock.** The grain comes straight from the card mock, lightened from its cream (2026-11-18: cream read too dark on the mat).
   `art/card-stock.webp` is quilted from plain patches of that mock's cards, and it's sized to each
   card, so the grain looks the same at any card size.
@@ -223,8 +237,8 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 ## The games
 
 - **Card and tile games (Hearts, Spades, Dominoes)** are played on the blue mat.
-  - **Name tags:** each player has a paper name tag; whose turn it is gets sunflower paper,
-    lifted. **Every tag is the same size, whatever the name** (user, 2026-11-20): a long name
+  - **Name tags:** each player has a felt name tag, laid flat on the table (it isn't a button);
+    whose turn it is gets sunflower felt. **Every tag is the same size, whatever the name** (user, 2026-11-20): a long name
     shrinks a little, then ends in "…". On a phone held upright the three across the top split
     the width evenly, and yours is as wide as one of them. Tags are two lines (name, score) and
     never grow a third: someone who dropped out gets a small "zzz" after their name (not the
@@ -243,13 +257,16 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
     line), but never at a double or right after one, which would make it look like a spinner:
     those run on a little past the edge instead (user, 2026-11-20).
   - **Your name and Scores** sit side by side, the same height, their edges lined up with the
-    button's outline. Your own tag doesn't lift on your turn (the yellow says it), so the two stay
-    level. There's only ever one Scores
+    button's outline. There's only ever one Scores
     button: after a hand, while you look at the board, it becomes a cobalt "Back to scores".
-  - **Dominoes on a phone held sideways:** there's no height for a row of names above the board
-    and a row of tiles below it. Everyone's name goes down the left in turn order (yours first)
-    with Scores under them, the board takes the middle, and your tiles sit in rows of four on
-    the right.
+  - **Dominoes on a phone** (user, 2026-11-22): everyone sits on their own side of the board.
+    The players on your left and right have their tags turned on their side up the edges (the
+    tops of the letters toward the screen's edge, so left reads upward and right downward:
+    mirror images, never a pinwheel), the player across is one line along the top, and your own
+    tag leaves out your tile count. Held upright, every tag is one line and "Ends add up to" sits
+    above your name; held sideways, the side tags are two lines (name, then points and tiles),
+    your tiles run along the bottom a fifth smaller, with your name over Scores on their left and
+    the total on their right.
   - **The domino board zooms** with a pinch, the mouse wheel (or a trackpad pinch), or a
     controller's shoulder buttons. There are no zoom buttons on screen. Drag to look around; a
     drag is never a tap.

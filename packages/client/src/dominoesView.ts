@@ -1,6 +1,7 @@
 import { CARD_SOUNDS } from './audio';
 import { DOMINOES_RULES, type DominoesView, type GameServerMessage, type Move, type TileId } from '@tank/shared';
 import { bounds, ghostSpot, layoutSpots, limitsFor, tileSvg, type TileSpot } from './dominoLayout';
+import { seatFelts } from './felts';
 import { focusForPad, type PadPress } from './gamepad';
 import { patchHtml, syncKeyed, type KeyedItem } from './dom';
 import { nameHtml } from './html';
@@ -153,12 +154,15 @@ export class DominoesTable implements View {
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
     let tagsChanged = false;
+    const felts = seatFelts(v.seats);
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
       const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
         <div class="ht-score"><i>${s.score} pts</i> <i class="dm-tiles">· ${s.tiles} tile${s.tiles === 1 ? '' : 's'}</i></div>`);
       tagsChanged ||= changed;
+      // Their own felt, the one their name has on Your table.
+      el.dataset.felt = felts[seat];
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;

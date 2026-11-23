@@ -16,7 +16,7 @@
   border-radius: var(--radius);
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
 }
 #game .hearts img,
 #game .hearts svg {
@@ -36,7 +36,7 @@
   border-radius: var(--radius);
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
+  box-shadow: var(--laid);
   color: var(--ink);
 }
 #game .wind {
@@ -55,7 +55,7 @@
   color: var(--ink);
   font: 800 0.9rem var(--font);
   animation: none;
-  box-shadow: var(--lift-0);
+  box-shadow: var(--laid);
 }
 #game .status {
   font: 800 1rem var(--font);
@@ -80,7 +80,7 @@
 #game .feed div {
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-0);
+  box-shadow: var(--laid);
   color: var(--ink);
   font-weight: 800;
 }
@@ -187,7 +187,7 @@
   border-radius: 18px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-2);
+  box-shadow: var(--laid);
   pointer-events: auto;
 }
 #game .cs-group {
