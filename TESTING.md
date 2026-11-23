@@ -13,6 +13,24 @@ _Last updated: 2026-11-22_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## Adding your own photo: the progress panel (new)
+
+Picking a photo for a Jigsaw used to show only "Checking…" on the tile. Now the panel you chose it
+from stays open and shows how it's going. On the PC, Chrome's DevTools → Network → **Slow 4G**
+makes the sending part slow enough to watch.
+
+- [ ] Pick a big photo on a phone: the panel shows a small copy of it, then "Getting your photo
+      ready…", "Sending your photo…" with the bar moving, and "Checking it's family friendly…".
+      Then it closes and your photo is picked in the grid. The tile says "Adding…" meanwhile.
+- [ ] **On an iPhone (Safari)** the bar moves while sending, not only at the end.
+- [ ] **Cancel** while it's sending, and once while it's checking: back to "Choose a photo", and
+      the photo doesn't turn up for anyone (look at the other player's picker too).
+- [ ] **A photo that's turned away** (on the PC: one exactly 404 pixels wide) says why in the
+      panel, with "Try another photo" and "Not now", and stays until you close it.
+- [ ] **Once it's on staging:** add a photo from your phone on Wi-Fi and one on cell data. The
+      admin logs' `photo_added` lines then say how long getting it ready (`readyMs`), sending
+      (`sendMs`) and the check (`ms`) took, in milliseconds. Tell me and I'll read them with you.
+
 ## The rest of the second code review (new)
 
 The fixes have automatic tests. The items below still need a real phone, tablet or computer.
@@ -129,8 +147,9 @@ Each has a unit test; none has been tried in a real browser or on a phone.
 - [ ] **Approve** is waiting in Production and names that commit. You can open and press it from
       your phone. (Checked November 22 that it waits and names the commit: only the phone part is
       left.)
-- [ ] **A second push before approving:** the first request closes ("staging is moving on"), and
-      once the new push is on staging a new request names it.
+- [x] **A second push before approving:** the first request closes ("staging is moving on"), and
+      once the new push is on staging a new request names it. (Checked November 22: b6693ba closed
+      e6908a2's request.)
 - [ ] **Approve it:** about 20 minutes later the site runs that commit, and the old box shuts
       itself down when its games are done.
 
@@ -651,9 +670,9 @@ The real check (Amazon Rekognition) only runs on the site. For the phone, use `n
       a note says only this table sees it, it's deleted when the table closes (so it can't be
       continued another day), and it's checked first. **Choose a photo** opens your photos;
       **Not now** closes the note.
-- [ ] Pick a photo: the tile says "Checking…", then your photo shows next to it as "Jesse's
-      photo", picked, and chat says "Jesse added a photo for a puzzle." Someone else at the table
-      gets it in their picker too (not picked for them).
+- [ ] Pick a photo: the panel shows how it's going (see "the progress panel" above), then your
+      photo shows next to the tile as "Jesse's photo", picked, and chat says "Jesse added a photo
+      for a puzzle." Someone else at the table gets it in their picker too (not picked for them).
 - [ ] On the iPhone, try one taken upright and one sideways: both puzzles come out the right way
       up. A screenshot or a very wide panorama says it's too small if it's under 300 pixels high.
 - [ ] Start a puzzle of it: the status says "20 pieces · Jesse's photo". Put it away from the

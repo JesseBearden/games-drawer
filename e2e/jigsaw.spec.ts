@@ -465,6 +465,30 @@ test('your own photo: checked, shared with the table, puzzled together, never sa
   await view.locator('.pz-upload').click();
   await expect(view.locator('.pz-photo-note')).toBeVisible();
   await expect(view.locator('.pz-photo-note')).toContainText('deleted when the table closes');
+
+  // While it's being added (held up here), the panel shows the photo, what's happening and how
+  // far along it is. Cancel stops it, and it's back to choosing one.
+  let letGo!: () => void;
+  const held = new Promise<void>((done) => (letGo = done));
+  const isUpload = (url: URL) => url.pathname === '/api/photo';
+  await page.route(isUpload, async (route) => {
+    await held;
+    await route.abort().catch(() => {});
+  });
+  await view.locator('.pz-photo-file').setInputFiles({ name: 'beach.jpg', mimeType: 'image/jpeg', buffer: await jpeg(1200, 800) });
+  await expect(view.locator('.pz-photo-step')).toHaveText(/Sending your photo|Checking it’s family friendly/);
+  await expect(view.locator('.pz-photo-thumb img')).toBeVisible();
+  await expect(view.locator('.pz-photo-bar')).toHaveAttribute('aria-valuenow', /^(1[5-9]|[2-9]\d)$/);
+  await expect(view.locator('.pz-photo-about')).toBeHidden();
+  await expect(view.locator('.pz-upload')).toBeDisabled();
+  await view.locator('[data-pz="photo-stop"]').click();
+  await expect(view.locator('.pz-photo-about')).toBeVisible();
+  await expect(view.locator('.pz-photo-work')).toBeHidden();
+  await expect(view.locator('.pz-photo-choose')).toHaveText('Choose a photo');
+  await expect(view.locator('.pz-upload')).toBeEnabled();
+  letGo();
+  await page.unroute(isUpload);
+
   await view.locator('.pz-photo-file').setInputFiles({ name: 'beach.jpg', mimeType: 'image/jpeg', buffer: await jpeg(1200, 800) });
   const tile = view.locator('.pz-own [data-image^="photo-"]');
   await expect(tile).toHaveCount(1);
@@ -472,10 +496,18 @@ test('your own photo: checked, shared with the table, puzzled together, never sa
   await expect(tile).toContainText('Pip’s photo');
   await expect(view.locator('.pz-photo-note')).toBeHidden();
 
-  // One that doesn't pass isn't added.
+  // One that doesn't pass isn't added, and the panel says why (it doesn't vanish in a moment).
   await view.locator('.pz-photo-file').setInputFiles({ name: 'no.jpg', mimeType: 'image/jpeg', buffer: await jpeg(404, 300) });
-  await expect(page.getByText('That photo didn’t pass the family-friendly check')).toBeVisible();
+  await expect(view.locator('.pz-photo-refused')).toHaveText(/That photo didn’t pass the family-friendly check/);
+  await expect(view.locator('.pz-photo-choose')).toHaveText('Try another photo');
   await expect(tile).toHaveCount(1);
+  // Closed and opened again, it starts from the beginning.
+  await view.locator('[data-pz="photo-cancel"]').click();
+  await expect(view.locator('.pz-photo-note')).toBeHidden();
+  await view.locator('.pz-upload').click();
+  await expect(view.locator('.pz-photo-about')).toBeVisible();
+  await expect(view.locator('.pz-photo-refused')).toBeHidden();
+  await view.locator('[data-pz="photo-cancel"]').click();
 
   // A friend who joins has it in their picker too.
   const friend = await newPlayer(browser, page);

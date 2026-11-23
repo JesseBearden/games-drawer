@@ -146,6 +146,72 @@
 #game .pz-photo-actions label {
   cursor: pointer;
 }
+#game .pz-photo-note [hidden] {
+  display: none;
+}
+#game .pz-photo-note .pz-photo-refused {
+  font-weight: 800;
+}
+
+/* While your photo is being added: a small copy of it (a camera until it's ready), what's
+   happening, and a bar of cobalt felt sunk into the paper. */
+#game .pz-photo-work {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 0 12px;
+}
+#game .pz-photo-thumb {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 2px dashed color-mix(in oklab, var(--cobalt) 55%, transparent);
+  border-radius: 8px;
+  color: var(--cobalt);
+}
+#game .pz-photo-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+#game .pz-photo-what {
+  flex: 1;
+  min-width: 0;
+}
+#game .pz-photo-note .pz-photo-step {
+  margin: 0 0 8px;
+  font-weight: 800;
+}
+#game .pz-photo-bar {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.3);
+}
+#game .pz-photo-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
+  transition: width 0.3s linear;
+}
+/* The steps that can't be measured glide toward their mark: getting it ready, then the check. */
+#game .pz-photo-bar[data-step='ready'] span {
+  transition-duration: 2.5s;
+  transition-timing-function: ease-out;
+}
+#game .pz-photo-bar[data-step='check'] span {
+  transition-duration: 4s;
+  transition-timing-function: ease-out;
+}
 
 /* Start stays in reach: a strip of paper along the bottom of the sheet. */
 #game .pz-start-bar {
@@ -405,5 +471,9 @@
   }
   .pz-cursor.talking i::after {
     display: none;
+  }
+  /* The photo bar steps rather than glides. */
+  #game .pz-photo-bar span {
+    transition: none;
   }
 }

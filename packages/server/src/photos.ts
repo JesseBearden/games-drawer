@@ -13,7 +13,8 @@ import { pseudonym, type Room } from './room';
  * logs, gone when the table closes (Room.close). Only people at the table can send one, and the
  * address it's shown at has 128 random bits in it, so nobody else can find it.
  *
- *   POST /api/photo?table=CODE   body: the JPEG; header x-gd-session: your session
+ *   POST /api/photo?table=CODE   body: the JPEG; header x-gd-session: your session (and
+ *                                x-gd-ready-ms: how long getting it ready took, for the logs)
  *   GET  /api/photo/CODE/ID.jpg  the photo
  *
  * Both also carry ?slot=, for the web server to route by (photoUrls.ts in shared).
@@ -191,7 +192,26 @@ export function photoRoutes(o: PhotoRoutesOptions) {
   /** An upload that's been let in: read it, clean it, check it, and add it to the table. */
   async function receive(req: IncomingMessage, res: ServerResponse, room: Room, code: string, session: string) {
     const checker = o.checker!;
-    const body = await readBody(req, PHOTO_MAX_BYTES);
+    // Someone who pressed Cancel (or lost their connection) before hearing back: their photo isn't
+    // added, even if it was all here and passed.
+    let gone = false;
+    res.on('close', () => {
+      if (!res.writableEnded) gone = true;
+    });
+    // How long the phone or computer took to get the photo ready (it says), and to send it, for
+    // the logs: where the wait is when adding a photo feels slow.
+    const ready = String(req.headers['x-gd-ready-ms'] ?? '');
+    const times = { readyMs: /^\d{1,6}$/.test(ready) ? Number(ready) : undefined, sendMs: 0 };
+    const sendStarted = now();
+    let body: Buffer | 'too-big';
+    try {
+      body = await readBody(req, PHOTO_MAX_BYTES);
+    } catch (err) {
+      if (!gone) throw err;
+      o.log.event('photo_stopped', { room: code, by: pseudonym(session), ...times, sendMs: now() - sendStarted, while: 'sending' });
+      return;
+    }
+    times.sendMs = now() - sendStarted;
     if (body === 'too-big') return refuse(res, 413, 'too-big');
     const clean = cleanJpeg(body);
     if (!clean) return refuse(res, 400, 'not-image');
@@ -205,20 +225,25 @@ export function photoRoutes(o: PhotoRoutesOptions) {
     try {
       verdict = await checker.check(clean.jpeg, { width, height });
     } catch (err) {
-      o.log.event('photo_check_failed', { room: code, checker: checker.name, error: String(err).slice(0, 300) });
+      o.log.event('photo_check_failed', { room: code, checker: checker.name, error: String(err).slice(0, 300), ...times });
       return refuse(res, 503, 'unavailable');
     }
+    // `ms` is how long the check took.
     const ms = now() - started;
     if (!verdict.ok) {
       // What kind of thing was found goes in the logs (so we can see if the check is too strict),
       // never the photo.
-      o.log.event('photo_refused', { room: code, by, reason: verdict.reason, categories: verdict.reason === 'blocked' ? verdict.categories : undefined, ms });
+      o.log.event('photo_refused', { room: code, by, reason: verdict.reason, categories: verdict.reason === 'blocked' ? verdict.categories : undefined, ms, ...times });
       return refuse(res, verdict.reason === 'blocked' ? 422 : 400, verdict.reason === 'blocked' ? 'blocked' : 'not-image');
+    }
+    if (gone) {
+      o.log.event('photo_stopped', { room: code, by, ms, ...times, while: 'checking' });
+      return;
     }
     const id = randomBytes(16).toString('base64url');
     const added = room.addPhoto(session, { id, jpeg: clean.jpeg, width, height });
     if (added !== 'ok') return refuse(res, added === 'full' ? 409 : 410, added === 'full' ? 'full' : 'not-at-table');
-    o.log.event('photo_added', { room: code, by, bytes: clean.jpeg.length, width, height, ms });
+    o.log.event('photo_added', { room: code, by, bytes: clean.jpeg.length, width, height, ms, ...times });
     json(res, 200, { ok: true, image: photoImageId(id) });
   }
 

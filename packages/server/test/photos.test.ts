@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import http from 'node:http';
-import type { AddressInfo } from 'node:net';
+import net, { type AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -76,12 +76,12 @@ async function table(o: { checker?: PhotoChecker | null; deps?: Partial<RoomDeps
   servers.push(server);
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const upload = async (jpeg: Buffer, session = 'session-aaaa', type = 'image/jpeg') => {
-    const res = await fetch(`${base}/api/photo?table=${a.room.code}`, { method: 'POST', headers: { 'content-type': type, 'x-gd-session': session }, body: new Uint8Array(jpeg) });
+  const upload = async (jpeg: Buffer, session = 'session-aaaa', type = 'image/jpeg', more: Record<string, string> = {}) => {
+    const res = await fetch(`${base}/api/photo?table=${a.room.code}`, { method: 'POST', headers: { 'content-type': type, 'x-gd-session': session, ...more }, body: new Uint8Array(jpeg) });
     return { status: res.status, body: (await res.json()) as { ok: boolean; image?: string; reason?: string } };
   };
   const send = (who: 'a' | 'b', m: object) => a.room.handle(`session-${who.repeat(4)}`, { t: 'g', m } as never);
-  return { clock, log, mgr, room: a.room, a, b, base, upload, send, game: a.room.game as JigsawGame };
+  return { clock, log, mgr, room: a.room, a, b, base, server, upload, send, game: a.room.game as JigsawGame };
 }
 
 /** A photo as a phone would send it (a plain JPEG), optionally with camera and location details. */
@@ -259,6 +259,66 @@ describe('your own photos at a table', () => {
     expect((await t.upload(await photo(600, 400))).body).toEqual({ ok: false, reason: 'unavailable' });
     expect(t.room.photos.size).toBe(0);
     expect(t.log.events.find((e) => e.type === 'photo_check_failed')).toMatchObject({ checker: 'down' });
+  });
+
+  it('the logs say where the wait went: getting it ready (as the phone says), sending it, the check', async () => {
+    const t = await table();
+    await t.upload(await photo(600, 400), 'session-aaaa', 'image/jpeg', { 'x-gd-ready-ms': '850' });
+    expect(t.log.events.find((e) => e.type === 'photo_added')).toMatchObject({ readyMs: 850, sendMs: expect.any(Number), ms: expect.any(Number) });
+    // Anything but a sensible number of milliseconds is left out.
+    for (const bad of ['-5', '1e3', 'soon', '12345678']) await t.upload(await photo(600, 400), 'session-aaaa', 'image/jpeg', { 'x-gd-ready-ms': bad });
+    const added = t.log.events.filter((e) => e.type === 'photo_added');
+    expect(added.map((e) => (e as { readyMs?: number }).readyMs)).toEqual([850, undefined, undefined, undefined, undefined]);
+  });
+
+  it('Cancel (or a lost connection) during the check: the photo isn’t added, even though it passed', async () => {
+    let hold = true;
+    let asked!: () => void;
+    let answer!: () => void;
+    const checking = new Promise<void>((done) => (asked = done));
+    const t = await table({
+      checker: {
+        name: 'slow',
+        check: () => (hold ? new Promise((done) => ((answer = () => done({ ok: true })), asked())) : Promise.resolve({ ok: true })),
+      },
+    });
+    const jpeg = await photo(600, 400);
+    // Told when the server's end of the connection closes.
+    const closed = new Promise<void>((done) => t.server.once('connection', (s: net.Socket) => s.once('close', () => done())));
+    const req = http.request(`${t.base}/api/photo?table=${t.room.code}`, { method: 'POST', headers: { 'content-type': 'image/jpeg', 'x-gd-session': 'session-aaaa', 'content-length': jpeg.length } });
+    req.on('error', () => {});
+    req.end(jpeg);
+    await checking;
+    req.destroy();
+    await closed;
+    await new Promise((done) => setImmediate(done));
+    answer();
+    await expect.poll(() => t.log.events.find((e) => e.type === 'photo_stopped')).toMatchObject({ while: 'checking' });
+    expect(t.room.photos.size).toBe(0);
+    expect(pz(t.b.conn, 'pz-photos').at(-1)!.photos).toEqual([]);
+    expect(t.log.events.some((e) => e.type === 'photo_added')).toBe(false);
+    // Its place is free again.
+    hold = false;
+    expect((await t.upload(jpeg)).status).toBe(200);
+  });
+
+  it('Cancel part-way through sending frees its place at once', async () => {
+    const t = await table();
+    const port = (t.server.address() as AddressInfo).port;
+    // More than may be in the air at once for a table: none of them keeps its place.
+    for (let i = 0; i <= PHOTO_LIMITS.atOncePerTable; i++) {
+      const reading = new Promise<void>((done) => t.server.once('request', () => done()));
+      const s = net.connect(port, '127.0.0.1');
+      s.on('error', () => {});
+      s.write(`POST /api/photo?table=${t.room.code} HTTP/1.1\r\nHost: x\r\nContent-Type: image/jpeg\r\nX-Gd-Session: session-aaaa\r\nContent-Length: 100000\r\n\r\n`);
+      s.write(Buffer.alloc(5000));
+      await reading;
+      s.destroy();
+    }
+    await expect.poll(() => t.log.events.filter((e) => e.type === 'photo_stopped').length).toBe(PHOTO_LIMITS.atOncePerTable + 1);
+    expect(t.log.events.find((e) => e.type === 'photo_stopped')).toMatchObject({ while: 'sending', sendMs: expect.any(Number) });
+    expect(t.log.events.some((e) => e.type === 'photo_upload_error')).toBe(false);
+    expect((await t.upload(await photo(600, 400))).status).toBe(200);
   });
 
   it('is off without a check: the picker isn’t told it’s on, and uploads are refused', async () => {

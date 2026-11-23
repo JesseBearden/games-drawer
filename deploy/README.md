@@ -248,7 +248,10 @@ first deploy that has it:
 
 To turn uploads off, set `PHOTO_CHECK=off` in setup.sh (`pretend` lets every photo through:
 only for your own computer and tests). The admin logs show `photo_added`, `photo_refused` (with
-what kind of thing the check found) and `photo_check_failed`; never the photo.
+what kind of thing the check found), `photo_check_failed` and `photo_stopped` (Cancel pressed, or
+the connection lost, before the answer); never the photo. Each says where the wait went:
+`readyMs` (the phone or computer shrinking it, as it reports), `sendMs` (the upload) and `ms`
+(the check).
 
 ## Voice relay (TURN)
 

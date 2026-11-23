@@ -168,6 +168,70 @@ const PHOTO_REFUSED: Record<string, string> = {
   unavailable: 'Your photo couldn’t be checked just now. Try again in a minute.',
 };
 
+/** What's happening while your photo is added, in the photo panel. */
+const ADDING_WORDS = {
+  ready: 'Getting your photo ready…',
+  send: 'Sending your photo…',
+  check: 'Checking it’s family friendly…',
+} as const;
+type AddingStep = keyof typeof ADDING_WORDS;
+
+/**
+ * How far along the bar is (percent). Getting the photo ready and the check can't be measured,
+ * so the bar glides toward their marks (jigsaw.css); sending moves with what's really been sent,
+ * the part that's slow on a slow connection.
+ */
+const addingPercent = (step: AddingStep, sent: number) => (step === 'ready' ? 15 : step === 'send' ? 15 + Math.round(75 * sent) : 97);
+
+/** Cancel was pressed while your photo was being added. */
+const STOPPED = new Error('stopped');
+
+/**
+ * Send your photo. XMLHttpRequest, not fetch: only it says how much has gone, in every browser
+ * (Safari included). `sent` hears the share sent so far (0 to 1); `checking`, that it's all there
+ * and being checked.
+ */
+function sendPhoto(
+  url: string,
+  jpeg: Blob,
+  headers: Record<string, string>,
+  on: { sent(share: number): void; checking(): void },
+  signal: AbortSignal,
+): Promise<{ ok?: boolean; image?: string; reason?: string }> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(STOPPED);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    // A connection that stalls part-way gives up in the end, rather than leaving the bar stuck.
+    xhr.timeout = 120_000;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) on.sent(Math.min(1, e.loaded / e.total));
+    };
+    xhr.upload.onload = () => on.checking();
+    xhr.onload = () => {
+      let out: unknown = null;
+      try {
+        out = JSON.parse(xhr.responseText);
+      } catch {
+        /* not an answer from us */
+      }
+      resolve(out && typeof out === 'object' ? out : {});
+    };
+    xhr.onerror = xhr.ontimeout = () => reject(new Error('unavailable'));
+    xhr.onabort = () => reject(STOPPED);
+    signal.addEventListener(
+      'abort',
+      () => {
+        xhr.abort();
+        reject(STOPPED);
+      },
+      { once: true },
+    );
+    xhr.send(jpeg);
+  });
+}
+
 /**
  * Your photo, smaller (PHOTO_MAX_SIDE on its long side) and as a fresh JPEG: drawing it onto a
  * canvas keeps only the picture, so its location, camera and date stay on your device. Throws
@@ -251,8 +315,13 @@ export class JigsawTable implements View {
   private photos: TablePhotoInfo[] = [];
   /** Whether this table may upload photos at all. */
   private photosOn = false;
-  /** A photo of yours is being shrunk, sent and checked. */
-  private uploading = false;
+  /**
+   * Your photo while it's being added: the step it's at, the share sent, a small copy of it to
+   * show, and Cancel. Null when you aren't adding one.
+   */
+  private adding: { step: AddingStep; sent: number; preview: string | null; stop: AbortController } | null = null;
+  /** Why your last photo wasn't added: the photo panel says so until you try again or close it. */
+  private photoRefused: string | null = null;
 
   // The table.
   private canvas!: HTMLCanvasElement;
@@ -545,12 +614,18 @@ export class JigsawTable implements View {
     html += '<h4>How many pieces?</h4><div class="pz-counts">';
     for (const n of PIECE_COUNTS) html += `<button type="button" class="pz-btn" data-count="${n}">${n}</button>`;
     html += '</div><h4>Choose a puzzle</h4>';
-    // What happens to your own photo, before you pick one (the tile opens it).
+    // What happens to your own photo, before you pick one (the tile opens it); then how adding it
+    // is going, or why it wasn't added (renderPhotoNote).
     html +=
-      '<div class="pz-photo-note" hidden><p><b>Use your own photo.</b> Only the people at this table see it, and it’s deleted when the table closes, so this puzzle can’t be continued another day.</p>' +
-      '<p>It’s checked automatically first: photos that aren’t family friendly are turned away.</p>' +
-      '<div class="pz-photo-actions"><label class="pc-btn pc-btn-main">Choose a photo<input type="file" accept="image/*" class="pz-photo-file" hidden /></label>' +
-      '<button type="button" class="pc-btn pc-btn-plain" data-pz="photo-cancel">Not now</button></div></div>';
+      '<div class="pz-photo-note" hidden><div class="pz-photo-about"><p><b>Use your own photo.</b> Only the people at this table see it, and it’s deleted when the table closes, so this puzzle can’t be continued another day.</p>' +
+      '<p>It’s checked automatically first: photos that aren’t family friendly are turned away.</p></div>' +
+      `<div class="pz-photo-work" hidden><span class="pz-photo-thumb">${CAMERA_ICON}<img alt="" hidden /></span>` +
+      '<div class="pz-photo-what"><p class="pz-photo-step" role="status"></p>' +
+      '<div class="pz-photo-bar" role="progressbar" aria-label="Adding your photo" aria-valuemin="0" aria-valuemax="100"><span></span></div></div></div>' +
+      '<p class="pz-photo-refused" role="alert" hidden></p>' +
+      '<div class="pz-photo-actions"><label class="pc-btn pc-btn-main pz-photo-choose"><span>Choose a photo</span><input type="file" accept="image/*" class="pz-photo-file" hidden /></label>' +
+      '<button type="button" class="pc-btn pc-btn-plain" data-pz="photo-cancel">Not now</button>' +
+      '<button type="button" class="pc-btn pc-btn-plain" data-pz="photo-stop" hidden>Cancel</button></div></div>';
     html += '<div class="pz-images"><div class="pz-own"></div>';
     for (const i of this.pictures) {
       html += `<button type="button" class="pz-image" data-image="${i.id}"><img src="${i.thumb}" alt="" loading="lazy" /><span>${escapeHtml(i.title)}</span></button>`;
@@ -563,6 +638,7 @@ export class JigsawTable implements View {
     this.savesHtml = '';
     this.renderSaves();
     this.renderPhotos();
+    this.renderPhotoNote();
     this.renderPicks();
   }
 
@@ -580,8 +656,8 @@ export class JigsawTable implements View {
     }
     if (!this.photosOn) tile?.remove();
     if (tile) {
-      tile.disabled = this.uploading;
-      tile.querySelector('.pz-upload-label')!.textContent = this.uploading ? 'Checking…' : 'Your photo';
+      tile.disabled = !!this.adding;
+      tile.querySelector('.pz-upload-label')!.textContent = this.adding ? 'Adding…' : 'Your photo';
     }
     const want = new Set(this.photos.map((p) => p.image));
     for (const b of own.querySelectorAll<HTMLElement>('[data-image]')) if (!want.has(b.dataset.image!)) b.remove();
@@ -593,6 +669,48 @@ export class JigsawTable implements View {
       if (tile) tile.insertAdjacentHTML('afterend', html);
       else own.insertAdjacentHTML('afterbegin', html);
     }
+  }
+
+  /**
+   * The photo panel: what happens to your photo, before you choose one; while it's being added,
+   * the photo with what's happening and a bar (and Cancel); if it's turned away, why.
+   */
+  private renderPhotoNote() {
+    const note = this.el.querySelector<HTMLElement>('.pz-photo-note');
+    if (!note) return;
+    const q = <T extends HTMLElement = HTMLElement>(sel: string) => note.querySelector<T>(sel)!;
+    const a = this.adding;
+    const refused = a ? null : this.photoRefused;
+    const work = q('.pz-photo-work');
+    const fresh = !!a && (note.hidden || work.hidden);
+    if (a) note.hidden = false;
+    q('.pz-photo-about').hidden = !!a || !!refused;
+    work.hidden = !a;
+    const why = q('.pz-photo-refused');
+    why.hidden = !refused;
+    why.textContent = refused ?? '';
+    q('.pz-photo-choose').hidden = !!a;
+    q('.pz-photo-choose span').textContent = refused ? 'Try another photo' : 'Choose a photo';
+    q('[data-pz="photo-cancel"]').hidden = !!a;
+    q('[data-pz="photo-stop"]').hidden = !a;
+    if (!a) return;
+    q('.pz-photo-step').textContent = ADDING_WORDS[a.step];
+    const img = q<HTMLImageElement>('.pz-photo-thumb img');
+    if (a.preview && img.getAttribute('src') !== a.preview) img.src = a.preview;
+    img.hidden = !a.preview;
+    const bar = q('.pz-photo-bar');
+    const fill = q('.pz-photo-bar span');
+    const percent = addingPercent(a.step, a.sent);
+    if (fresh) {
+      // From empty, not from where the last photo's bar was left.
+      fill.style.transition = 'none';
+      fill.style.width = '0%';
+      void fill.offsetWidth;
+      fill.style.transition = '';
+    }
+    bar.dataset.step = a.step;
+    bar.setAttribute('aria-valuenow', String(percent));
+    fill.style.width = `${percent}%`;
   }
 
   /** The picture that's picked (a photo of the table's, or one of the site's), with its credit line. */
@@ -1691,37 +1809,72 @@ export class JigsawTable implements View {
 
   /**
    * Shrink your photo here (which also leaves its location and camera details behind), send it
-   * to be checked, and pick it once it's in. Everyone at the table gets it in their picker.
+   * to be checked, and pick it once it's in. Everyone at the table gets it in their picker. The
+   * photo panel shows how it's going the whole time (renderPhotoNote).
    */
   private async uploadPhoto(file: File) {
-    if (this.uploading) return;
-    this.uploading = true;
-    const note = this.el.querySelector<HTMLElement>('.pz-photo-note');
-    if (note) note.hidden = true;
+    if (this.adding) return;
+    const adding: NonNullable<JigsawTable['adding']> = { step: 'ready', sent: 0, preview: null, stop: new AbortController() };
+    this.adding = adding;
+    this.photoRefused = null;
     this.renderPhotos();
+    this.renderPhotoNote();
+    const update = () => {
+      if (this.adding === adding) this.renderPhotoNote();
+    };
+    const stopped = new Promise<never>((_, reject) => adding.stop.signal.addEventListener('abort', () => reject(STOPPED), { once: true }));
     let reason = 'unavailable';
+    let added = false;
     try {
-      const jpeg = await shrinkPhoto(file);
-      const res = await fetch(photoUploadUrl(this.shell.roomCode), {
-        method: 'POST',
-        headers: { 'content-type': 'image/jpeg', 'x-gd-session': getSession() ?? '' },
-        body: jpeg,
-      });
-      const out = (await res.json().catch(() => ({}))) as { ok?: boolean; image?: string; reason?: string };
+      const began = performance.now();
+      // Getting it ready can't be cut short, but Cancel needn't wait for it.
+      const jpeg = await Promise.race([shrinkPhoto(file), stopped]);
+      const readyMs = Math.round(performance.now() - began);
+      adding.preview = URL.createObjectURL(jpeg);
+      adding.step = 'send';
+      update();
+      const out = await sendPhoto(
+        photoUploadUrl(this.shell.roomCode),
+        jpeg,
+        { 'content-type': 'image/jpeg', 'x-gd-session': getSession() ?? '', 'x-gd-ready-ms': String(readyMs) },
+        {
+          sent: (share) => {
+            adding.sent = share;
+            update();
+          },
+          checking: () => {
+            adding.step = 'check';
+            update();
+          },
+        },
+        adding.stop.signal,
+      );
       if (out.ok && out.image) {
         this.pickImage = out.image;
+        added = true;
         reason = '';
       } else reason = out.reason ?? reason;
     } catch (err) {
-      reason = err instanceof Error && err.message in PHOTO_REFUSED ? err.message : reason;
+      if (err === STOPPED) reason = '';
+      else if (err instanceof Error && err.message in PHOTO_REFUSED) reason = err.message;
     } finally {
-      this.uploading = false;
-      if (this.setupBuilt) {
-        this.renderPhotos();
-        this.renderPicks();
-      }
+      if (adding.preview) URL.revokeObjectURL(adding.preview);
+      this.adding = null;
     }
-    if (reason) this.shell.toast(PHOTO_REFUSED[reason] ?? PHOTO_REFUSED.unavailable);
+    this.photoRefused = reason ? (PHOTO_REFUSED[reason] ?? PHOTO_REFUSED.unavailable) : null;
+    if (this.setupBuilt) {
+      // Added: the panel goes, and the photo is picked in the grid. Turned away: the panel says
+      // why. Cancelled: it's back to choosing one.
+      const note = this.el.querySelector<HTMLElement>('.pz-photo-note');
+      if (note) note.hidden = added;
+      this.renderPhotos();
+      this.renderPicks();
+      this.renderPhotoNote();
+    } else if (this.photoRefused) {
+      // The puzzle began meanwhile, and the panel isn't on screen.
+      this.shell.toast(this.photoRefused);
+      this.photoRefused = null;
+    }
   }
 
   private onClick = (e: Event) => {
@@ -1751,8 +1904,16 @@ export class JigsawTable implements View {
       case 'photo-cancel': {
         const note = this.el.querySelector<HTMLElement>('.pz-photo-note');
         if (note) note.hidden = act === 'photo-cancel' || !note.hidden;
+        // Closed: it starts from the beginning next time.
+        if (note?.hidden && this.photoRefused) {
+          this.photoRefused = null;
+          this.renderPhotoNote();
+        }
         return;
       }
+      case 'photo-stop':
+        this.adding?.stop.abort();
+        return;
       case 'picture': {
         const img = this.el.querySelector('.pz-preview') as HTMLElement;
         img.hidden = !img.hidden;
