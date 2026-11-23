@@ -159,10 +159,12 @@ Each has a unit test; none has been tried in a real browser or on a phone.
 - [x] **A second push before approving:** the first request closes ("staging is moving on"), and
       once the new push is on staging a new request names it. (Checked November 22: b6693ba closed
       e6908a2's request.)
-- [ ] **Approve it:** about 20 minutes later the site runs that commit, and the old box shuts
-      itself down when its games are done.
+- [x] **Approve it:** about 20 minutes later the site runs that commit, and the old box shuts
+      itself down when its games are done. (Checked November 22 with a2c76ea: approved at 6:00 pm,
+      live at 6:20, the old box gone at 6:34. Afterwards only the live box runs, and the staging
+      address shows it too, until the next push brings a staging box back.)
 
-## Pictures the browser keeps (new; needs a deploy)
+## Pictures the browser keeps (new; live since November 22)
 
 The felt, the cards and the puzzle pictures used to download again on every page load (about
 3.9 MB each time on the live site). Now a browser keeps them for ten minutes, then asks "still
@@ -202,14 +204,15 @@ been tested).
 - [ ] **A controller** (if you have one handy): it wakes up on the first button press or the
       second, including after being unplugged and plugged back in.
 
-## Voice relay setup (new; needs a deploy)
+## Voice relay setup (new; live since November 22)
 
 The relay's setup was tested on throwaway boxes (setup, reboot, attacks, and browser calls on
-the box itself), never as part of a real deploy, over the internet, or on a phone. So check these
-on the next deploy. The relay now waits only 5 seconds for a slot to be asked for, which makes a
-slow connection the one to try: a phone on one bar.
+the box itself), then went live with a2c76ea, but hasn't been tried over the internet or on a
+phone. The relay now waits only 5 seconds for a slot to be asked for, which makes a slow
+connection the one to try: a phone on one bar.
 
-- [ ] **The deploy finishes.** Setup now stops if the relay or its firewall doesn't start.
+- [x] **The deploy finishes.** Setup now stops if the relay or its firewall doesn't start.
+      (Checked November 22: a2c76ea's go-live finished, with the relay and its firewall running.)
 - [ ] **Through the relay**: a table link with `?relay=1` on two phones on cell data, one of them
       an iPhone. They hear each other, and still do after 11 minutes (the relay's slots renew
       about every 10).
@@ -220,9 +223,10 @@ slow connection the one to try: a phone on one bar.
       as Chrome already did).
 - [ ] **A public Tanks game** still starts and plays as before (it has no voice, and gets no relay
       credentials now).
-- [ ] **On the new box** (or ask Claude): `sudo nft list table inet gd_relay` lists its rules,
+- [x] **On the new box** (or ask Claude): `sudo nft list table inet gd_relay` lists its rules,
       `systemctl show coturn -p MemoryMax` says 367001600, and
-      `sudo journalctl --namespace gd-relay -u coturn` shows the relay's log.
+      `sudo journalctl --namespace gd-relay -u coturn` shows the relay's log. (Checked November 22
+      on the live box: 32 rules, 367001600, and the log is there.)
 - [x] **After `cdk deploy`**: the next deploy still finishes (boxes may now only create the shared
       secrets, never replace them). (Checked November 22: e6908a2's staging box started with them.)
 
