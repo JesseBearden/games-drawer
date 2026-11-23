@@ -83,8 +83,10 @@ function fitTogether(els: HTMLElement[], minPx: number) {
  */
 export function fitOneLine(el: HTMLElement, minPx: number) {
   el.style.fontSize = '';
-  const room = el.clientWidth;
-  const need = el.scrollWidth;
+  // A name tag turned on its side (Dominoes on an upright phone) runs its line downward.
+  const sideways = getComputedStyle(el).writingMode.startsWith('vertical');
+  const room = sideways ? el.clientHeight : el.clientWidth;
+  const need = sideways ? el.scrollHeight : el.scrollWidth;
   if (!room || need <= room + 0.5) return;
   const base = parseFloat(getComputedStyle(el).fontSize);
   el.style.fontSize = `${Math.max(minPx, Math.floor(((base * room) / need) * 10) / 10)}px`;

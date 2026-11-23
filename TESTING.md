@@ -585,6 +585,12 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
 (double-nine, double-twelve), 5/6/7 tiles and other player counts are for later.
 
 - [ ] Pick Dominoes on Start a table (or open /dominoes).
+- [ ] **Sideways names** (new, a trial; phones held upright only): the players on your left and
+      right sit up the sides of the board on thin one-line tags ("Robo-Bob · 5 pts · 5 tiles"),
+      the left one reading upward and the right one downward; the player across stays at the top.
+      The computer mark and the talking bars turn with the writing, and whoever's turn it is
+      still goes yellow. Is it easy enough to read, and is the board (a little narrower now) still
+      comfortable late in a hand? Turned sideways, the phone keeps everyone down the left as before.
 - [ ] Whoever holds the 6-6 leads it in the first hand; after that the last hand's winner leads.
 - [ ] Tap a tile: dashed blue spots show where it can go. Tap a spot to play it there. Tapping
       the tile again now puts it back down instead of playing it (even when there's only one

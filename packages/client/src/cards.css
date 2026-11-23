@@ -810,6 +810,81 @@ body.pad-mode #game .dm-mine.pad-cursor {
   }
 }
 
+/* ------------------------------------------------------------------ Dominoes: sideways names (2026-11-22)
+   Phones held upright: the players on your left and right sit up the sides of the board, their
+   name tags turned on their side, and the player across stays at the top (the user's "version A",
+   a trial). The tops of the letters face the screen's edges, so the left tag reads upward and the
+   right one downward: mirror images, never a pinwheel. A sideways tag is one line, name then
+   score ("Robo-Bob · 5 pts · 5 tiles"), so it's thin (the user, 2026-11-22: two lines gave back
+   too little of the board), and as long as that line needs, the same for both sides. The marks
+   (talking bars, computer, zzz) turn with the writing. fitOneLine measures a sideways line by
+   its height. */
+@media (max-width: 600px) and (min-height: 461px) {
+  #game .dominoes-view .ht {
+    --tag-len: calc((100vw - 32px - var(--safe-l, 0px) - var(--safe-r, 0px)) / 3);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      '. top .'
+      'left center right'
+      'mine mine mine'
+      'hand hand hand';
+  }
+  #game .dominoes-view .ht-pos-2 {
+    width: var(--tag-len);
+    justify-self: center;
+  }
+  #game .dominoes-view .ht-pos-1,
+  #game .dominoes-view .ht-pos-3 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+    width: auto;
+    height: clamp(170px, 30dvh, 240px);
+    justify-self: stretch;
+    align-self: center;
+    padding: 12px 6px;
+    font-size: 0.8125rem;
+  }
+  /* Right: the writing turned a quarter clockwise, read top to bottom. */
+  #game .dominoes-view .ht-pos-3 {
+    writing-mode: vertical-rl;
+  }
+  /* Left: the mirror image, read bottom to top. Each piece is turned over and the pieces run
+     upward (the tag itself isn't turned, so its shadow still falls downward like everyone
+     else's). */
+  #game .dominoes-view .ht-pos-1 {
+    writing-mode: vertical-lr;
+    flex-direction: row-reverse;
+  }
+  #game .dominoes-view .ht-pos-1 > .ht-name,
+  #game .dominoes-view .ht-pos-1 > .ht-score {
+    transform: rotate(180deg);
+  }
+  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-name {
+    flex: 0 1 auto;
+    min-height: 0;
+    font-size: inherit;
+  }
+  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-nm {
+    min-height: 0;
+  }
+  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-score {
+    flex: none;
+    white-space: nowrap;
+    font-size: 0.75rem;
+  }
+  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-score::before {
+    content: '· ';
+  }
+  /* The marks are pictures, which sideways writing leaves standing up: turn them a quarter too
+     (the left one's piece is already turned over, which finishes the job). */
+  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) :is(.pc-talk, .ht-cpu) {
+    writing-mode: horizontal-tb;
+    transform: rotate(90deg);
+  }
+}
+
 /* ------------------------------------------------------------------ Three Thirteen */
 
 /* The middle of the table: which round (and what's wild), the pile and the discards side by
