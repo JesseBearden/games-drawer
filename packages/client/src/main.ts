@@ -37,7 +37,7 @@ import { Sfx } from './audio';
 import { Gamepads, moveFocus, watchPadMode } from './gamepad';
 import { reloadForUpdate } from './reload';
 import { readActive, resumesTable, type Active, type AsItWas } from './resume';
-import { Net } from './net';
+import { getDeviceId, Net } from './net';
 import { escapeHtml } from './html';
 import { MIC_CONSTRAINTS, voiceSupported } from './voice';
 
@@ -268,6 +268,8 @@ const GAME_PHRASE: Record<GameId, string> = { jigsaw: 'a puzzle', dominoes: 'Dom
 
 /** The join page re-checks who's there this often, so someone arriving or leaving shows before you join. */
 const JOIN_REFRESH_MS = 8000;
+/** Sooner while you're still at the table from a tab you've just closed: you're let back in once it's noticed. */
+const JOIN_REFRESH_HERE_MS = 2500;
 let joinTimer = 0;
 
 /**
@@ -309,7 +311,10 @@ async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
   try {
     const q = new URLSearchParams({ code: p.code, slot: slotOfCode(p.code) });
     if (p.token) q.set('i', p.token);
-    const res = await fetch(`/api/table?${q}`, { cache: 'no-store' });
+    // This device's number, so a seat you left here is known as yours (your table knows you again
+    // in a new tab, the same way).
+    const device = getDeviceId();
+    const res = await fetch(`/api/table?${q}`, { cache: 'no-store', ...(device && { headers: { 'x-gd-device': device } }) });
     if (res.ok) info = (await res.json()) as TableInfo;
   } catch {
     /* offline or an old server: the page still works, just without names */
@@ -317,11 +322,11 @@ async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
   // The address may have changed (or you joined) while we waited.
   const stillHere = () => !app && page.kind === 'join' && page.code === p.code;
   if (!stillHere()) return;
-  const again = () => {
+  const again = (ms = JOIN_REFRESH_MS) => {
     joinTimer = window.setTimeout(() => {
       if (stillHere() && document.visibilityState === 'visible') void refreshJoin(p);
-      else if (stillHere()) again();
-    }, JOIN_REFRESH_MS);
+      else if (stillHere()) again(ms);
+    }, ms);
   };
   if (!info) {
     again();
@@ -341,9 +346,19 @@ async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
     return;
   }
   const who = namesHtml(info.people);
-  if (info.full) {
+  // A seat you left here (this device's): joining gives it back, full table or not.
+  const back = info.back ?? null;
+  if (info.full && !back) {
     form.hidden = true;
     setJoinClosed(true);
+    if (info.here) {
+      // One of the full table's people is you, on this device: usually a tab you've just closed
+      // that the table hasn't noticed yet.
+      title.textContent = 'You’re already at this table';
+      detail.textContent = 'It’s open in another tab or window on this device. If you just closed it, this page lets you back in by itself in a moment.';
+      again(JOIN_REFRESH_HERE_MS);
+      return;
+    }
     title.textContent = 'This table is full';
     detail.innerHTML = `${who || 'Four people'} ${info.people.length === 1 ? 'is' : 'are'} already playing. Ask them to make room, or start your own table.`;
     again();
@@ -353,7 +368,13 @@ async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
   setJoinClosed(false);
   const game = info.game ? GAME_PHRASE[info.game] : null;
   const joinLine = who ? (game ? `Join ${who} for ${game}` : `Join ${who} at the table`) : '';
-  if (joinLine && (!info.from || info.people.includes(info.from))) {
+  if (back) {
+    // You're coming back: not "Jesse invited you" or "Jesse stepped away" when you're Jesse.
+    title.innerHTML = `Welcome back, ${namesHtml([back])}`;
+    detail.innerHTML = joinLine
+      ? `Your seat is saved. ${joinLine}.`
+      : `Your seat is saved. Nobody else is at the table right now${game ? `. It’s set up for ${game}` : ''}.`;
+  } else if (joinLine && (!info.from || info.people.includes(info.from))) {
     // Whoever invited you is there: "Join Jesse and Sam for a puzzle" says it all.
     title.innerHTML = joinLine;
     detail.textContent = '';
@@ -363,7 +384,7 @@ async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
     detail.innerHTML = joinLine ? `${joinLine}.` : `Nobody is at the table right now${game ? `. It’s set up for ${game}` : ''}.`;
   }
   // People who dropped out still hold their seat and may come back: name them too.
-  const away = (info.away ?? []).filter((n) => !info.people.includes(n));
+  const away = (info.away ?? []).filter((n) => !info.people.includes(n) && n !== back);
   if (away.length) {
     const line = `${namesHtml(away)} stepped away and may come back.`;
     detail.innerHTML = detail.innerHTML ? `${detail.innerHTML} ${line}` : line;

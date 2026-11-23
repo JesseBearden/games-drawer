@@ -5,10 +5,11 @@ const DEVICE_KEY = 'gd.device';
 
 /**
  * A random number this browser keeps for good (unlike the session, which is per tab), so the admin
- * page can count devices rather than tabs. It's sent when joining and logged only scrambled; it
- * says nothing about who you are (the privacy page explains it). Null if storage is off.
+ * page can count devices rather than tabs, and a table knows you again in a new tab. It's sent when
+ * joining and when the join page looks at a table, and logged only scrambled; it says nothing
+ * about who you are (the privacy page explains it). Null if storage is off.
  */
-function getDeviceId(): string | null {
+export function getDeviceId(): string | null {
   try {
     let id = localStorage.getItem(DEVICE_KEY);
     if (!id || !/^[0-9a-f]{32}$/.test(id)) {

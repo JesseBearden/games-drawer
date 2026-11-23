@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   DEFAULT_CONFIG,
+  isDeviceId,
   isInviteToken,
   isRoomCode,
   normalizeRoomCode,
@@ -219,7 +220,10 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
         return;
       }
       if (url.pathname === '/api/table') {
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(tableLookup(url, clientIp(req, o.trustProxy), req.headers['sec-fetch-site'] === 'cross-site')));
+        // The asking device's number (as when joining), so the page can tell it its seat is waiting.
+        const device = req.headers['x-gd-device'];
+        const info = tableLookup(url, clientIp(req, o.trustProxy), req.headers['sec-fetch-site'] === 'cross-site', isDeviceId(device) ? device : null);
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(info));
         return;
       }
       if (o.production) {
@@ -240,7 +244,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
    * The join page's look at a table before joining: who's there, the game, who invited you. Wrong
    * codes count with wrong codes at join, so this can't be used to hunt for open tables.
    */
-  function tableLookup(url: URL, ip: string, crossSite: boolean): TableInfo {
+  function tableLookup(url: URL, ip: string, crossSite: boolean, deviceId: string | null): TableInfo {
     const now = Date.now();
     // Only our own pages ask. Another website making a visitor's browser ask (ten hidden pictures
     // would do) must not use up that household's wrong tries and lock it out of joining.
@@ -253,7 +257,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       return { ok: false, reason: 'closed' };
     }
     const token = url.searchParams.get('i');
-    return room.tableInfo(isInviteToken(token) ? token : null);
+    return room.tableInfo(isInviteToken(token) ? token : null, deviceId);
   }
 
   function stats() {

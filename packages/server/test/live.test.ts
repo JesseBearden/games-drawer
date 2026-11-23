@@ -417,9 +417,34 @@ describe('live server: abuse limits', () => {
       const host = await joined(s.port, { kind: 'create-private', game: 'jigsaw' });
       const code = host.w.room.code;
       const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}`)).json();
-      expect(info).toEqual({ ok: true, from: 'Tester', for: null, game: 'jigsaw', people: ['Tester'], away: [], full: false });
+      expect(info).toEqual({ ok: true, from: 'Tester', for: null, game: 'jigsaw', people: ['Tester'], away: [], full: false, back: null, here: false });
       const gone = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=BBBBB`)).json();
       expect(gone).toEqual({ ok: false, reason: 'closed' });
+      host.c.ws.close();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('the join page, asked with your device’s number, knows a seat you left is yours', async () => {
+    const s = await startWith();
+    try {
+      const host = await joined(s.port, { kind: 'create-private', game: 'jigsaw' });
+      const code = host.w.room.code;
+      const device = '0123456789abcdef0123456789abcdef';
+      const c = connect(s.port);
+      await c.opened;
+      c.send({ t: 'hello', v: PROTOCOL_VERSION, session: null, name: 'Jesse', room: { kind: 'private', code }, device: 'desktop', deviceId: device });
+      await c.waitFor('welcome');
+      const look = async (headers: Record<string, string>) => (await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}`, { headers })).json()) as { back?: string | null };
+      expect(await look({ 'x-gd-device': device })).toMatchObject({ people: ['Tester', 'Jesse'], back: null, here: true });
+      // The tab is closed: the seat waits for this device, and only this device.
+      c.ws.close();
+      await expect.poll(async () => (await look({ 'x-gd-device': device })).back).toBe('Jesse');
+      expect(await look({ 'x-gd-device': device })).toMatchObject({ people: ['Tester'], away: ['Jesse'], here: false });
+      expect(await look({ 'x-gd-device': 'fedcba9876543210fedcba9876543210' })).toMatchObject({ back: null, here: false });
+      // Anything that isn't a device number is ignored.
+      expect(await look({ 'x-gd-device': device.toUpperCase() })).toMatchObject({ back: null, here: false });
       host.c.ws.close();
     } finally {
       await s.close();

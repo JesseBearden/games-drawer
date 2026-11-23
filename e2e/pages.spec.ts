@@ -114,6 +114,30 @@ test('before joining you see everyone at the table, kept up to date', async ({ p
   await expect(detail).toHaveText('Sam stepped away and may come back.');
 });
 
+test('back at a table you just left: you’re told it’s yours, not that it’s full or that you stepped away', async ({ page }) => {
+  // Four at the table, one of them you, from a tab you've just closed that isn't noticed yet.
+  let info: object = { ok: true, from: 'Jesse', for: null, game: 'jigsaw', people: ['Jesse', 'Jesse 2', 'iPad', 'Jesse Phone'], away: [], full: true, back: null, here: true };
+  let device = '';
+  await page.route('**/api/table**', (route) => {
+    device = route.request().headers()['x-gd-device'] ?? '';
+    return route.fulfill({ json: info });
+  });
+  await page.goto(at('/r/BCDFG'));
+  const title = page.locator('#join-title');
+  const detail = page.locator('#join-detail');
+  const join = page.getByRole('button', { name: 'Join with mic off' });
+  await expect(title).toHaveText('You’re already at this table');
+  await expect(detail).toContainText('If you just closed it, this page lets you back in by itself');
+  await expect(join).toBeHidden();
+  // The page asks with this device's number (a header, never in the address).
+  expect(device).toMatch(/^[0-9a-f]{32}$/);
+  // It's noticed: your seat waits for you (the table is still "full", but the seat is yours).
+  info = { ...info, people: ['Jesse 2', 'iPad', 'Jesse Phone'], away: ['Jesse'], here: false, back: 'Jesse' };
+  await expect(title).toHaveText('Welcome back, Jesse', { timeout: 6000 });
+  await expect(detail).toHaveText('Your seat is saved. Join Jesse 2, iPad and Jesse Phone for a puzzle.');
+  await expect(join).toBeVisible();
+});
+
 test('an invite made for someone by name fills it in for them @smoke', async ({ page: host, browser }) => {
   // Catch the link instead of opening the phone's share sheet.
   await host.addInitScript(() => {

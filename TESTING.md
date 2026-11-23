@@ -13,6 +13,15 @@ _Last updated: 2026-11-22_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player room.
 
+## Coming back to your own table in a new tab (new)
+
+- [ ] At a table of four, copy the link, close your tab and open the link again in a new one. For
+      a moment it says **"You're already at this table"** (not "full"), then by itself
+      **"Welcome back, Jesse"** and "Your seat is saved. Join … for a puzzle." It doesn't call you
+      the one who stepped away. Join: you're back in your seat.
+- [ ] Someone else opening the link while you're gone still sees "Jesse stepped away and may come
+      back."
+
 ## Adding your own photo: the progress panel (new)
 
 Picking a photo for a Jigsaw used to show only "Checking…" on the tile. Now the panel you chose it

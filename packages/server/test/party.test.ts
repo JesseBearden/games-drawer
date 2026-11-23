@@ -1177,6 +1177,22 @@ describe('coming back in a new tab', () => {
     expect(seatOf(room, 'session-bro1')).toBe(seat);
   });
 
+  it('the join page knows the device: its own seat is waiting for it, or it is here already', () => {
+    const { mgr, room, code } = spades();
+    const moms = 'device-moms-phone-1234';
+    const look = (deviceId: string | null) => room.tableInfo(null, deviceId);
+    expect(look(moms)).toMatchObject({ back: null, here: true });
+    room.disconnect('session-mom1', room.players.get('session-mom1')!.conn, 'disconnect');
+    // Gone: her seat waits for her, under her name. Anyone else just sees that Mom stepped away.
+    expect(look(moms)).toMatchObject({ back: 'Mom', here: false, away: ['Mom'] });
+    expect(look('device-bros-phone-5678')).toMatchObject({ back: null, here: true });
+    expect(look('device-someone-else-0000')).toMatchObject({ back: null, here: false });
+    expect(look(null)).toMatchObject({ back: null, here: false });
+    // Joining from her phone gives it back, as the page said.
+    come(mgr, code, 'session-mom2', 'Mom', moms);
+    expect(look(moms)).toMatchObject({ back: null, here: true, away: [] });
+  });
+
   it('at the table before a game, the seat they picked comes with them', () => {
     const { mgr, clock } = setup();
     const a = joinPrivate(mgr, 'session-aaaa');

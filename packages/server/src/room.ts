@@ -959,13 +959,19 @@ export class Room {
     p.conn?.send(JSON.stringify({ t: 'invite', token, for: wanted } satisfies ServerMessage));
   }
 
-  /** What the join page shows for this table (and an invite token, if the link had one). */
-  tableInfo(token: string | null): TableInfo {
+  /**
+   * What the join page shows for this table (and an invite token, if the link had one). With the
+   * asking device's number, also whether it's coming back to a seat it left (as `returning` would
+   * give it back), or is here already.
+   */
+  tableInfo(token: string | null, deviceId: string | null = null): TableInfo {
     const invite = token ? this.invites.get(token) : undefined;
     // The sender's current name (they may have changed it); if they've gone, whoever started the table.
     const sender = invite ? this.players.get(invite.session) : undefined;
     const starter = this.starter ? this.players.get(this.starter) : undefined;
     const from = sender?.name ?? starter?.name ?? null;
+    const did = deviceId ? devicePseudonym(deviceId) : null;
+    const mine = did ? [...this.players.values()].filter((p) => p.did === did) : [];
     return {
       ok: true,
       from,
@@ -974,6 +980,8 @@ export class Room {
       people: [...this.players.values()].filter((p) => p.conn).map((p) => p.name),
       away: [...this.players.values()].filter((p) => !p.conn).map((p) => p.name),
       full: this.openSlots() <= 0,
+      back: mine.find((p) => !p.conn && p.awaySince !== null)?.name ?? null,
+      here: mine.some((p) => !!p.conn),
     };
   }
 

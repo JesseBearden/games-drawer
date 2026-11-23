@@ -189,6 +189,9 @@ export const isInviteToken = (v: unknown): v is string =>
  * What the join page shows before you join (GET /api/table?code=…&i=…). Names come from the
  * server, never from the link, so a link can't claim to be from someone it isn't.
  */
+/** A device number as the browser makes them (net.ts): 32 hex digits. */
+export const isDeviceId = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f]{32}$/.test(s);
+
 export type TableInfo =
   | {
       ok: true;
@@ -203,6 +206,13 @@ export type TableInfo =
       /** People who dropped out but still hold their seat (they may come back). */
       away: string[];
       full: boolean;
+      /**
+       * Asked with this device's number (x-gd-device): the name of a seat it left, which joining
+       * gives back. Null otherwise. (Missing from an older server.)
+       */
+      back?: string | null;
+      /** This device is at the table now: another tab, or one just closed that isn't noticed yet. */
+      here?: boolean;
     }
   | { ok: false; reason: 'closed' | 'busy' };
 
@@ -487,7 +497,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       else if (room.kind === 'private' && str(room.code, 12)) req = { kind: 'private', code: room.code };
       else return null;
       // A device number that isn't one of ours is just left off (it only feeds the admin counts).
-      const deviceId = typeof o.deviceId === 'string' && /^[0-9a-f]{32}$/.test(o.deviceId) ? o.deviceId : undefined;
+      const deviceId = isDeviceId(o.deviceId) ? o.deviceId : undefined;
       return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device, ...(deviceId && { deviceId }), ...(o.batch === true && { batch: true }) };
     }
     case 'leave':
