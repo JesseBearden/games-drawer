@@ -87,14 +87,14 @@ on calm grey. [DESIGN.md](DESIGN.md) has the rules (words, sizes, layouts, what 
 ## Deploying
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) tests every pull request
-and push. Each push to `main` also starts the pipeline inside the AWS account
-([deploy/README.md](deploy/README.md#the-pipeline)): it runs every test, browser tests too, then
-puts the build on staging and **waits for someone to approve it**. Approved, that same build gets
-a new box and 10% of new tables for 10 minutes. If it stays healthy, it takes all new tables
-and the front door; the old box finishes its games and shuts itself down, so a deploy doesn't cut
-anyone off (a table still going after 3 hours gets a 10-minute warning). If it isn't, the new box
-is removed. The AWS side (DNS, the boxes' launch template, a shared disk, the pipeline, budgets
-and a spending kill switch) is code in [infra/](infra/README.md).
+and push. Each push to `main` also starts the `games-drawer` pipeline inside the AWS account
+([deploy/README.md](deploy/README.md#the-pipeline)): it runs every test, browser tests too, puts
+the build on staging and **waits for someone to approve it**; a push never goes live by itself.
+Approved, that same build gets a new box and 10% of new tables for 10 minutes. If it stays
+healthy, it takes all new tables and the front door; the old box finishes its games and shuts
+itself down, so a deploy doesn't cut anyone off (a table still going after 3 hours gets a
+10-minute warning). If it isn't, the new box is removed. The AWS side is code in
+[infra/](infra/README.md).
 
 ## Adding a game
 
@@ -104,7 +104,7 @@ and a spending kill switch) is code in [infra/](infra/README.md).
 2. Rules and computer players go in `packages/shared`; the server side in
    `packages/server/src/games/` (a `ServerGame`), hooked into `makeGame` in `room.ts`.
 3. The screen goes in `packages/client/src/` (a `View`, with `onPad` for controllers), with its
-   container in `index.html`, hooked into `showGame` in `shell.ts`.
+   container in `index.html`, listed in `FETCH` in `gameViews.ts`.
 4. Give it a felt icon at `packages/client/public/art/games/<id>.webp` and a felt colour and a
    place in the list at the table (`GAME_PAPER` and `ORDER` in `lobby.ts`).
 
@@ -126,8 +126,8 @@ and a spending kill switch) is code in [infra/](infra/README.md).
   sizes.
 - `deploy/` — deploys: the fleet tool (launches, promotes and retires boxes) and what runs on
   each box (machine setup, Caddy routing between boxes, coturn, the rollout tool).
-- `infra/` — the AWS stacks (CDK): CloudFront and DNS, the boxes' launch template, shared disk,
-  firewall, budgets, kill switch, deploy access.
+- `infra/` — the AWS stacks (CDK): DNS, the boxes' launch template, shared disk, firewall, the
+  pipeline, budgets, kill switch, and CloudFront for later.
 - `scripts/` — releases, stats, the admin password, and the felt art.
 - `docs/screenshots/` — the pictures in this README.
 
@@ -144,7 +144,7 @@ and a spending kill switch) is code in [infra/](infra/README.md).
 | `STATS_TOKEN` | none | Required as `?token=` for `/stats` in production |
 | `EMPTY_ROOM_MS`, `RECLAIM_MS` | 60000 | Shorten to test room expiry and reclaim |
 | `IDLE_ROOM_MS` | 10 minutes | Close a table after this long with nobody playing or talking (after a minute's warning) |
-| `MAX_PUBLIC_ROOMS`, `MAX_PRIVATE_ROOMS` | 10 | Room caps |
+| `MAX_PUBLIC_ROOMS`, `MAX_PRIVATE_ROOMS` | 10, 50 | Room caps |
 | `LOG_DIR` | `./logs` | Where the JSONL logs go. Files more than 30 days old are deleted, here and in every `ADMIN_LOG_DIRS` folder (the privacy page promises it) |
 | `VOICE_ICE_SERVERS` | our relay's STUN, or Google's public STUN without a relay | JSON list of STUN servers for voice chat |
 | `TURN_URLS`, `TURN_SECRET` | none | Our own voice relay (coturn); players get expiring credentials. See [deploy/README.md](deploy/README.md) |

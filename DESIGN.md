@@ -1,128 +1,95 @@
-# Games Drawer design rules: Cut Paper
+# Games Drawer design rules: Felt
 
 Games Drawer is for hanging out with family and friends, some of them not technical. It works on
 phones, tablets and computers, and people should be able to jump in and out easily. Every screen has
 to make sense to someone seeing it for the first time.
 
-The look is **cut construction paper**. These rules keep it consistent. When a mock or a new screen
-disagrees with them, the rules win, or we change the rules on purpose.
+The look is **wool felt**, like a card table and a puzzle mat. These rules keep it consistent. When
+a mock or a new screen disagrees with them, the rules win, or we change the rules on purpose.
 
-See every piece in one place at `/paper.html` on the dev server (`npm run dev`). Check a change there
-first.
+## 1. Everything is felt
 
-## 1. Everything is paper
-
-- **Every colored shape is its own piece of paper.** It has a palette color, the paper grain, and a
-  shadow that shows what it sits on.
-  - Don't use flat boxes, gradients, glows, frosted glass, or outlines drawn as thin lines.
-- **Light comes from above.** Shadows fall downward and are tinted ink, never black. A piece sits at
-  one of five heights:
+- **Every coloured shape is its own piece of felt.** It has a palette colour, the felt's grain, and
+  a shadow that shows what it lies on. No flat boxes, gradients, glows, frosted glass, or outlines
+  drawn as thin lines.
+- **Warm, not kiddy.** It should feel inviting and easy, never like a site only for children.
+- **Light comes from above.** Shadows fall downward and are warm and dark (`--shade`), never blue
+  or black. A piece sits at one of five heights:
   - **Laid down** (`--laid`): felt that isn't a button (user, 2026-11-22): name tags, taken
     seats, the red "mic is off" strip, messages, status and score chips, the strips that hold
     buttons, the little green table on Your table. A thin piece of felt lying on what's under it:
-    no rounded, lit edge, just a fine dark line where it meets the felt below. Only buttons
-    stand up off the table (an open seat is a button: tap it to sit), so you can tell what to
+    no rounded, lit edge, just a fine dark line where it meets the felt below. **Only buttons
+    stand up** off the table (an open seat is a button: tap it to sit), so you can tell what to
     tap. Whose turn it is shows by colour, not by lifting the tag. Things that pop up over
     everything else (sheets, notices, Messages, the Ready strip) are still held up.
-  - **Pressed** (`--lift-0`): a button while it's being pressed.
+  - **Pressed** (`--lift-0`): a button while it's being pressed (it sinks into the felt).
   - **Resting** (`--lift-1`): buttons, cards, tiles.
   - **Lifted** (`--lift-2`): the thing you picked, hover.
   - **Held** (`--lift-3`): a card or piece you're dragging, and pop-up panels.
-- **A piece shouldn't sit on its own color.** It needs to differ from what's under it, not just by
-  its shadow, because the same color stacked on itself reads oddly. Treat this as a strong habit,
-  not a law: if you do stack a color on itself, decide that on purpose. Examples:
-  - **Name tags** on the light blue mat are ivory.
-  - **Messages** sit on a sheet of sky paper: ivory notes from others, cobalt notes for yours.
-  - **Outlined buttons** are white, not page ivory.
-  - **Ivory dominoes** sit straight on the blue mat (no rack under them).
-  - **The in-game buttons** sit straight on the mat, not on an ivory strip.
-  - **Game tiles** are each tinted with their game's color.
-- **An outline is a bigger piece of paper underneath:** cobalt, at least 2 px.
-- **Tap or type:**
-  - Things you tap are stuck on top, so they cast a shadow.
-  - Things you type into are cut out of the page, so the shadow falls inside.
-- **Cut or torn:**
-  - Anything you tap or read has clean, scissor-cut edges with rounded corners.
-  - Torn edges belong only to illustrations and scenery, like the hero picture and the Tanks hills.
+- **Depth comes from shadow**, like the user's mock: a lit top edge and a dark shadow hugging the
+  piece, not a visible side band.
+- **No blue outlines.** Something picked lifts or turns cobalt.
+- **Words look pressed into the felt.** Words straight on a table (green or grey) are near-white.
+- **A piece shouldn't lie on its own colour.** It needs to differ from what's under it, not just by
+  its shadow. Treat this as a strong habit, not a law: if you do stack a colour on itself, decide
+  that on purpose. Game tiles are each their game's colour.
+- **Tap or type:** things you tap stand up and cast a shadow; boxes you type into are cut into the
+  felt (`--cut-in`), so the shadow falls inside.
 - **Pictures sit straight on the page, not in a box:** cut them out (a transparent image) rather
   than blending a white background away, which iPad Safari doesn't do inside scrolling pages.
   Never crop them; they keep their own shape.
 - **Home and the join page fit one screen:** their main button shows without scrolling on every
   device, so sizes there follow the screen's height as well as its width.
 - **Never rotate a piece to change its orientation**, because its shadow would turn with it. Draw the
-  vertical version instead, as with dominoes.
+  vertical version instead, as with dominoes. (Writing can run sideways: see Dominoes on a phone.)
 
-## 2. Colors
+## 2. Colours
 
-Use as many paper colors as make sense. Only the **signal colors** below are strict: each one
-means exactly one thing in the interface, so nobody has to guess.
+Use as many felt colours as make sense. Only the **signal colours** are strict: each one means
+exactly one thing, so nobody has to guess.
 
-| Signal | Hex | It means |
-| --- | --- | --- |
-| Cobalt | `#103db6` | The main button (one per screen), outlines of other buttons, links |
-| Sunflower | `#ffcb2d` | Whose turn it is |
-| Tomato | `#ef5943` | Something is off: mic muted, unread messages, mic blocked, leaving |
+| Signal | It means |
+| --- | --- |
+| Cobalt | The main button (one per screen), the words on other buttons, links, something picked |
+| Sunflower | Whose turn it is |
+| Tomato | Something is off: mic muted, unread messages, mic blocked, leaving |
 
-Base colors:
+The rest: paper (cream, the page), white, mat (grey), the green card table (`--baize`), dove
+(the light grey Jigsaw table), sky, mint, butter, lilac, peach, blush, kraft and grass. The exact
+colours are the user's swatch sheet, in `felt.css`; `/felt-swatches.html` on the dev server lays
+ours out like it. Add a colour when something needs it; each one needs its own felt sheet (see
+"Where things live").
 
-| Color | Hex | Use |
-| --- | --- | --- |
-| Paper | `#fffcf5` | The page and most pieces |
-| Ink | `#112875` | Text |
-| Mat | `#e5eff6` | The table a game is played on |
-
-**More paper, used freely:**
-- sky `#85bee3`
-- mint `#b7ddc8`
-- butter `#f7e3a2`
-- lilac `#c6b5dc`
-- peach `#f2bd96`
-- blush `#ebb7bf`
-- kraft `#bb926a`
-- grass `#478653`
-
-There's also a white paper (`#fefefd`) for outlined buttons. Add more colors when something needs
-them; each one needs its own paper sheet (see "Where things live").
-
-**On the deeper papers, use full ink for text**, including small notes. Soft ink is for the
-lighter papers: paper, white and mat.
-
-- **Each game has its own paper color**, used for its tile and its page: Jigsaw sky, Dominoes mint,
-  Hearts butter, Spades lilac, Tanks peach.
-- **A piece and what it sits on must differ in color.** Ink text on any paper needs a contrast
-  ratio of at least 4.5:1, and the light tints above all pass.
-- **One cobalt main button per screen.** Everything else is an ivory button with a cobalt outline.
-- **Player colors.** In games where you tell people apart on the board (Tanks, Jigsaw hands),
-  players are cobalt, tomato, sunflower and grass, in seat order.
+- **Each game has its own colour**, used for its tile: Jigsaw sky, Dominoes mint, Hearts butter,
+  Spades lilac, Tanks peach, Three Thirteen blush.
+- **Ink on any felt needs a contrast ratio of at least 4.5:1.** On the deeper colours use full ink,
+  even for small notes.
+- **One cobalt main button per screen.** Other buttons are white felt with cobalt words.
+- **Player colours** where you tell people apart on the board (Tanks, Jigsaw pointers) come from
+  `packages/shared/src/palette.ts`: cobalt, tomato, sunflower and grass first. Names in the Tanks
+  notes are ink, underlined in the tank's colour (coloured text is hard to read).
 - **Each person's own felt** (a trial, user 2026-11-22; `felts.ts`): a light felt that stays with
   the name. Their name tag on Your table, the seat they pick there, and their name tag in
-  Dominoes are all in it; the computers take the colors nobody has. They're sky, lilac, peach and
+  Dominoes are all in it; the computers take the colours nobody has. They're sky, lilac, peach and
   mint first, then blush, kraft, white and dove. Never sunflower or butter (whose turn it is),
-  tomato (something's off), cobalt (a button) or grass (it vanishes into the green table). So
-  sunflower still never means two things: in Dominoes whose turn it is shows as a band of
-  sunflower round that person's tag, and while someone talks rings of their own color ripple
-  out from it. Ready on Your table is a cobalt tick on the tag's corner, not mint.
-- **Playing cards are ivory card stock.** The grain comes straight from the card mock, lightened from its cream (2026-11-18: cream read too dark on the mat).
-  `art/card-stock.webp` is quilted from plain patches of that mock's cards, and it's sized to each
-  card, so the grain looks the same at any card size.
+  tomato (something's off), cobalt (a button) or grass (it vanishes into the green table). In
+  Dominoes whose turn it is shows as a band of sunflower round that person's tag, and while
+  someone talks rings of their own colour ripple out from it. Ready on Your table is a cobalt
+  tick on the tag's corner.
+- **Playing cards are ivory card stock**, thin (a soft shadow close under them, no thick edge).
   - **Code draws everything that has to be exact:** corners, numbers, suit marks, the layouts of the
-    number cards, and the layered Aces (a smaller, lighter suit stuck on a big one).
-  - **The Jacks, Queens and Kings are cut-paper portraits,** our own art, one per card, in
-    `public/art/cards/`. All 12 share one scale, sit left of center so the upside-down corner stays
-    clear, and cast a small paper shadow.
-  - **Jokers** (the user's felt art, 2026-11-20): a black one and a red one, as whole card faces
-    (`public/art/cards/joker-black.webp`, `joker-red.webp`, 420 x 588, the same shape as a card's
-    250 x 350). No game deals them yet; one that does shows the picture as the card's whole face.
-  - Suits are classic red (`#d4351f`, deeper than tomato so small corner numbers stay readable) and
-    black (`#1e1e26`).
-  - **Backs are the user's felt card backs** (2026-11-20): 30 of them, `public/art/backs/back-01`
-    to `back-30.webp`, cut from `scripts/art/card-backs-*.webp` (see-through backgrounds, so lifted
-    out as drawn) and all saved at one card shape, 300 x 420 (the second sheet's squatter ones are
-    stretched about 12% taller). A game picks one at random for the whole table, a new one each
-    new game (`CARD_BACK_COUNT`); maybe a chooser later. Three Thirteen's pile is the only back on
-    screen so far. The older drawn back (white border, cobalt panel, `cardBackHtml`) is unused.
-  - Dominoes stay ivory.
-- **Illustrations** can use any colors they need, like skin tones.
+    number cards, and the layered Aces. Generated pictures get pips and corners wrong, so never
+    take card mechanics from them.
+  - **The Jacks, Queens and Kings** are the user's portraits, one per card, in
+    `public/art/cards/`, with their shadows baked in. Don't put SVG filters on cards: they made
+    frames slow enough to drop controller presses.
+  - **Jokers** are the user's art, as whole card faces (`joker-black.webp`, `joker-red.webp`).
+  - Suits are classic red and black.
+  - **Backs are the user's felt card backs**: 30 of them, `public/art/backs/back-01` to
+    `back-30.webp`. A game picks one at random for the whole table, a new one each new game
+    (`CARD_BACK_COUNT`); maybe a chooser later.
+- **Dominoes are matte ceramic**: clean warm white, pressed-in pips, a crisp middle line.
+- **Illustrations** can use any colours they need, like skin tones.
 
 ## 3. Words
 
@@ -145,28 +112,28 @@ Use one word for each thing, everywhere.
 | Your turn / Liz's turn | waiting for Liz… |
 | Work in Progress | under construction, beta, still being built |
 
-Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsaw.
+Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsaw, Three Thirteen.
 
 **How to write:**
 - **Buttons say what will happen, starting with a verb:** "Start with mic on", not "OK",
   "Submit" or "Continue".
 - **Use sentence case.** No all-caps labels.
 - **Use people's names:** "Jesse invited you to play."
-- **A name never wraps onto a second line** (user, 2026-11-18). Wherever a name shows (name
-  tags, score sheets, who's at the table, the mic list, Messages, the Tanks scores), it stays on
-  one line, and a name too long for its room ends in "…" (`.pc-nm`). On the card games' name
-  tags and score sheets it first shrinks to fit (`fitSeatText`, `fitScoreTable`), and names
-  side by side share one size so they match.
+- **A name never wraps onto a second line** (user, 2026-11-18). Wherever a name shows, it stays on
+  one line, and a name too long for its room ends in "…" (`.pc-nm`). On name tags and score
+  sheets it first shrinks a little to fit (`fitOneLine`, `fitScoreTable`), and names side by side
+  share one size.
 - **No technical words** (server, connection, permission, sync, host, guest). When something goes
   wrong, say what to do: "Your mic is blocked." with a button: "Show me how".
-- **No emoji in the interface.** They look different on every device, and they aren't paper.
-  People's own messages can have them.
+- **No emoji in the interface.** They look different on every device. People's own messages can
+  have them.
+- **No lone icon buttons:** a button has words (an icon beside them is fine).
 
 ## 4. Type and size
 
-- **One font: Atkinson Hyperlegible Next.** Use 400 for text and 800 for headings, buttons and
-  names. The Braille Institute designed it for readers with low vision, and letters that are easy to
-  mix up (I l 1, O 0, b d) are drawn to look different.
+- **One font: Atkinson Hyperlegible Next**, served by the site itself. Use 400 for text and 800
+  for headings, buttons and names. Letters that are easy to mix up (I l 1, O 0, b d) look
+  different.
 - **Text is 18 px on phones**, and small notes never go below 15 px.
 - **Anything you can tap is at least 48 px tall**, with at least 8 px between tappable things.
 - **Every screen works from a 360 px phone up to a desktop.** The page never scrolls sideways.
@@ -174,8 +141,8 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 
 ## 5. Motion
 
-- **Paper slides and drops into place, with a tiny settle at the end.**
-  - No fading pieces in and out, no spinning, no endless bouncing.
+- **Pieces slide and drop into place, with a tiny settle at the end.** No fading pieces in and
+  out, no spinning, no endless bouncing.
 - **Turn movement off when the device asks for less motion.**
 
 ## 6. Layout
@@ -193,72 +160,73 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
   goes). A strip that stays at the bottom says who we're waiting for, with **I'm ready**. The
   game starts when everyone here is ready: someone away doesn't hold it up, and the computer
   plays the empty seats. A game's own page (`/dominoes`) opens the table with that game picked.
-  Switch game brings everyone back here with nothing picked.
+  Switch game brings everyone back here with nothing picked. Home → Start a table → Your table
+  stays three pages (user, 2026-11-20).
 - **The way in keeps still from page to page** (user, 2026-11-20): home, Start a table and a
   table's invite page show the hands-and-puzzle picture at exactly the same size, and their buttons
   at the same width, so going from one to the next doesn't zoom. Each fits one screen, down to an
-  iPad mini on its side in Safari: on shorter screens the picture and the spacing shrink, the same
-  on every page. Scrolling isn't switched off (big text or a phone held sideways still needs it),
-  and where a page scrolls, its felt moves with it.
-- **A paper bar across the top:** Mute mic, Messages, Invite, Menu. The game sits below it, never
-  under it.
-- **The mic button says what it will do:** Mute mic (cobalt), or Unmute mic / Turn on mic
-  (tomato).
-- **Everything else opens as a paper sheet over the dimmed table,** one at a time: the menu, the
-  invite, and help when the mic is blocked. Tapping the dimmed table closes it. Sheets always
-  open scrolled to the top.
+  iPad mini on its side in Safari. Where a page scrolls, its felt moves with it.
+- **The bar:** on an iPad or computer, your mic on the left and Messages, Invite, Help and Menu on
+  the right. On a phone it folds away: a mic tab in the top-left corner and a caret tab in the
+  top-right that drops the rest as a stack (a tomato dot on it means unread messages). Tanks also
+  folds the bar on short computer windows. The game sits below the bar, never under it.
+- **The mic button says what it will do:** Mute mic, or Unmute mic / Turn on mic (tomato).
+- **Everything else opens as a felt sheet over the dimmed table** (a warm shadow), one at a time:
+  the menu, the invite, help. Tapping the dimmed table closes it. Sheets always open scrolled to
+  the top.
 - **The menu is the same at every game:** the game's own "change what we're doing" actions (like
   Jigsaw's New puzzle) go at its top, above Switch game and Leave table, not in the game's tools.
 - **Game tools stay on one row**, even on a 360 px phone (smaller text before a second row).
-- **Messages is a sheet of sky paper.** Others' notes are paper, yours are cobalt.
+- **Messages is a cream felt sheet.** Others' notes are white felt, yours are cobalt.
 - **Messages starts closed when everyone at the table has their mic on** (user, 2026-11-20):
-  talking, nobody needs it. Otherwise it starts open where there's room beside the game (a
-  laptop, an iPad on its side) and closed on phones. Once you open or close it yourself, it stays
-  as you left it.
+  talking, nobody needs it. Otherwise it starts open where there's room beside the game and
+  closed on phones. Once you open or close it yourself, it stays as you left it.
 - **Little notes pop up over the game** and go by themselves: someone arriving ("Miranda is
-  here.", with the join sound), and other people's messages while Messages is closed ("Sammy: I
-  can't hear you"), which also count on the button's red dot. Arrivals and leavings are never
-  counted as unread, and leavings don't pop up.
+  here.", with the join sound), and other people's messages while Messages is closed, which also
+  count on the red dot. Arrivals and leavings are never counted as unread, and leavings don't pop
+  up.
 - **Before you join, the join page names everyone at the table:** "Join Jesse, Sam and Mory for a
-  puzzle." That way you can back out before you're in a room with someone you'd rather avoid. The
-  list refreshes while the page is open.
+  puzzle." That way you can back out first. The list refreshes while the page is open.
 - **Invite links name who sent them, and optionally who they're for.** The server keeps those
   names, and the link only carries a random token, so a link can't claim to be from someone it
   isn't.
 - **Privacy and House rules** (user, 2026-11-20) are plain reading pages at /privacy and /rules,
-  linked under every way-in page and under the menu's Close. Keep the privacy page true to the
-  code: change it in the same commit as anything it describes (what's kept, for how long, who
-  else is involved), and update its date. Today: logs 30 days, puzzles 30, no cookies, fonts
-  and voice set-up from our own servers only, your own photos checked by Rekognition (with the
-  AWS AI services opt-out on) and kept in memory until the table closes. **Before every push, read both pages against
-  what's being pushed** (user, 2026-11-20); `packages/server/test/privacy.test.ts` catches the
-  numbers and outside servers, the rest needs reading.
+  linked under every way-in page and in the menu. Keep the privacy page true to the code: change
+  it in the same commit as anything it describes (what's kept, for how long, who else is
+  involved), and update its date. **Before every push, read both pages against what's being
+  pushed**; `packages/server/test/privacy.test.ts` catches the numbers and outside servers, the
+  rest needs reading.
 
 ## The games
 
-- **Card and tile games (Hearts, Spades, Dominoes)** are played on the blue mat.
-  - **Name tags:** each player has a felt name tag, laid flat on the table (it isn't a button);
-    whose turn it is gets sunflower felt. **Every tag is the same size, whatever the name** (user, 2026-11-20): a long name
+- **Card and tile games (Hearts, Spades, Dominoes, Three Thirteen)** are played on the green card
+  table.
+  - **Name tags** are felt laid flat on the table (they aren't buttons); whose turn it is gets
+    sunflower. **Every tag is the same size, whatever the name** (user, 2026-11-20): a long name
     shrinks a little, then ends in "…". On a phone held upright the three across the top split
-    the width evenly, and yours is as wide as one of them. Tags are two lines (name, score) and
-    never grow a third: someone who dropped out gets a small "zzz" after their name (not the
-    word "Away"), and computer players a small computer screen. Both marks stay in view when a
-    long name is cut; score sheets leave them off. Computer players have made-up robot names
-    (`ROBOT_NAMES`; our own names only, never robots from films, shows or toys, and no two that
-    look alike, like Beep Boop and Bleep Bloop). No "Computer" label under the name (it took
-    room the tags don't have; the word is fine in a sentence that needs it, user 2026-11-20), and
-    Spades has no "Partner" label either, since your partner always sits across.
-  - **Spades:** your team's tags are lilac, Spades' own color.
-  - **Other players' hands:** not shown. In a trick game everyone holds about the same number
-    of cards, so the tags keep just the name and score.
-  - **Dominoes:** card stock with navy pips, your hand straight on the mat. The tile just
-    played has a sunflower edge, and the places you can play are dashed cobalt (they don't pulse).
-    Lines turn at the edge of the table as an L (the turning tile just past the end of the
-    line), but never at a double or right after one, which would make it look like a spinner:
-    those run on a little past the edge instead (user, 2026-11-20).
-  - **Your name and Scores** sit side by side, the same height, their edges lined up with the
-    button's outline. There's only ever one Scores
+    the width evenly. Tags never grow a third line: someone who dropped out gets a small "zzz"
+    after their name, and computer players a small computer screen; both stay in view when a
+    long name is cut, and score sheets leave them off.
+  - **Computer players** have made-up robot names (`ROBOT_NAMES`; never robots from films, shows
+    or toys, and no two that look alike). No "Computer" or "Partner" label on the tag.
+  - **Spades:** your team's tags are lilac, Spades' own colour.
+  - **Other players' hands** aren't shown; the tags keep just the name and score.
+  - **Your name and Scores** sit side by side, the same height. There's only ever one Scores
     button: after a hand, while you look at the board, it becomes a cobalt "Back to scores".
+  - **Score sheets** have one row per player (you first): the name with all the room it needs,
+    then the points each hand scored, then a narrow, bold Total. The hand just ended is darker.
+    Phones show the last 3 hands, bigger screens 8 (`scoreSheet.ts`).
+- **Dominoes**: the places you can play are dashed (they don't pulse). Lines turn at the edge of
+  the table as an L (the turning tile just past the end of the line), but never at a double or
+  right after one, which would look like a spinner: those run on a little past the edge instead.
+  East and west mirror each other (never a pinwheel).
+  - **Playing:** tap a tile, then tap its spot. Tapping the picked tile again puts it back. No
+    hint text while you play: the yellow shows whose turn it is, the dashed spots where a tile
+    can go. The line under the board appears only when there's news ("Nothing fits: you pass").
+    "Ends add up to" sits under your tiles.
+  - **The board zooms** with a pinch, the mouse wheel (or a trackpad pinch), or a controller's
+    shoulder buttons; no zoom buttons. Drag to look around; a drag is never a tap. The green
+    cloth zooms with the tiles, and tiles fade near the screen's edges, under the side tags.
   - **Dominoes on a phone** (user, 2026-11-22): everyone sits on their own side of the board.
     The players on your left and right have their tags turned on their side up the edges (the
     tops of the letters toward the screen's edge, so left reads upward and right downward:
@@ -267,118 +235,70 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
     above your name; held sideways, the side tags are two lines (name, then points and tiles),
     your tiles run along the bottom a fifth smaller, with your name over Scores on their left and
     the total on their right.
-  - **The domino board zooms** with a pinch, the mouse wheel (or a trackpad pinch), or a
-    controller's shoulder buttons. There are no zoom buttons on screen. Drag to look around; a
-    drag is never a tap.
-  - **Playing a domino:** tap a tile, then tap its spot on the board. Tapping the picked tile
-    again puts it back. No hint text while you play: the yellow name tag shows whose turn it
-    is, the dashed spots show where a tile can go, and the board gets the room. The line under
-    the board appears only when there's news ("Nothing fits: you pass", "Hand 1 is over").
-    "Ends add up to" sits under your tiles.
-  - **Name tags** (all three card games) keep each name and score on one line. Long ones shrink
-    to fit (the other players' share one size), then end in "…".
-  - **Score sheets** have one row per player (you first): the name with all the room it needs,
-    then the points each hand scored, then a narrow, bold Total. The hand just ended is darker.
-    Phones show the last 3 hands, bigger screens 8 (`scoreSheet.ts`).
-- **Three Thirteen** (user, 2026-11-20) is played at the same green table as Hearts, with the
-  user's family rules: two decks with their jokers, 11 rounds (3 cards up to 13), jokers and the
-  round's own rank wild, Ace low with no wrapping, any number of wilds in a meld, one last turn
-  each after someone goes out, no adding to other people's melds. Unmelded cards: Ace 1, number
-  cards their number, J/Q/K 10, jokers 20; lowest total wins. You can't throw back the card you
-  just took from the discards (standard, so nobody stalls).
+- **Three Thirteen** (user, 2026-11-20), with the user's family rules: two decks with their
+  jokers, 11 rounds (3 cards up to 13), jokers and the round's own rank wild, Ace low with no
+  wrapping, any number of wilds in a meld, one last turn each after someone goes out, no adding to
+  other people's melds. Unmelded cards: Ace 1, number cards their number, J/Q/K 10, jokers 20;
+  lowest total wins. You can't throw back the card you just took from the discards.
   - **The table picks how many play**, 2 to 4 (never fewer than the people there), so two people
     can play without a computer going out on them. Seats come into play across first.
-  - **The middle of the table:** the round and what's wild, the pile (with its count) and the
-    top discard side by side; the one you can take from glows sunflower.
-  - **Your hand:** drag cards to arrange them, in any order (no sort buttons; the server keeps
-    your order). Tap a card to lift it, tap it again (or the discards) to throw it away. Cards
-    already in a meld are tinted light green all over (a strip of green felt along the bottom
-    looked like the table cutting the cards off, user 2026-11-20); this round's wild rank wears a
-    small sunflower star under its corner (where it still shows when the hand overlaps); the card
-    you just took says "Taken". A tag beside your name says "Left over: 7 pts": what the cards not
-    in a meld would cost if the round ended now ("loose" didn't explain itself). **Go out**
-    appears only when you can, and the card that does it is outlined.
-  - **Between rounds:** everyone's hand, melds first then what's loose and what it cost, then the
-    score sheet (headed Round, not Hand), and Ready for the next round.
-  - Icon: the left one of the user's sheet (`scripts/art/three-thirteen-icons.webp`); its tile is
-    blush (peach is Tanks).
-- **Jigsaw** is played on the mat too. The frame where the finished picture goes is cream paper
-  with a dashed ink edge, and the tools are a paper strip along the bottom (it wraps onto two rows
-  on phones rather than hiding buttons off the edge). Chosen options are cobalt.
-  - **Everyone else's pointer** is a dot in their color with their name beside it. It fades a
-    few seconds after they stop moving. **While they talk, rings ripple out from it** and it
-    stays, at their last spot, so you can see who's talking and where they're working (user,
-    2026-11-20: that does the job of name tags here). With less motion asked for, it's a steady
-    ring instead. The pointers are page elements over the table, not drawn on it, so the pulse
-    doesn't redraw the puzzle every frame.
-  - **The picker** (user, 2026-11-21): sizes 6 to 500 (no 1000), the pictures in a new order each
-    time it opens with the first one picked, and picking only moves the tick (rebuilding the grid
-    made every picture blink on iPhones). Finished puzzles leave "Continue a puzzle" (no "Look
-    again") and their saves are deleted.
-  - **Smaller pictures offer fewer pieces** (user, 2026-11-21): every piece keeps at least 60 of
-    the picture's pixels across (`MIN_PIECE_PX`), so about 2 megapixels for 500, 1 for 250, 0.4
-    for 100, 0.2 for 50. Bigger sizes are greyed out; a size you picked that's too big comes down
-    to the picture's most, and comes back with a bigger picture. The server holds to it too.
-  - **Your own photos** (user, 2026-11-21): a "Your photo" tile first in the grid opens a note
-    (only this table sees it, deleted when the table closes, checked first), then the file
-    picker. The phone shrinks it to 2048 px and re-saves it, which leaves location and camera
-    details behind; the server strips any that remain, has Amazon Rekognition check it (nudity,
-    sexual content, violence, disturbing images, hate symbols, rude gestures are refused;
-    swimsuits, a bare chest, a kiss, drinks and cigarettes are fine), and keeps it in the table's
-    memory only. Anyone at the table can add one (4 a table); everyone gets it in their picker.
-    Puzzles of photos are never saved. Off unless the server has a check (`PHOTO_CHECK`).
-- **Tanks** is a cut-paper scene:
-  - a paper sky with paper clouds
-  - torn-paper hills (lilac far away, mint nearer)
-  - ground made of strips of red clay paper (peach and kraft, toned down) under a thick strip of
-    grass. Each strip casts a deep shadow on the one below and is lighter at its top, so they read
-    as paper laid on paper; torn edges show pale fibers. (Peach, kraft and butter at full strength
-    read as sherbet. In development, `?ground=kraft` or `?ground=earth` on the start page tries
-    the other looks.)
-  - **Sprites:** the tanks, helicopter, parachute, shell, explosion, smoke, heart and windsock are
-    drawn as layered paper by `npm run sprites` (`scripts/paper-sprites.cjs`). The tank's player
-    colored parts are cyan in the file, and the game recolors that cyan per player.
-  - **Framing:** the whole-battlefield view always fits from a little sky above the highest
-    hill down past the deepest valley. It fills the width when it can; on short, wide screens
-    the map shrinks instead, and the ground past its edges shows dimmed at the sides. Your
-    helicopter stays in view while you ride it.
-  - **The folding bar:** on a phone held sideways (520 px tall or less), Tanks folds the bar up
-    out of sight so the battle gets the full height. A paper tab in the top right corner, with a
-    caret, pulls it down and pushes it back up. Using the bar or touching the battlefield folds
-    it. A tomato dot on the tab means unread messages. Only Tanks does this; the other games
-    keep the bar.
-- **Player colors** (`packages/shared/src/palette.ts`) are paper colors: cobalt, tomato,
-  sunflower and grass first, then lilac, orange, pink, white, teal and sky.
-- **On the board, labels are ink with a paper-colored edge**, so they read on the sky, the
-  ground and puzzle pieces alike. Names in the Tanks notes are ink, underlined in the tank's
-  color (colored text is hard to read on paper).
+  - **The middle:** the round and what's wild, the pile (with its count) and the top discard; the
+    one you can take from glows sunflower.
+  - **Your hand:** drag cards into any order (no sort buttons; the server keeps your order). Tap
+    a card to lift it, tap it again (or the discards) to throw it. Cards in a meld are tinted
+    light green all over; this round's wild rank wears a small sunflower star; the card you just
+    took says "Taken". A tag says "Left over: 7 pts". **Go out** appears only when you can, and
+    the card that does it is outlined.
+  - **Between rounds:** everyone's hand, melds first, then the score sheet (headed Round), and
+    Ready for the next round.
+- **Jigsaw** is played on calm light-grey felt. Every loose piece casts a small shadow; joined
+  seams have none; pieces locked into the frame lie flat. The frame is a sheet of cream felt with
+  a dashed edge. The tools are a strip along the bottom, one row on phones. Chosen options are
+  cobalt.
+  - **Everyone else's pointer** is a dot in their colour with their name beside it. It fades a
+    few seconds after they stop. **While they talk, rings ripple out from it** and it stays, so
+    you can see who's talking and where. With less motion asked for, it's a steady ring. The
+    pointers are page elements over the table, so the pulse doesn't redraw the puzzle.
+  - **The magnifier** (touch screens) shows a single piece straight above the finger and slides
+    off the top rather than moving the table. Nothing auto-scrolls except the screen-edge scroll.
+  - **The picker**: sizes 6 to 500, the pictures in a new order each time with the first picked,
+    and picking only moves the tick. Finished puzzles leave "Continue a puzzle".
+  - **Smaller pictures offer fewer pieces**: every piece keeps at least 60 of the picture's pixels
+    across (`MIN_PIECE_PX`). Bigger sizes are greyed out. The server holds to it too.
+  - **Your own photos**: a "Your photo" tile first in the grid opens a note (only this table sees
+    it, deleted when the table closes, checked first), then the file picker. The phone shrinks it
+    to 2048 px and re-saves it, which leaves location and camera details behind; the server
+    strips any that remain, has Amazon Rekognition check it, and keeps it in the table's memory
+    only. Anyone at the table can add one (4 a table). Puzzles of photos are never saved. Off
+    unless the server has a check (`PHOTO_CHECK`).
+- **Tanks** is a felt scene: a muted blue sky, slate felt mountains, and ground in layers of olive,
+  tan, orange and rust over charcoal; craters cut cleanly through the layers. Past the map's edges
+  the hills carry on as a faded mirror.
+  - **Sprites** are the user's felt art (`scripts/art/felt-sprite-sheet.webp`, cut by
+    `scripts/felt-sprites.cjs`). The tank's player-coloured parts are recoloured per player.
+  - **Controls** are one felt strip along the bottom; on a phone held sideways they run down the
+    right edge instead.
+  - **Framing:** the whole battlefield always fits from a little sky above the highest hill down
+    past the deepest valley. On short, wide screens the map shrinks and the ground past its edges
+    shows dimmed. Your helicopter stays in view while you ride it.
 
 ## Where things live
 
-- **`packages/client/src/paper.css`:** colors, paper, shadows and every shared piece (buttons,
-  fields, name tags, cards, dominoes, messages).
-- **`packages/client/src/paperArt.ts`:** suits, playing cards and dominoes, drawn as SVG on top of
-  the CSS paper.
-- **`packages/client/src/entry.css`** lays out the way in (home, start a table, join a table).
-  **`packages/client/src/table.css`** styles the table around the games: the bar, sheets,
-  Messages and the game picker. **`cards.css`**, **`jigsaw.css`** and **`tanks.css`** give
-  each game its paper look. They override the older `room.css` and `styles.css`, which still hold
-  the games' layouts.
-- **`packages/client/public/art/paper/`:** one seamless paper sheet per color, made for the
-  project.
-  - They're 768 px tiles shown at 384 px, so the grain stays crisp on sharp screens.
-  - Each paper sits on its flat color, which shows until the texture arrives.
-  - Apply one with `class="paper-mint"`, or in CSS with
-    `background: var(--mint) var(--mint-img) 0 0 / var(--paper-size)`.
-  - Don't recompress them: tested at 60–80% quality, they lost most of their grain.
-- **`packages/client/public/art/`:** the card stock, the hero picture, game icons, the card royals,
-  app icons and the link-preview card.
-  - The hero picture is cut out of its white background (transparent WebP).
+- **`packages/client/src/felt.css`** (loaded last): the felt colours, sheets, shadows and heights,
+  and each person's felt. It restyles the shared pieces from **`paper.css`** (buttons, fields,
+  name tags, cards, dominoes, messages), the Cut Paper look felt replaced, which still holds their
+  shapes.
+- **`packages/client/src/paperArt.ts`:** suits, playing cards and dominoes, drawn as SVG.
+- **`entry.css`** lays out the way in (home, Start a table, join). **`table.css`** styles the table
+  around the games: the bar, sheets, Messages and Your table. **`cards.css`**, **`jigsaw.css`**
+  and **`tanks.css`** style each game. They override the older `room.css` and `styles.css`, which
+  still hold some layout.
+- **`packages/client/public/art/felt/`:** one seamless felt sheet per colour, made by
+  `scripts/felt-textures.cjs` to match the user's swatch sheet. Don't recompress them: it smooths
+  the grain away.
+- **`packages/client/public/art/`:** the card royals and backs, the hero picture, game icons, app
+  icons and the link-preview card.
+  - The hero picture is cut out of its background (transparent WebP).
   - The game icons (`art/games/<id>.webp`, 176 px) come from the user's felt icon sheet,
-    `scripts/art/game-icons.webp`, which has a see-through background, so they're lifted out as
-    drawn with no cutting (the earlier set, cut from cream felt, had a cream fringe). The jokers'
-    full-size originals are in `scripts/art/` too.
-  - `brand.webp`, the drawer beside "Games Drawer" on the way-in pages, is the user's cut-paper
-    art cut out of its cream background (its soft shadow kept as a see-through tint). The
-    browser-tab icon is still the older flat `drawer.svg`.
-- **`packages/client/paper.html`:** the sample sheet (dev only, not part of the build).
+    `scripts/art/game-icons.webp`. Icons for games not built yet are in
+    `scripts/art/future-icons/`; copy one to `art/games/<id>.webp` when its game is built.

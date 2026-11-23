@@ -1,6 +1,6 @@
 /*
- * Felt (trial, on the felt branch): the same pieces and layout as Cut Paper, made of wool felt.
- * Imported last, so it only changes materials:
+ * Felt, the site's look (adopted 2026-11-20): the same pieces and layout as Cut Paper, made of
+ * wool felt. Imported last, so it only changes materials:
  *   - felt sheets in place of the paper ones (public/art/felt/, from scripts/felt-textures.cjs),
  *     in the colours of the user's felt swatch sheet;
  *   - depth: every piece lies on the felt under it like the user's mock: a lit top edge, a
@@ -120,12 +120,12 @@ body *::after {
   /* Pressed: pushed flat into the felt under it. */
   --lift-0:
     var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 1.5px 0 rgb(var(--shade) / 0.35), 0 1px 1.5px 0 rgb(var(--shade) / 0.4);
-  /* Lying flat (measured on the mock's name tag: about half as bright as the table right under
-     the edge, still a fifth darker 5 px down). */
+  /* Resting: buttons, cards and tiles (measured on the mock's name tag: about half as bright as
+     the table right under the edge, still a fifth darker 5 px down). */
   --lift-1:
     var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 2.5px 0 rgb(var(--shade) / 0.32), 0 1.5px 2px 0 rgb(var(--shade) / 0.6),
     0 4px 6px 0 rgb(var(--shade) / 0.4), 0 8px 16px 0 rgb(var(--shade) / 0.24);
-  /* Lifted (whose turn, picked, hover): off the felt below, so the shadow drops further. */
+  /* Lifted (picked, hover): off the felt below, so the shadow drops further. */
   --lift-2:
     var(--felt-top), 0 0 1px 0.4px var(--fuzz), 0 0 3px 0 rgb(var(--shade) / 0.25), 0 3px 4px 0 rgb(var(--shade) / 0.42),
     0 8px 12px 0 rgb(var(--shade) / 0.26), 0 14px 26px 0 rgb(var(--shade) / 0.16);

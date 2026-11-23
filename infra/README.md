@@ -4,25 +4,23 @@ Three stacks, all code in [lib/](lib) and all in Ohio (the AWS account's organiz
 to that region):
 
 - **GamesDrawerDns** ([edge.ts](lib/edge.ts)): the domain's DNS zone (Route 53), on its own
-  and created first, because the registrar has to point the domain at it before AWS will issue
-  the HTTPS certificate.
+  and created first, because the registrar has to point the domain at it before HTTPS
+  certificates can be issued.
 - **GamesDrawerGitHub** ([github.ts](lib/github.ts)): the link from AWS to the GitHub repo
   (a CodeConnections connection, through AWS's own GitHub app), on its own because you approve
   it once on GitHub before deploys can use it.
 - **GamesDrawer** ([stack.ts](lib/stack.ts)): everything else.
-  - **The front door:** the HTTPS certificate and CloudFront, which passes players through to
-    whichever box `origin.<domain>` points at. CloudFront only takes certificates from
-    us-east-1; the organization allows certificates there but no stacks, so this stack asks for
-    it there. **For now there's none:** AWS hasn't yet let the account use CloudFront, so
-    `"frontDoor": "direct"` in [config.json](config.json) has the domain point straight at the
-    boxes, with Caddy doing HTTPS. Switching later is in
-    [deploy/README.md](../deploy/README.md#the-front-door-cloudfront-or-the-boxes-themselves-for-now).
+  - **The front door:** with `"frontDoor": "cloudfront"` in [config.json](config.json), the
+    HTTPS certificate (asked for in us-east-1, the only region CloudFront takes them from) and
+    CloudFront, which passes players through to whichever box `origin.<domain>` points at. It's
+    `"direct"` now, as CloudFront isn't enabled on the account yet: the domain points straight at
+    the boxes, with Caddy doing HTTPS. Switching is in
+    [deploy/README.md](../deploy/README.md#the-front-door).
   - **The game server boxes and what outlives them:** a launch template that deploys start
     boxes from, a shared disk for Jigsaw saves and logs (EFS), a bucket for release bundles.
   - **The pipeline** (CodePipeline, with three CodeBuild projects): each push to main gets every
-    test, goes to staging, and waits for approval to go live. It's all inside the account. GitHub
-    never signs in to AWS; the organization doesn't allow GitHub sign-in links anyway. GitHub
-    Actions still tests every push and pull request.
+    test, goes to staging, and waits for approval to go live. It's all inside the account; GitHub
+    never signs in to AWS. GitHub Actions tests every push and pull request too.
   - **The spending guardrails.**
 
 How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md).
@@ -34,17 +32,16 @@ How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md)
 | Its 12 GB encrypted disk | | ~$1/month per box |
 | Shared disk (EFS) | Jigsaw saves and logs outlive the boxes | pennies (a few MB) |
 | Route 53 hosted zone | The domain's DNS | $0.50/month |
-| CloudFront | HTTPS, the front door that never changes | free up to 1 TB and 10 million requests a month |
+| CloudFront (once enabled) | HTTPS, the front door that never changes | free up to 1 TB and 10 million requests a month |
 | A private bucket for release bundles | Deploys fetch releases from here | pennies |
 | Voice relayed through a box | | free for the first 100 GB a month, then $0.09/GB |
 | The pipeline (CodeBuild and CodePipeline) | Tests each push, deploys staging, then the site | free for 100 build minutes and 100 pipeline minutes a month, then about half a cent and a fifth of a cent a minute: roughly 25¢ a push that goes live |
 | A staging box | The release being tried, until it's live or taken down | about 1.4¢/hour |
 | Budgets, the kill switch, the GitHub connection | Guardrails and deploy access | free |
 
-No load balancer or NAT gateway: either one costs more than the server. Game traffic to players
-goes out through CloudFront, so it counts against CloudFront's free terabyte rather than EC2's
-data-out charges. (Not while `frontDoor` is `direct`: then it goes straight from the box, free
-for the first 100 GB a month across AWS, then $0.09/GB.)
+No load balancer or NAT gateway: either one costs more than the server. With the `direct` front
+door, game traffic goes straight from the box: free for the first 100 GB a month across AWS, then
+$0.09/GB. Behind CloudFront it would count against CloudFront's free terabyte instead.
 
 ## Spending guardrails
 
@@ -55,11 +52,11 @@ for the first 100 GB a month across AWS, then $0.09/GB.)
   hours, so it's a backstop, not a hard cap.
 - **No surprise CPU bills:** boxes use "standard" CPU credits, which can't bill extra.
 - **Bandwidth caps in the software:** at most 10 public and 50 private rooms of 4 at once per box
-  (`MAX_PUBLIC_ROOMS` and `MAX_PRIVATE_ROOMS` in [deploy/setup.sh](../deploy/setup.sh)), and
-  the voice relay is capped at 40 slots and 620 KB/s out per box ([deploy/turnserver.conf](../deploy/turnserver.conf),
-  [deploy/relay-firewall.sh](../deploy/relay-firewall.sh)). A table closes a minute after its last
-  person leaves, and after 10 minutes with nobody playing or talking (`IDLE_ROOM_MS`), with a
-  minute's warning.
+  (`MAX_PUBLIC_ROOMS` and `MAX_PRIVATE_ROOMS` in [deploy/setup.sh](../deploy/setup.sh)), and the
+  voice relay is capped at 40 slots and 620 KB/s out per box
+  ([deploy/turnserver.conf](../deploy/turnserver.conf), [deploy/relay-firewall.sh](../deploy/relay-firewall.sh)).
+  A table closes a minute after its last person leaves, and after 10 minutes with nobody playing
+  or talking (`IDLE_ROOM_MS`), with a minute's warning.
 - Change the amounts in [config.json](config.json).
 
 These budgets watch the whole AWS account, so they work best in an account used only for this.
@@ -67,14 +64,14 @@ The organization the account belongs to also has its own hard limit at $75; the 
 set lower so the boxes stop (and stop costing) before that locks the account.
 
 **If the kill switch fires:** the site goes down. Check the bill first. Then launch a fresh box,
-which takes the front door straight away
-(`npx tsx deploy/fleet.ts launch <commit>` then `promote <commit>`; see
-[deploy/README.md](../deploy/README.md#the-fleet-tool-by-hand)), and terminate the stopped ones
-in the EC2 console. Nothing is lost: saves and logs are on the shared disk.
+which takes the front door straight away (`npx tsx deploy/fleet.ts launch <commit>` then
+`promote <commit>`; see [deploy/README.md](../deploy/README.md#the-fleet-tool-by-hand)), and
+terminate the stopped ones in the EC2 console. Nothing is lost: saves and logs are on the shared
+disk.
 
 ## First-time setup
 
-Done once, from this computer, after the AWS account is ready.
+Done once, from your computer, to build the AWS side in a ready AWS account.
 
 1. Install the AWS CLI and sign in (opens a browser):
 
@@ -101,9 +98,8 @@ Done once, from this computer, after the AWS account is ready.
 
    It prints `NameServers`: four names. Enter them at Squarespace, where the domain is
    registered: **Domains → gamesdrawer.com → DNS → Nameservers → Use custom nameservers**. The
-   domain stays registered at Squarespace; only its DNS moves. (Squarespace's own DNS records
-   stop applying. If the domain ever gets email, its MX records go in Route 53 instead.) The
-   change usually spreads within an hour; this shows the Route 53 names once it has:
+   domain stays registered at Squarespace; only its DNS moves. The change usually spreads within
+   an hour; this shows the Route 53 names once it has:
 
    ```bash
    nslookup -type=NS gamesdrawer.com 8.8.8.8
@@ -130,10 +126,10 @@ Done once, from this computer, after the AWS account is ready.
 6. Create the rest. The alert email is passed in, never committed, because this repo is public:
 
    ```bash
-   ALERT_EMAIL=you@example.com npm run infra -- deploy GamesDrawer --profile games-drawer
+   ALERT_EMAIL=<your email address> npm run infra -- deploy GamesDrawer --profile games-drawer
    ```
 
-   It takes 10 to 20 minutes (CloudFront and the certificate are the slow parts) and prints
+   It can take up to 20 minutes (CloudFront and its certificate are the slow parts) and prints
    `LaunchTemplateName`, `ReleaseBucket` and `PipelinePage`. No box runs yet; the first deploy
    starts one.
 
@@ -160,14 +156,14 @@ Done once, from this computer, after the AWS account is ready.
 ## Day to day
 
 - `ALERT_EMAIL=… npm run infra -- diff GamesDrawer --profile games-drawer` shows what a change
-  would do; `deploy GamesDrawer` applies it. A change to the launch template (instance size, image, first-boot
-  script) takes effect with the next box, so with the next deploy; nothing running is replaced.
+  would do; `deploy GamesDrawer` applies it. A change to the launch template (instance size,
+  image, first-boot script) takes effect with the next deploy's box; nothing running is replaced.
   Machine setup lives in [deploy/setup.sh](../deploy/setup.sh), which every new box runs.
 - **A bigger box:** change `"instanceType"` in `config.json` (for example `t4g.small`, or
-  `c7g.medium` for steady CPU), deploy the stack, then deploy the site.
+  `c7g.medium` for steady CPU) and deploy the stack; the next deploy's box is the bigger size.
 - `npm test` checks the stacks (no AWS account needed); `ALERT_EMAIL=… npm run infra -- synth`
   prints the CloudFormation templates.
 - **Shutting it all down:** `npx tsx deploy/fleet.ts status` to find the boxes and terminate
-  them, then `ALERT_EMAIL=… npm run infra -- destroy --all --profile games-drawer`. The DNS zone, the shared
-  disk and the releases bucket are kept so a slip can't lose them; delete them in the console
-  if you really mean it.
+  them, then `ALERT_EMAIL=… npm run infra -- destroy --all --profile games-drawer`. The DNS zone,
+  the shared disk and the releases bucket are kept so a slip can't lose them; delete them in the
+  console if you really mean it.
