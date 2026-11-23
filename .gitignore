@@ -13,8 +13,8 @@ cdk.out/
 puzzle-candidates/
 data/
 
-# Puzzle pictures that stay on this computer (family photos). Never commit them; the dev server
-# shows them, production never does. Add one with: npm run local-puzzle -- photo.jpg "Title"
+# Where family photos for testing puzzles used to live (the feature is gone: people add their own
+# photo at the table now). Still ignored, so a copy brought back can never be committed.
 local-puzzles/
 
 # Local secrets (the admin password hash). Never commit.

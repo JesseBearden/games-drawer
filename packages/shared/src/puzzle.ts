@@ -103,48 +103,8 @@ export const PUZZLE_IMAGES: PuzzleImage[] = [
   pic('plankton', 'Plankton swirls', 2400, 1775, 'Image: NASA Goddard'),
 ];
 
-/**
- * Pictures that live only on one computer: the git-ignored `local-puzzles/` folder (family
- * photos that must never be published). The dev server reads its `puzzles.json` at start-up and
- * the picker fetches it; production never does, and the folder is never committed or deployed.
- */
-const localImages: PuzzleImage[] = [];
-export const LOCAL_PUZZLE_PATH = '/puzzles/local';
-export const LOCAL_PUZZLE_CREDIT = 'Only on this computer';
-
-/** Check a local-puzzles/puzzles.json and turn it into pictures (anything odd is skipped). */
-export function parseLocalPuzzles(raw: unknown): PuzzleImage[] {
-  if (!Array.isArray(raw)) return [];
-  const out: PuzzleImage[] = [];
-  for (const r of raw.slice(0, 50)) {
-    if (!r || typeof r !== 'object') continue;
-    const { id, title, width, height } = r as Record<string, unknown>;
-    if (typeof id !== 'string' || !/^local-[a-z0-9-]{1,34}$/.test(id)) continue;
-    if (typeof title !== 'string' || !title.trim() || title.length > 40) continue;
-    const size = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 100 && n <= 10_000;
-    if (!size(width) || !size(height)) continue;
-    out.push({ id, file: `${LOCAL_PUZZLE_PATH}/${id}.jpg`, thumb: `${LOCAL_PUZZLE_PATH}/thumbs/${id}.webp`, title: title.trim(), width, height, credit: LOCAL_PUZZLE_CREDIT });
-  }
-  return out;
-}
-
-/** Add (or update, after a rename) this computer's own pictures; they come first in the picker. */
-export function addLocalPuzzleImages(list: PuzzleImage[]) {
-  for (const i of list) {
-    if (PUZZLE_IMAGES.some((p) => p.id === i.id)) continue;
-    const at = localImages.findIndex((p) => p.id === i.id);
-    if (at >= 0) localImages[at] = i;
-    else localImages.push(i);
-  }
-}
-
-/** Every picture to choose from: this computer's own first (if any), then everyone's. */
-export function allPuzzleImages(): PuzzleImage[] {
-  return [...localImages, ...PUZZLE_IMAGES];
-}
-
 export function puzzleImage(id: string): PuzzleImage | undefined {
-  return PUZZLE_IMAGES.find((i) => i.id === id) ?? localImages.find((i) => i.id === id);
+  return PUZZLE_IMAGES.find((i) => i.id === id);
 }
 
 /**

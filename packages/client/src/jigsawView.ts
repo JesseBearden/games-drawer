@@ -12,9 +12,6 @@ import {
   puzzleProgress,
   puzzleUntouched,
   PUZZLE_IMAGES,
-  addLocalPuzzleImages,
-  allPuzzleImages,
-  parseLocalPuzzles,
   puzzleImage,
   TAB_REACH,
   tabCurve,
@@ -449,21 +446,6 @@ export class JigsawTable implements View {
       if (el) this.boxObserver.observe(el);
     }
     shell.sfx.preloadSounds(CARD_SOUNDS);
-    // Pictures that live only on this computer (the git-ignored local-puzzles folder, served by
-    // the dev server). A real build drops this whole block, so the hosted site never asks.
-    if (import.meta.env.DEV) {
-      void fetch('/puzzles/local/puzzles.json', { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : []))
-        .then((raw) => {
-          const list = parseLocalPuzzles(raw);
-          if (!list.length) return;
-          addLocalPuzzleImages(list);
-          this.pictures = [];
-          this.setupBuilt = false;
-          if (this.phase === 'setup' && !this.el.hidden) this.renderSetup();
-        })
-        .catch(() => {});
-    }
   }
 
   // ------------------------------------------------------------------ messages
@@ -722,7 +704,7 @@ export class JigsawTable implements View {
 
   /** The pictures in a new order with the first one picked, so different ones are up top each time. */
   private shuffleImages() {
-    const list = allPuzzleImages();
+    const list = [...PUZZLE_IMAGES];
     for (let i = list.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [list[i], list[j]] = [list[j], list[i]];

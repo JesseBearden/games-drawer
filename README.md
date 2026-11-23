@@ -71,21 +71,6 @@ npm run dev:https   # dev server over https (needed for voice chat on phones)
 What to try by hand after a change (things the tests can't judge, like how it looks and feels on
 a real phone) is in [TESTING.md](TESTING.md).
 
-## Puzzle pictures only for this computer
-
-Family photos can be puzzles without ever being published:
-
-```bash
-npm run local-puzzle -- "C:\path\to\photo.jpg" "Wedding day"
-```
-
-That saves a copy (upright, standard colours, no camera or location data, at most 2400 px wide)
-and a preview in `local-puzzles/` at the top of the repo, and lists it in
-`local-puzzles/puzzles.json` (edit a title there; delete a line and its files to remove one).
-Git ignores the folder, so it's never committed or deployed. With `npm run dev` running, those
-pictures come first in the puzzle picker (reload the page after adding one). Production servers
-and builds never look for them.
-
 ## The look
 
 Everything is made of felt: pieces lie on the table in layers with real thickness and soft
@@ -143,7 +128,7 @@ and a spending kill switch) is code in [infra/](infra/README.md).
   each box (machine setup, Caddy routing between boxes, coturn, the rollout tool).
 - `infra/` — the AWS stacks (CDK): CloudFront and DNS, the boxes' launch template, shared disk,
   firewall, budgets, kill switch, deploy access.
-- `scripts/` — releases, stats, the admin password, local puzzles, and the felt art.
+- `scripts/` — releases, stats, the admin password, and the felt art.
 - `docs/screenshots/` — the pictures in this README.
 
 ## Server settings (environment variables)

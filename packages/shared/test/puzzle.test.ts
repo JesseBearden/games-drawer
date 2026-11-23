@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addLocalPuzzleImages,
-  allPuzzleImages,
   cutPuzzle,
   gridFor,
   isPuzzleId,
   maxPieces,
   MIN_PIECE_PX,
   parseGameInput,
-  parseLocalPuzzles,
   PIECE_COUNTS,
   piecesFit,
   puzzleImage,
@@ -17,29 +14,10 @@ import {
   tabCurve,
 } from '../src';
 
-describe('pictures only on this computer (local-puzzles/puzzles.json)', () => {
-  it('become puzzles served from /puzzles/local, and anything odd is skipped', () => {
-    const list = parseLocalPuzzles([
-      { id: 'local-wedding-day', title: ' Wedding day ', width: 2048, height: 1362 },
-      // Not a local id, a path trick, too small, no title, too long a title: all skipped.
-      { id: 'dog', title: 'Penny', width: 1600, height: 1067 },
-      { id: 'local-../../secrets', title: 'Nope', width: 1000, height: 800 },
-      { id: 'local-tiny', title: 'Tiny', width: 10, height: 10 },
-      { id: 'local-untitled', title: '', width: 1000, height: 800 },
-      { id: 'local-long', title: 'x'.repeat(41), width: 1000, height: 800 },
-    ]);
-    expect(list).toEqual([
-      { id: 'local-wedding-day', title: 'Wedding day', width: 2048, height: 1362, file: '/puzzles/local/local-wedding-day.jpg', thumb: '/puzzles/local/thumbs/local-wedding-day.webp', credit: 'Only on this computer' },
-    ]);
-    expect(parseLocalPuzzles({ not: 'a list' })).toEqual([]);
-  });
-
-  it('pick up a new title when one is renamed, and never replace an everyone picture', () => {
-    addLocalPuzzleImages(parseLocalPuzzles([{ id: 'local-test-rename', title: 'Wedding day', width: 2048, height: 1362 }]));
-    addLocalPuzzleImages(parseLocalPuzzles([{ id: 'local-test-rename', title: 'Nephews', width: 2048, height: 1362 }]));
-    expect(puzzleImage('local-test-rename')?.title).toBe('Nephews');
-    expect(allPuzzleImages().filter((p) => p.id === 'local-test-rename')).toHaveLength(1);
+describe('puzzle pictures', () => {
+  it('are found by id, and an unknown one is nothing', () => {
     expect(puzzleImage('dog')?.title).toBe('Penny Pickles');
+    expect(puzzleImage('local-wedding-day')).toBeUndefined();
   });
 });
 

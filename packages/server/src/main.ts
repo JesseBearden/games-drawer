@@ -6,7 +6,7 @@ import { FileLog, pruneLogs } from './eventlog';
 import { pretendChecker, RekognitionChecker } from './photoCheck';
 import { startGameServer } from './server';
 import { readSettings } from './settings';
-import { addLocalPuzzleImages, isSlot, parseLocalPuzzles, type GameConfig } from '@tank/shared';
+import { isSlot, type GameConfig } from '@tank/shared';
 
 /**
  * Environment:
@@ -51,21 +51,6 @@ const env = process.env;
 // them from systemd's environment files instead.
 if (env.NODE_ENV !== 'production' && fs.existsSync(path.join(root, '.env.local'))) process.loadEnvFile(path.join(root, '.env.local'));
 const production = env.NODE_ENV === 'production';
-// Puzzle pictures that live only on this computer (the git-ignored local-puzzles folder). Never
-// in production, where the folder doesn't exist anyway: it's never committed or deployed.
-if (!production) {
-  const localList = path.join(root, 'local-puzzles', 'puzzles.json');
-  const loadLocal = () => {
-    try {
-      addLocalPuzzleImages(parseLocalPuzzles(JSON.parse(fs.readFileSync(localList, 'utf8'))));
-    } catch {
-      /* no local pictures */
-    }
-  };
-  loadLocal();
-  // Pictures added with npm run local-puzzle show up without restarting the server.
-  fs.watchFile(localList, { interval: 2000 }, loadLocal);
-}
 const logDir = env.LOG_DIR ?? path.join(root, 'logs');
 const log = new FileLog(logDir);
 const adminLogDirs = env.ADMIN_LOG_DIRS ? env.ADMIN_LOG_DIRS.split(',').map((s) => s.trim()).filter(Boolean) : [logDir];

@@ -715,11 +715,7 @@ and 48 public-domain or CC0 photos and paintings.
       drops to 100; back to the big one: 250 again. Penny Pickles, Sailboat, Milli and Leeloo go
       up to 250, the rest to 500. A small photo of your own works the same way.
 - [ ] The picker shows all 56 pictures (51 then, plus Milli, Sucia, Cricket, Leeloo and Noodle).
-- [ ] **Pictures only on this computer**: with `npm run dev`, "Tree House" and
-      "Nephews" are mixed in with the rest, and play like any other. They're in
-      `local-puzzles/`, which git ignores: `git status` never lists them, and the hosted site
-      won't have them. Add more with `npm run local-puzzle -- photo.jpg "Title"` (see README).
-      Scroll through the 28 new ones (monarch butterflies to plankton swirls at the end) and
+- [ ] Scroll through the 28 new ones (monarch butterflies to plankton swirls at the end) and
       tell me any you'd rather swap out. Three spares are ready: a Bierstadt painting of
       Yosemite, a second carousel, and a Bahamas tidal-flats photo from space.
 - [ ] Start a puzzle with Sailboat. It's portrait (taller than wide), unlike the rest, so check
