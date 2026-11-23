@@ -178,8 +178,9 @@ export class DominoesTable implements View {
       if (v.seat !== null && waiting.length === 1 && waiting[0] === v.seat) text += ' Everyone else is ready.';
     } else if (v.phase === 'gameOver') text = 'Game over.';
     patchHtml(q<HTMLElement>('.ht-status'), text);
-    // With every tile dealt there's no boneyard to mention.
-    q<HTMLElement>('.dm-info').textContent = v.phase === 'playing' ? `Ends add up to ${v.count}${v.boneyard ? ` · Boneyard: ${v.boneyard}` : ''}` : '';
+    // With every tile dealt there's no boneyard to mention. Two pieces: on a phone held sideways
+    // they stack, in the narrow space beside your tiles.
+    patchHtml(q<HTMLElement>('.dm-info'), v.phase === 'playing' ? `<span>Ends add up to ${v.count}</span>${v.boneyard ? `<span>Boneyard: ${v.boneyard}</span>` : ''}` : '');
 
     const draw = q<HTMLButtonElement>('.dm-draw');
     draw.hidden = !(myTurn && v.mustDraw);

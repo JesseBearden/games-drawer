@@ -358,9 +358,9 @@ matched to your swatch sheet (`scripts/felt-textures.cjs`).
 - [ ] White felt (Join on home, the Ready strip, others' messages, the sound knob) is calmer:
       finer grain, fewer dark flecks. Does it still read as felt? Does it still look dirty?
 - [ ] Phone, with the bar's dropdown open: turn the phone and the dropdown folds itself.
-- [ ] Dominoes, zoomed in: the tiles fade softly on all four sides, in Safari too. On a phone
-      held sideways they fade at the board's own sides (clear of the names and your tiles); on
-      an iPad or computer they carry on under the side name tags and fade near the screen's edges.
+- [ ] Dominoes, zoomed in: the tiles fade softly on all four sides, in Safari too. Left and right
+      they carry on under the side name tags and fade near the screen's edges (on a phone held
+      sideways too, now that the names sit on the sides there).
 - [ ] **Name tags all one size** (Hearts, Spades, Dominoes; phone, iPad, computer): the tags
       across the top of a phone split the width evenly, yours matches them, and a long name
       shrinks a little then ends in "…". Someone who dropped out shows a small "zzz" after
@@ -590,7 +590,7 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       the left one reading upward and the right one downward; the player across stays at the top.
       The computer mark and the talking bars turn with the writing, and whoever's turn it is
       still goes yellow. Is it easy enough to read, and is the board (a little narrower now) still
-      comfortable late in a hand? Turned sideways, the phone keeps everyone down the left as before.
+      comfortable late in a hand?
 - [ ] **One line for everyone** (same trial): the player across and your own tag are one line
       too, and all four tags are the same length. Yours says just your points (no tile count, since
       your tiles are right below). "Ends add up to …" now sits just above your name and Scores,
@@ -604,8 +604,8 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       room. The line only comes back to say something ("Nothing fits: you pass", "Hand 1 is
       over").
 - [ ] Scoring: after each play, if the open ends add up to 5, 10, 15… that player scores it
-      ("+10" floats up). "Ends add up to" sits under your tiles (sideways: under the block of
-      tiles on the right).
+      ("+10" floats up). "Ends add up to" sits under your tiles on an iPad or computer, just
+      above your name on a phone held upright, and to the right of your tiles held sideways.
 - [ ] The spinner (the first double) lets play go off all four sides once both of its main
       sides have tiles.
 - [ ] On your turn, tiles that don't fit go grey. On the iPad (Safari) the grey tiles sit in line
@@ -622,11 +622,16 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
 - [ ] Phone held upright: every name is on one line. A long name shrinks to fit (the other
       players' names share one size, so they match), and only past a small size is it cut off
       with "…".
-- [ ] Phone held sideways (new layout): everyone's names down the left, yours first, in turn
-      order, with Scores under them; the board in the middle; your tiles in rows of four on the
-      right. Try it with Safari's address bar showing too: Scores and the "Ends add up to" line
-      should both be on screen. Tell me if the tiles are too small, or if Scores belongs
-      somewhere else.
+- [ ] **Phone held sideways** (new layout, a trial, 2026-11-22): everyone sits on their own side
+      of the board, like upright. The player across is one line along the top, between the mic
+      and menu tabs. The players on your left and right are turned on their side halfway up the
+      edges (left reads upward, right downward), the name on one line and "pts · tiles" on a
+      second beside it; the computer mark and talking bars turn with them. Your tiles (a fifth
+      smaller than before) run in a row along the bottom, with your name (just your points) over
+      Scores to their left and "Ends add up to" to their right. The board is much wider than
+      before: is it comfortable late in a hand, and are your tiles still easy to tap? Try it
+      with Safari's address bar showing too: your tiles, Scores and the total should all be on
+      screen. "Sparky 3000"-length names fit whole, even on a small phone.
 - [ ] Hearts and Spades upright: your name and Scores are the same height there too.
 - [ ] iPad and computer (all three card games): every name tag is the same width (changed
       2026-11-20; they used to be as wide as each name). Your tag and Scores line up exactly,

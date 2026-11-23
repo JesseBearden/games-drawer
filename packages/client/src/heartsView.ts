@@ -83,12 +83,24 @@ function fitTogether(els: HTMLElement[], minPx: number) {
  */
 export function fitOneLine(el: HTMLElement, minPx: number) {
   el.style.fontSize = '';
+  const cs = getComputedStyle(el);
   // A name tag turned on its side (Dominoes on an upright phone) runs its line downward.
-  const sideways = getComputedStyle(el).writingMode.startsWith('vertical');
-  const room = sideways ? el.clientHeight : el.clientWidth;
-  const need = sideways ? el.scrollHeight : el.scrollWidth;
-  if (!room || need <= room + 0.5) return;
-  const base = parseFloat(getComputedStyle(el).fontSize);
+  const sideways = cs.writingMode.startsWith('vertical');
+  const box = el.getBoundingClientRect();
+  const room = sideways
+    ? box.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+    : box.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  if (!(room > 0)) return;
+  // The text's own length, to the fraction of a pixel: a line a third of a pixel too long still
+  // ends in "…", and scrollWidth rounds that away ("Sparky 3000" on a phone held sideways).
+  // scrollWidth still counts for what the text alone doesn't, like a "· " put before it.
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const text = range.getBoundingClientRect();
+  const over = sideways ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth;
+  const need = Math.max(sideways ? text.height : text.width, over > 0 ? room + over : 0);
+  if (need <= room) return;
+  const base = parseFloat(cs.fontSize);
   el.style.fontSize = `${Math.max(minPx, Math.floor(((base * room) / need) * 10) / 10)}px`;
 }
 
