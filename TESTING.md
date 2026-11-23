@@ -591,6 +591,10 @@ first to 250. Those live in `DOMINOES_RULES` in packages/shared/src/dominoes.ts.
       The computer mark and the talking bars turn with the writing, and whoever's turn it is
       still goes yellow. Is it easy enough to read, and is the board (a little narrower now) still
       comfortable late in a hand? Turned sideways, the phone keeps everyone down the left as before.
+- [ ] **One line for everyone** (same trial): the player across and your own tag are one line
+      too, and all four tags are the same length. Yours says just your points (no tile count, since
+      your tiles are right below). "Ends add up to …" now sits just above your name and Scores,
+      not under your tiles. A long name still fits on a small phone (shrinks a little, then "…").
 - [ ] Whoever holds the 6-6 leads it in the first hand; after that the last hand's winner leads.
 - [ ] Tap a tile: dashed blue spots show where it can go. Tap a spot to play it there. Tapping
       the tile again now puts it back down instead of playing it (even when there's only one

@@ -157,7 +157,7 @@ export class DominoesTable implements View {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
       const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
-        <div class="ht-score"><i>${s.score} pts ·</i> <i>${s.tiles} tile${s.tiles === 1 ? '' : 's'}</i></div>`);
+        <div class="ht-score"><i>${s.score} pts</i> <i class="dm-tiles">· ${s.tiles} tile${s.tiles === 1 ? '' : 's'}</i></div>`);
       tagsChanged ||= changed;
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;

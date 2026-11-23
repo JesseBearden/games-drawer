@@ -814,37 +814,52 @@ body.pad-mode #game .dm-mine.pad-cursor {
    Phones held upright: the players on your left and right sit up the sides of the board, their
    name tags turned on their side, and the player across stays at the top (the user's "version A",
    a trial). The tops of the letters face the screen's edges, so the left tag reads upward and the
-   right one downward: mirror images, never a pinwheel. A sideways tag is one line, name then
-   score ("Robo-Bob · 5 pts · 5 tiles"), so it's thin (the user, 2026-11-22: two lines gave back
-   too little of the board), and as long as that line needs, the same for both sides. The marks
+   right one downward: mirror images, never a pinwheel. Every tag is one line, name then score
+   ("Robo-Bob · 5 pts · 5 tiles"), so they're thin (the user, 2026-11-22: two lines gave back too
+   little of the board), and all four are the same length. Yours leaves out your tile count (your
+   tiles are right there), and what the open ends add up to sits just above it. The marks
    (talking bars, computer, zzz) turn with the writing. fitOneLine measures a sideways line by
    its height. */
 @media (max-width: 600px) and (min-height: 461px) {
   #game .dominoes-view .ht {
-    --tag-len: calc((100vw - 32px - var(--safe-l, 0px) - var(--safe-r, 0px)) / 3);
+    --tag-len: clamp(170px, 32dvh, 240px);
     grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto auto;
     grid-template-areas:
       '. top .'
       'left center right'
+      'info info info'
       'mine mine mine'
       'hand hand hand';
   }
-  #game .dominoes-view .ht-pos-2 {
-    width: var(--tag-len);
-    justify-self: center;
-  }
-  #game .dominoes-view .ht-pos-1,
-  #game .dominoes-view .ht-pos-3 {
+  #game .dominoes-view .ht-seat {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.35em;
+    font-size: 0.8125rem;
+  }
+  #game .dominoes-view .ht-pos-2 {
+    width: var(--tag-len);
+    justify-self: center;
+    padding: 6px 12px;
+  }
+  #game .dominoes-view .ht-mine > .ht-pos-0 {
+    flex: 0 1 auto;
+    width: var(--tag-len);
+    min-width: 0;
+    padding-inline: 12px;
+  }
+  #game .dominoes-view .ht-pos-0 .dm-tiles {
+    display: none;
+  }
+  #game .dominoes-view .ht-pos-1,
+  #game .dominoes-view .ht-pos-3 {
     width: auto;
-    height: clamp(170px, 30dvh, 240px);
+    height: var(--tag-len);
     justify-self: stretch;
     align-self: center;
     padding: 12px 6px;
-    font-size: 0.8125rem;
   }
   /* Right: the writing turned a quarter clockwise, read top to bottom. */
   #game .dominoes-view .ht-pos-3 {
@@ -861,21 +876,36 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .ht-pos-1 > .ht-score {
     transform: rotate(180deg);
   }
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-name {
+  #game .dominoes-view .ht-seat .ht-name {
     flex: 0 1 auto;
+    min-width: 0;
     min-height: 0;
     font-size: inherit;
   }
   #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-nm {
     min-height: 0;
   }
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-score {
+  #game .dominoes-view .ht-seat .ht-score {
     flex: none;
     white-space: nowrap;
     font-size: 0.75rem;
   }
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-score::before {
+  #game .dominoes-view .ht-seat .ht-score::before {
     content: '· ';
+  }
+  /* What the open ends add up to: its own line just above your name and Scores (the user,
+     2026-11-22), not under your tiles. */
+  #game .dominoes-view .dm-side {
+    display: contents;
+  }
+  #game .dominoes-view .dm-side .dm-hand {
+    grid-area: hand;
+    min-width: 0;
+  }
+  #game .dominoes-view .dm-side .dm-info {
+    grid-area: info;
+    justify-self: center;
+    margin: 0;
   }
   /* The marks are pictures, which sideways writing leaves standing up: turn them a quarter too
      (the left one's piece is already turned over, which finishes the job). */
