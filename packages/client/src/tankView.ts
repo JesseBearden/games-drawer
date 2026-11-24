@@ -80,6 +80,36 @@ export class TankView implements View {
     scores.addEventListener('click', toggle);
     this.cleanups.push(() => scores.removeEventListener('click', toggle));
     window.addEventListener('resize', this.onResize);
+    // A phone held sideways: the lives tag sits in the top row beside your mic tab, so it needs to
+    // know how wide that is (its words change).
+    const mic = document.getElementById('btn-mic');
+    if (mic && 'ResizeObserver' in window) {
+      const view = $('tank-view');
+      const ro = new ResizeObserver(() => {
+        view.style.setProperty('--mic-w', `${mic.offsetWidth}px`);
+        this.inset = -1;
+      });
+      ro.observe(mic);
+      this.cleanups.push(() => ro.disconnect());
+    }
+    // In a phone's browser (not opened from the home screen icon), a swipe on the battlefield
+    // scrolls the page a little, so the browser tucks its tabs and address bar away (user,
+    // 2026-11-23; styles.css "tuck-bars", and main.ts leaves that scroll alone).
+    const homeScreen = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (shell.device.small && !homeScreen()) {
+      document.documentElement.classList.add('tuck-bars');
+      this.cleanups.push(() => {
+        document.documentElement.classList.remove('tuck-bars');
+        window.scrollTo(0, 0);
+      });
+    }
+    // Turning a sideways phone right round swaps which side the notch is on (no resize then).
+    if (shell.device.small) {
+      const turned = () => window.setTimeout(() => !this.disposed && this.onResize(), 300);
+      window.addEventListener('orientationchange', turned);
+      this.cleanups.push(() => window.removeEventListener('orientationchange', turned));
+      this.fitSides();
+    }
     this.raf = requestAnimationFrame(this.frame);
   }
 
@@ -217,6 +247,8 @@ export class TankView implements View {
   private onResize = () => {
     this.renderer?.resize();
     this.inset = -1;
+    this.camera?.snap();
+    this.fitSides();
   };
 
   /**
@@ -225,6 +257,8 @@ export class TankView implements View {
    */
   private inset = -1;
   private insetRight = 0;
+  /** With the strip down the side, the row of tags along the top (lives, wind) is kept clear too. */
+  private insetTop = 0;
   private stripInset() {
     if (this.inset < 0) {
       const strip = $('touch').getBoundingClientRect();
@@ -232,6 +266,20 @@ export class TankView implements View {
       const side = strip.height > strip.width;
       this.inset = strip.height && !side ? Math.max(0, canvas.bottom - strip.top + 6) : 0;
       this.insetRight = strip.height && side ? Math.max(0, canvas.right - strip.left + 6) : 0;
+      this.insetTop = 0;
+      if (strip.height && side) {
+        const lives = document.querySelector('#tank-view .hud-top-left')?.getBoundingClientRect();
+        const wind = $('wind').getBoundingClientRect();
+        for (const r of [lives, wind]) if (r && r.height) this.insetTop = Math.max(this.insetTop, r.bottom - canvas.top + 4);
+        // Messages show one at a time in the top row, centred in the gap between the lives tag
+        // and the wind (table.css; user, 2026-11-23).
+        const arena = $('arena');
+        const a = arena.getBoundingClientRect();
+        if (lives?.width && wind.width && wind.left > lives.right) {
+          arena.style?.setProperty('--pop-x', `${(lives.right + wind.left) / 2 - a.left}px`);
+          arena.style?.setProperty('--pop-w', `${Math.max(160, wind.left - lives.right - 12)}px`);
+        }
+      }
     }
     return this.inset;
   }
@@ -323,8 +371,14 @@ export class TankView implements View {
         }
         // Riding in the helicopter (or floating down): keep it in view, to see where you'll land.
         if (me && (me.phase === 'carried' || me.phase === 'chute')) highest = Math.min(highest, me.y);
+        // The screen changed size (Safari's bars tucking away grow it over a few frames): follow
+        // it frame by frame, without easing, so the battlefield doesn't stretch or wobble.
+        if (this.renderer.syncSize()) {
+          this.inset = -1;
+          this.camera.snap();
+        }
         // On touch screens the corner control pads cover roughly the bottom 70px.
-        this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.stripInset(), Number.isFinite(highest) ? highest : deepest, this.insetRight);
+        this.camera.update(this.renderer.viewW, this.renderer.viewH, target, deepest, dt, this.stripInset(), Number.isFinite(highest) ? highest : deepest, this.insetRight, this.insetTop);
         this.renderer.draw(g, this.camera, { angle: this.input.angle, power: this.input.power }, now);
         this.updateAmbience();
       }
@@ -367,6 +421,7 @@ export class TankView implements View {
       });
       this.set('level', `${info.level}|${info.kills}`, () => {
         $('level-line').textContent = `LV ${info.level} / ${cfg.winLevel} · ${info.kills} ${info.kills === 1 ? 'kill' : 'kills'}`;
+        this.inset = -1; // the lives tag's width changed: measure the pop-up gap again
       });
       const ready = spreadReady(info) ? (spreadSize(info.level) === 5 ? 'QUINTUPLE READY' : 'TRIPLE READY') : '';
       this.set('spread', ready, () => {
@@ -379,18 +434,13 @@ export class TankView implements View {
       this.set('move', canMove, () => ($('move-row').hidden = !canMove));
 
       const phase = me.phase;
+      // (No "Protected" line: the bubble round your tank says it, and blinks as it runs out. User,
+      // 2026-11-23.)
       let status = '';
       if (phase === 'carried') status = this.shell.device.touch ? '' : 'Press any key to drop';
-      else if (phase === 'chute') status = 'Parachuting in (protected)';
       else if (phase === 'dead') status = g.match.state === 'won' ? '' : 'Respawning…';
-      else if (info.protectedUntil > g.renderTick) {
-        const secs = Math.min(cfg.spawnProtectionSeconds, Math.ceil((info.protectedUntil - g.renderTick) / cfg.tickRate));
-        status = `Protected ${secs}s (ends when you fire)`;
-      } else if (info.away) status = 'A bot is driving';
-      this.set('status', status, () => {
-        $('status').hidden = !status;
-        $('status').textContent = status;
-      });
+      else if (info.away && phase !== 'chute') status = 'A bot is driving';
+      this.set('status', status, () => this.paintSlot());
       const fireState = phase === 'carried' ? 'drop' : info.shellsInFlight > 0 || !(phase === 'ground' || phase === 'slide') ? 'busy' : 'ready';
       this.set('fire', fireState, () => {
         const btn = $<HTMLButtonElement>('fire-btn');
@@ -415,12 +465,88 @@ export class TankView implements View {
   }
 
   private feed(html: string) {
+    if (this.sideways()) {
+      this.queueNote(html);
+      return;
+    }
     const el = document.createElement('div');
     el.innerHTML = html;
     const feed = $('feed');
     feed.prepend(el);
     while (feed.children.length > 5) feed.lastElementChild!.remove();
     setTimeout(() => el.remove(), 6000);
+  }
+
+  // ------------------------------------------------------------------ messages on a sideways phone
+
+  /**
+   * On a phone held sideways, every message (who knocked out whom, "Your mic is on", a chat
+   * message) waits its turn and shows by itself for a couple of seconds, in the top row between
+   * the lives tag and the wind (user, 2026-11-23). In between, that spot shows the status, if any.
+   */
+  private notes: string[] = [];
+  private noteShowing = '';
+  private noteTimer: number | undefined;
+
+  /**
+   * An iPhone held sideways reports the notch's margin on both sides, but the notch is only on one.
+   * When it's on the left, the controls down the right edge only need to clear the rounded corner,
+   * so they move out to it (user, 2026-11-23; tanks.css). Android reports only the real side.
+   */
+  private fitSides() {
+    const view = document.getElementById('tank-view');
+    if (!view?.style) return;
+    view.style.removeProperty('--strip-safe-r');
+    if (!this.sideways()) return;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)';
+    document.body.append(probe);
+    const cs = getComputedStyle(probe);
+    const left = parseFloat(cs.paddingLeft) || 0;
+    const right = parseFloat(cs.paddingRight) || 0;
+    probe.remove();
+    // 90: turned to the left, so the top of the phone (with the notch) is on the left.
+    const angle = (window as { orientation?: number }).orientation ?? screen.orientation?.angle;
+    if (left > 20 && Math.abs(left - right) < 1 && angle === 90) view.style.setProperty('--strip-safe-r', '12px');
+  }
+
+  private sideways() {
+    return this.shell.device.small && matchMedia('(max-height: 500px)').matches;
+  }
+
+  showNote(html: string): boolean {
+    if (!this.sideways()) return false;
+    this.queueNote(html);
+    return true;
+  }
+
+  private queueNote(html: string) {
+    if (html === this.noteShowing || this.notes.includes(html)) return;
+    this.notes.push(html);
+    // A burst (a nuke's knock-outs) keeps only the latest few waiting.
+    while (this.notes.length > 4) this.notes.shift();
+    if (!this.noteShowing) this.nextNote();
+  }
+
+  private nextNote() {
+    this.noteShowing = this.notes.shift() ?? '';
+    this.paintSlot();
+    if (!this.noteShowing) return;
+    // A couple of seconds each; a long message stays up long enough to read.
+    const length = $('status').textContent?.length ?? 0;
+    this.noteTimer = window.setTimeout(() => this.nextNote(), Math.min(6000, Math.max(2200, 900 + length * 55)));
+  }
+
+  /** The status spot: the message showing, or else the status. */
+  private paintSlot() {
+    const el = $('status');
+    const note = this.noteShowing;
+    el.hidden = !note && !this.hud.status;
+    el.classList.toggle('note', !!note);
+    if (note) {
+      el.innerHTML = note;
+      el.animate?.([{ opacity: 0, transform: 'translate(-50%, -4px)' }, { opacity: 1, transform: 'translate(-50%, 0)' }], { duration: 200, easing: 'ease-out' });
+    } else el.textContent = this.hud.status;
   }
 
   private banner(html: string | null) {
@@ -470,6 +596,11 @@ export class TankView implements View {
     $('banner').hidden = true;
     $('status').hidden = true;
     $('feed').innerHTML = '';
+    for (const v of ['--pop-x', '--pop-w']) document.getElementById('arena')?.style?.removeProperty(v);
+    clearTimeout(this.noteTimer);
+    this.notes = [];
+    this.noteShowing = '';
+    $('status').classList.remove('note');
     $('tank-view').hidden = true;
     const canvas = $<HTMLCanvasElement>('canvas');
     canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);

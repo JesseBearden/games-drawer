@@ -83,5 +83,11 @@ export interface View {
   /** Menu opened or closed: stop taking game input while it's open. */
   setPaused?(paused: boolean): void;
   resize?(): void;
+  /**
+   * A note for the table ("Your mic is on", a message while Messages is closed), as safe HTML.
+   * Return true if the view shows it itself (Tanks on a sideways phone queues them in its own
+   * spot); otherwise it pops up as usual.
+   */
+  showNote?(html: string): boolean;
   dispose(): void;
 }

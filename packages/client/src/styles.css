@@ -58,6 +58,24 @@ body {
   }
 }
 
+/* Tanks in a phone's browser, held sideways (tankView adds "tuck-bars"): the page scrolls a
+   little, so a swipe up on the battlefield tucks the browser's tabs and address bar away (user,
+   2026-11-23). The game stays pinned to the screen and grows into the room they leave. */
+@media (orientation: landscape) {
+  html.tuck-bars,
+  html.tuck-bars body {
+    height: auto;
+    overflow: visible;
+  }
+  html.tuck-bars body {
+    position: static;
+    min-height: calc(100vh + 120px);
+  }
+  html.tuck-bars .arena {
+    touch-action: pan-y;
+  }
+}
+
 button {
   font: inherit;
   color: inherit;

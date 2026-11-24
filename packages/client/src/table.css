@@ -1029,10 +1029,79 @@
   #game.phone .pz-status {
     top: 54px;
   }
+}
+
+/* Tanks on a sideways phone: one slim row across the top (user, 2026-11-23). The mic and caret
+   tabs are a fifth shorter; the lives tag (hearts, then level and knock-outs on the same line)
+   sits beside the mic tab, and the wind beside the caret tab, over the controls it matters to.
+   The battlefield is framed below the row (tankView.stripInset). */
+@media (max-height: 500px) {
+  #game.phone[data-view='tanks'] .toolbar.pc-toolbar #btn-mic {
+    min-height: calc(37px + var(--safe-t));
+  }
+  #game.phone[data-view='tanks'] .bar-tab {
+    height: calc(37px + var(--safe-t));
+  }
+  #game.phone .tank-view .hud-top-left,
+  #game.phone .tank-view .wind {
+    top: 4px;
+    height: 29px;
+    display: flex;
+    align-items: center;
+  }
   #game.phone .tank-view .hud-top-left {
-    top: calc(54px + var(--safe-t));
+    left: calc(10px + var(--safe-l) + var(--mic-w, 150px) + 8px);
+    gap: 8px;
+    padding: 0 10px 0 8px;
+  }
+  #game.phone .tank-view .hearts {
+    gap: 3px;
+  }
+  #game.phone .tank-view .hearts img,
+  #game.phone .tank-view .hearts svg {
+    width: 20px;
+    height: 18px;
+  }
+  #game.phone .tank-view .level-line {
+    margin: 0;
+    font-size: 0.9rem;
+    white-space: nowrap;
   }
   #game.phone .tank-view .wind {
-    top: calc(130px + var(--safe-t));
+    left: auto;
+    right: calc(10px + var(--safe-r) + 64px + 8px);
+    transform: none;
+    padding: 0 10px 0 6px;
+    font-size: 1rem;
+  }
+  #game.phone .tank-view .wind img {
+    height: 20px;
+  }
+  /* "Triple ready" under the wind, over the Fire button it's about. */
+  #game.phone .tank-view .aim-box {
+    top: 40px;
+    right: calc(10px + var(--strip-safe-r, var(--safe-r)));
+  }
+  /* One spot for messages, in the top row between the lives tag and the wind (user, 2026-11-23;
+     tankView measures the gap and queues them): who knocked out whom, "Your mic is on", a chat
+     message, one at a time for a couple of seconds each, and otherwise the status ("Respawning…").
+     A long one may take a second line. "Jesse wins!" stays big in the middle. */
+  #game.phone .tank-view .status {
+    left: var(--pop-x, 50%);
+    width: max-content;
+    max-width: var(--pop-w, 60%);
+    top: 4px;
+    min-height: 29px;
+    padding: 5px 12px;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
+  }
+  #game.phone .tank-view .status.note {
+    font-weight: 800;
+  }
+  #game.phone .tank-view .feed {
+    display: none;
   }
 }

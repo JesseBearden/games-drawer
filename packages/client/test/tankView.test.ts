@@ -107,6 +107,29 @@ describe('the Tanks screen', () => {
     view.dispose();
   });
 
+  it('on a sideways phone, shows messages one at a time in the status spot', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('max-height') }));
+    vi.stubGlobal('document', { getElementById: el, documentElement: { classList: { add() {}, remove() {}, contains: () => false } } });
+    vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {}, scrollTo() {}, setTimeout: (f: () => void, ms: number) => setTimeout(f, ms) });
+    const view = new TankView({ ...(shell() as object), device: { touch: true, small: true } } as never);
+    expect(view.showNote('Your mic is on.')).toBe(true);
+    view.showNote('Liz is here.');
+    view.showNote('Your mic is on.'); // already showing: not again
+    expect([el('status').hidden, el('status').innerHTML]).toEqual([false, 'Your mic is on.']);
+    vi.advanceTimersByTime(2200);
+    expect(el('status').innerHTML).toBe('Liz is here.');
+    vi.advanceTimersByTime(2200);
+    expect(el('status').hidden).toBe(true);
+    view.dispose();
+  });
+
+  it('elsewhere, leaves messages to pop up as usual', () => {
+    const view = new TankView(shell());
+    expect(view.showNote('Your mic is on.')).toBe(false);
+    view.dispose();
+  });
+
   it('a retry for the pictures stops when the screen closes', async () => {
     vi.useFakeTimers();
     art.load = () => Promise.reject(new Error('offline'));

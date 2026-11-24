@@ -20,12 +20,19 @@ export class Camera {
   y = 0;
   scale = 1;
   zoomIndex = 0;
+  /** Screen pixels on the right that the battlefield is framed clear of (whole-battlefield view). */
+  coverRight = 0;
   private initialised = false;
 
   constructor(private cfg: GameConfig) {}
 
   get following() {
     return ZOOM_LEVELS[this.zoomIndex].zoom > 1;
+  }
+
+  /** Jump straight to the new framing on the next update (the screen changed size). */
+  snap() {
+    this.initialised = false;
   }
 
   /** Step to the next zoom level (wrapping) and return its name. */
@@ -51,9 +58,10 @@ export class Camera {
   /**
    * bottomInset / rightInset: screen pixels covered by the control strip (along the bottom, or
    * down the right side on a phone held sideways). The whole battlefield is framed clear of it
-   * so no tank ends up hidden under a button.
+   * so no tank ends up hidden under a button. topInset: the row of tags along the top on a phone
+   * held sideways; the whole battlefield is framed under it.
    */
-  update(vw: number, vh: number, target: Point | null, deepest: number, dtMs: number, bottomInset = 0, highest = deepest, rightInset = 0) {
+  update(vw: number, vh: number, target: Point | null, deepest: number, dtMs: number, bottomInset = 0, highest = deepest, rightInset = 0, topInset = 0) {
     const W = this.cfg.worldWidth;
     const H = this.cfg.worldHeight;
     const b = this.contentBounds(deepest);
@@ -61,14 +69,16 @@ export class Camera {
     let scale: number;
     let x: number;
     let y: number;
+    this.coverRight = 0;
     if (!this.following || !target) {
+      this.coverRight = rightInset;
       // Whole battlefield: the full width, edge to edge, unless that would cut the hills or the
       // valleys off (short, wide phone screens). Then it shrinks until they fit, and the ground
       // past the map's edges (drawn dimmed) fills the sides. Spare height goes to the sky. It all
       // sits above the control strip; below the strip there's just more ground.
       const band = this.wholeBand(deepest, highest);
       const usableW = Math.max(100, vw - rightInset);
-      scale = Math.min(usableW / W, usableH / (band.bottom - band.top));
+      scale = Math.min(usableW / W, Math.max(100, usableH - topInset) / (band.bottom - band.top));
       x = -Math.max(0, usableW / scale - W) / 2;
       y = band.bottom - usableH / scale;
     } else {

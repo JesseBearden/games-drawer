@@ -621,6 +621,8 @@ for (const ev of ['gesturestart', 'gesturechange'] as const) document.addEventLi
  * Never while you're typing: then the phone has moved the page to keep the box in sight.
  */
 function unscrollPage() {
+  // Tanks in a phone's browser scrolls on purpose, to tuck the browser's bars away (styles.css).
+  if (document.documentElement.classList.contains('tuck-bars') && matchMedia('(orientation: landscape)').matches) return;
   const a = document.activeElement;
   if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) return;
   if (window.scrollX || window.scrollY) window.scrollTo(0, 0);

@@ -55,6 +55,19 @@ export class Renderer {
     this.canvas.height = Math.round(r.height * this.dpr);
   }
 
+  /**
+   * Checked every frame: if the canvas's size on screen has changed (a phone's browser tucking its
+   * bars away grows it a little each frame, before any resize event), match it. True if it did.
+   */
+  syncSize(): boolean {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const w = Math.round(this.canvas.clientWidth * dpr);
+    const h = Math.round(this.canvas.clientHeight * dpr);
+    if (w === this.canvas.width && h === this.canvas.height && dpr === this.dpr) return false;
+    this.resize();
+    return true;
+  }
+
   get viewW() {
     return this.canvas.width / this.dpr;
   }
@@ -110,21 +123,31 @@ export class Renderer {
     // Parallax mountains
     const W = cfg.worldWidth;
     // Layers are rendered at half resolution, so draw them at 2x.
-    ctx.drawImage(this.far, cam.x * 0.45 - W * 0.15, cfg.worldHeight * 0.16, this.far.width * 2, this.far.height * 2);
-    ctx.drawImage(this.near, cam.x * 0.25 - W * 0.07, cfg.worldHeight * 0.3, this.near.width * 2, this.near.height * 2);
+    // On a screen wider than the map they carry on past its edges, mirrored so the joins don't show.
+    const viewL = cam.x - 20 / S;
+    const viewR = cam.x + (vw + 20) / S;
+    drawLayer(ctx, this.far, cam.x * 0.45 - W * 0.15, cfg.worldHeight * 0.16, viewL, viewR);
+    drawLayer(ctx, this.near, cam.x * 0.25 - W * 0.07, cfg.worldHeight * 0.3, viewL, viewR);
 
     // Terrain
     ctx.imageSmoothingEnabled = S < 1;
     ctx.drawImage(g.terrainView.canvas, 0, 0);
     // Past the map edges (seen when zoomed in near an edge, or on short, wide screens) the hills
-    // carry on as a mirror of the map, faded into the sky so they read as out of bounds.
+    // carry on as a mirror of the map, faded into the sky so they read as out of bounds. Not
+    // behind the controls down the side of a sideways phone, though: there the battlefield ends
+    // where the controls begin, and hills under them looked like part of it (user, 2026-11-23).
     const W2 = cfg.worldWidth;
     const H2 = cfg.worldHeight;
     const pastLeft = cam.x < 0;
-    const pastRight = cam.x + this.viewW / S > W2;
+    const pastRight = cam.x + (this.viewW - cam.coverRight) / S > W2 + 1;
     if (pastLeft || pastRight) {
       const tv = g.terrainView.canvas;
       ctx.save();
+      if (cam.coverRight) {
+        ctx.beginPath();
+        ctx.rect(cam.x - 10, cam.y - 10, (this.viewW - cam.coverRight) / S + 10, this.viewH / S + 20);
+        ctx.clip();
+      }
       ctx.globalAlpha = 0.55;
       ctx.scale(-1, 1);
       if (pastLeft) ctx.drawImage(tv, 0, 0); // mirrored: x from -W2 to 0
@@ -522,7 +545,11 @@ export class Renderer {
 
     // Spawn protection bubble
     // (Carried and parachuting tanks are protected too; the helicopter and chute signal that.)
-    if (t.info.protectedUntil > g.renderTick && (t.phase === 'ground' || t.phase === 'slide' || t.phase === 'air')) {
+    // In its last 3 seconds it blinks, and faster in the last one (user, 2026-11-23: this replaced
+    // the "Protected 5s" line).
+    const left = (t.info.protectedUntil - g.renderTick) / cfg.tickRate;
+    const blinkOff = left <= 3 && Math.floor(now / (left <= 1 ? 90 : 220)) % 2 === 1;
+    if (left > 0 && !blinkOff && (t.phase === 'ground' || t.phase === 'slide' || t.phase === 'air')) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 200);
       // A cobalt bubble (the old pale cyan disappeared against the paper sky).
       ctx.strokeStyle = `rgba(16, 61, 182, ${0.35 + 0.3 * pulse})`;
@@ -551,8 +578,10 @@ export class Renderer {
     // Aim guide for your own tank.
     if (aim && (t.phase === 'ground' || t.phase === 'slide') && t.info.shellsInFlight === 0) {
       const tip = barrelTip(cfg, t.x, t.y, angle);
-      // Sized in screen pixels (about 40-110 px) so it stays readable when zoomed out.
-      const len = (40 + aim.power * 0.7) / S;
+      // As long as the power says, in step with the tank (about one tank's width at the lowest
+      // power, four at full), and never too short to see. It used to be
+      // sized in screen pixels, which on a phone made even a gentle shot look long.
+      const len = Math.max(14 / S, 24 + aim.power * 1.1);
       const dx = Math.cos(angle * DEG);
       const dy = -Math.sin(angle * DEG);
       ctx.setLineDash([4 / S, 5 / S]);
@@ -572,6 +601,28 @@ export class Renderer {
  * sheet of felt (optionally washed lighter for distance), its top edge catching a little light,
  * and a soft warm shadow so it sits in front of what's behind it.
  */
+/**
+ * A background mountain layer (half-size canvas, drawn at 2x) placed at x0, repeated across
+ * everything from viewL to viewR in world units: every other copy mirrored, so neighbours meet
+ * at the same hill height.
+ */
+function drawLayer(ctx: CanvasRenderingContext2D, img: HTMLCanvasElement, x0: number, y: number, viewL: number, viewR: number) {
+  const w = img.width * 2;
+  const h = img.height * 2;
+  for (let k = Math.floor((viewL - x0) / w); x0 + k * w < viewR; k++) {
+    const left = x0 + k * w;
+    if (k % 2 === 0) {
+      ctx.drawImage(img, left, y, w, h);
+    } else {
+      ctx.save();
+      ctx.translate(left + w, y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0, w, h);
+      ctx.restore();
+    }
+  }
+}
+
 function mountains(width: number, height: number, seed: number, paper: HTMLImageElement, wash: string | null, roughness: number) {
   const c = document.createElement('canvas');
   c.width = Math.round(width / 2);

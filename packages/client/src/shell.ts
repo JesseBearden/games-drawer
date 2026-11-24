@@ -670,6 +670,7 @@ export class RoomApp {
       el.className = 'toast-chat';
       el.innerHTML = `<b>${escapeHtml(from)}:</b> ${escapeHtml(text)}`;
     } else el.textContent = text;
+    if (this.view?.showNote?.(el.innerHTML)) return;
     // The same note again (tapping a tile that doesn't fit twice) replaces it rather than stacking.
     const last = box.lastElementChild;
     if (last?.textContent === el.textContent) last.remove();

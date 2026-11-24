@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-23 (talking ripples on every name tag)_
+_Last updated: 2026-11-23 (Tanks on an iPhone held sideways)_
 
 ## Getting set up
 
@@ -13,7 +13,33 @@ _Last updated: 2026-11-23 (talking ripples on every name tag)_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player table.
 
-## Newest: talking ripples from every name tag (2026-11-23)
+## Newest: Tanks on an iPhone held sideways, in Safari (2026-11-23)
+
+- [ ] **Swipe to tuck Safari away** (works; it was a bit jittery): the battlefield now follows
+      the screen frame by frame as Safari's bars slide away, instead of stretching and then
+      zooming to catch up. Smoother? If it still shakes, is it the battlefield, the buttons and
+      tags, or the whole page? Turn the phone upright and back: does everything still line up?
+      From the home screen icon nothing should scroll.
+- [ ] **One row along the top:** the mic tab is a little shorter, with your hearts and "LV · kills"
+      on one line beside it, and the wind beside the caret tab. Nothing overlaps (try "Turn on
+      mic", and Mute once it's on). Is the text big enough to read?
+- [ ] **One message at a time:** who knocked out whom, "Your mic is on" and chat messages take
+      turns in the top row between your lives and the wind, a couple of seconds each (a long chat
+      message a bit longer, on two lines). Nothing pops up anywhere else, except "Jesse wins!"
+      in the middle. Too quick, too slow?
+- [ ] **No "Protected" line** (every device): the blue bubble round a new tank blinks for its
+      last 3 seconds, faster in the last one. Clear enough?
+- [ ] **Controls closer to the edge:** hold the phone with the Dynamic Island on the left; the
+      Angle / Power / Fire panel should sit near the right edge instead of a thumb's width in.
+      Turned the other way it stays clear of the island. Nothing clipped by the rounded corner?
+- [ ] **The battlefield fits:** it runs from the left edge to the controls, under the top row, with
+      no hills behind the controls. Is any tank hidden under anything?
+- [ ] **The aim line** (every device): short at low power, about four tank-widths at full. Does it
+      feel right?
+- [ ] **A very wide computer window:** the faint background mountains carry on across the greyed
+      sides past the battlefield, with no straight edges where they used to stop.
+
+## Talking ripples from every name tag (2026-11-23)
 
 - [ ] **Two tabs (or a phone) with mics on, at Your table and in a game:** while someone talks,
       rings of their tag's colour ripple out from their name tag and their seat on Your table,

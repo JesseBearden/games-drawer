@@ -259,7 +259,8 @@
    row each, then Fire. The battlefield is framed to its left (tankView.stripInset). */
 @media (max-height: 500px) {
   #game.phone .touch {
-    inset: auto calc(8px + var(--safe-r)) calc(8px + var(--safe-b)) auto;
+    /* --strip-safe-r: an iPhone with its notch on the left side (tankView.fitSides). */
+    inset: auto calc(8px + var(--strip-safe-r, var(--safe-r))) calc(8px + var(--safe-b)) auto;
     transform: none;
     flex-direction: column;
     justify-content: flex-end;
