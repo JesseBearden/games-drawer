@@ -93,6 +93,8 @@ export class RoomApp {
   ) {
     const gameEl = $('game');
     gameEl.classList.toggle('phone', device.small);
+    // An iPad or other tablet (table.css lifts the message box clear of a keyboard's hovering bar).
+    gameEl.classList.toggle('tablet', device.touch && !device.small);
     // "Turn your phone sideways", or iPad, or tablet: whatever they're holding.
     $('rotate').querySelector('.overlay-card')!.textContent = `Turn your ${deviceWord(device)} sideways to play`;
     $('chat-log').innerHTML = '';

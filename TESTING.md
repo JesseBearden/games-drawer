@@ -54,7 +54,19 @@ _Last updated: 2026-11-23 (Mahjong)_
       zooming to catch up. Smoother? If it still shakes, is it the battlefield, the buttons and
       tags, or the whole page? Turn the phone upright and back: does everything still line up?
       From the home screen icon nothing should scroll.
-- [ ] **"Swipe up for fullscreen":** start Tanks with the phone sideways and Safari's bars showing:
+- [ ] **No black at the ends** (iPhone, upright): on Your table, pull past the top and the bottom.
+      It should just stop, with no black band or flashing. Same in the menu, invite and scores
+      sheets, and on Start a table with big text.
+- [ ] **Typing on the iPad, keyboard attached:** the message box now sits well up from the
+      bottom (about 130 points), with felt under it. Tap it: nothing should move or jump, and the hovering bar comes up below
+      the box. Type and send a few: does it stay put? Does the space under the box look odd?
+      Try a name box too (Change on Start a table). Without the keyboard attached, the box
+      should still slide up above the keyboard, smoothly.
+- [ ] **Turn upright and back, then swipe up** (Tanks and Mahjong): swipe Safari's bars away,
+      turn the phone upright, then sideways again. One swipe up should tuck the bars away again,
+      with no swipe down first. Also try tapping the shrunken address bar to bring the bars back,
+      then swiping up.
+- [ ] **"Swipe up for fullscreen":** in Tanks or Mahjong, start with the phone sideways and Safari's bars showing:
       the hint shows faintly across the middle for about 3 seconds (and goes as soon as you swipe).
       Readable but not in the way? It shouldn't show with the bars already tucked away, or from
       the home screen icon. Start upright, then turn the phone: it shows then instead.

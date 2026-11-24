@@ -7,6 +7,7 @@ import { tankSprites, tankSpritesNow, type Sprites } from './sprites';
 import { TANK_SOUNDS } from './audio';
 import { colorCss, escapeHtml } from './html';
 import { GameState, type TankInit } from './state';
+import { tuckBars } from './tuckBars';
 import type { ShellApi, View } from './views';
 import type { PadButton, PadPress } from './gamepad';
 import type { Action } from './input';
@@ -87,26 +88,11 @@ export class TankView implements View {
       ro.observe(mic);
       this.cleanups.push(() => ro.disconnect());
     }
-    // In a phone's browser (not opened from the home screen icon), a swipe on the battlefield
-    // scrolls the page a little, so the browser tucks its tabs and address bar away (user,
-    // 2026-11-23; styles.css "tuck-bars", and main.ts leaves that scroll alone).
-    const homeScreen = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    if (shell.device.small && !homeScreen()) {
-      document.documentElement.classList.add('tuck-bars');
-      this.cleanups.push(() => {
-        document.documentElement.classList.remove('tuck-bars');
-        window.scrollTo(0, 0);
-      });
-      this.hintTimer = window.setTimeout(() => this.maybeHint(), 700);
-    }
+    // In a phone's browser, a swipe up on the battlefield tucks the browser's bars away.
+    this.cleanups.push(tuckBars(shell.device.small));
     // Turning a sideways phone right round swaps which side the notch is on (no resize then).
     if (shell.device.small) {
-      const turned = () =>
-        window.setTimeout(() => {
-          if (this.disposed) return;
-          this.onResize();
-          this.maybeHint();
-        }, 300);
+      const turned = () => window.setTimeout(() => !this.disposed && this.onResize(), 300);
       window.addEventListener('orientationchange', turned);
       this.cleanups.push(() => window.removeEventListener('orientationchange', turned));
       this.fitSides();
@@ -250,41 +236,7 @@ export class TankView implements View {
     this.inset = -1;
     this.camera?.snap();
     this.fitSides();
-    // They swiped the bars away while the hint was up: it's done its job.
-    if (this.hintShowing && !this.barsShowing()) this.hideHint();
   };
-
-  /**
-   * An iPhone held sideways in Safari, with its tabs and address bar showing: say once, briefly,
-   * that a swipe up tucks them away (user, 2026-11-23). Faint, across the middle, and taps go
-   * straight through it. Held upright at first, it waits for the phone to be turned.
-   */
-  private hinted = false;
-  private hintShowing = false;
-  private hintTimer: number | undefined;
-  private barsShowing() {
-    // iPhones report the screen's size held upright, so its width is the height there is to fill.
-    return window.innerHeight < Math.min(screen.width, screen.height) - 30;
-  }
-  private maybeHint() {
-    if (this.hinted || this.disposed || !document.documentElement.classList.contains('tuck-bars')) return;
-    if (!/iPhone|iPod/.test(navigator.userAgent) || !matchMedia('(orientation: landscape)').matches) return;
-    this.hinted = true;
-    const el = document.getElementById('swipe-hint');
-    if (!el || !this.barsShowing()) return;
-    el.hidden = false;
-    el.classList.remove('gone');
-    this.hintShowing = true;
-    this.hintTimer = window.setTimeout(() => this.hideHint(), 2800);
-  }
-  private hideHint() {
-    const el = document.getElementById('swipe-hint');
-    clearTimeout(this.hintTimer);
-    this.hintShowing = false;
-    if (!el) return;
-    el.classList.add('gone');
-    this.hintTimer = window.setTimeout(() => (el.hidden = true), 450);
-  }
 
   /**
    * How much of the battlefield the control strip covers: from the bottom, or from the right when
@@ -302,8 +254,8 @@ export class TankView implements View {
       this.inset = strip.height && !side ? Math.max(0, canvas.bottom - strip.top + 6) : 0;
       this.insetRight = strip.height && side ? Math.max(0, canvas.right - strip.left + 6) : 0;
       this.insetTop = 0;
-      // The swipe hint centres on the battlefield, not on the strip beside it.
-      document.getElementById('tank-view')?.style?.setProperty('--field-r', `${this.insetRight}px`);
+      // The swipe hint (tuckBars.ts) centres on the battlefield, not on the strip beside it.
+      document.getElementById('arena')?.style?.setProperty('--field-r', `${this.insetRight}px`);
       if (strip.height && side) {
         const lives = document.querySelector('#tank-view .hud-top-left')?.getBoundingClientRect();
         const wind = $('wind').getBoundingClientRect();
@@ -629,15 +581,11 @@ export class TankView implements View {
     this.shell.sfx.stopAmbience();
     clearTimeout(this.bannerTimer);
     clearTimeout(this.artTimer);
-    clearTimeout(this.hintTimer);
-    const hint = document.getElementById('swipe-hint');
-    if (hint) hint.hidden = true;
-    document.getElementById('tank-view')?.style?.removeProperty('--field-r');
     $('scores').hidden = true;
     $('banner').hidden = true;
     $('status').hidden = true;
     $('feed').innerHTML = '';
-    for (const v of ['--pop-x', '--pop-w']) document.getElementById('arena')?.style?.removeProperty(v);
+    for (const v of ['--pop-x', '--pop-w', '--field-r']) document.getElementById('arena')?.style?.removeProperty(v);
     clearTimeout(this.noteTimer);
     this.notes = [];
     this.noteShowing = '';

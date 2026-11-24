@@ -242,6 +242,16 @@ body *::after {
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   background-attachment: local;
 }
+/* A phone's browser can't paint felt that moves with the page into the gap it opens when you
+   pull past the end: it flashed black there (user's iPhone, 2026-11-23). So these don't stretch
+   past their ends, like the page itself (styles.css). (A second felt that stays put behind it
+   was tried: it looked off.) */
+#game .sheet,
+#game .ht-panel,
+#game .lobby-view,
+.entry.pc-page {
+  overscroll-behavior-y: none;
+}
 
 /* ------------------------------------------------------------------ dominoes: matte ceramic */
 

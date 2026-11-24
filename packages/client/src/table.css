@@ -485,6 +485,15 @@
 #game.phone .chat {
   width: min(380px, 88%);
 }
+/* An iPad: with a keyboard attached, picking the message box brings up a little bar hovering
+   along the bottom of the screen. If the box sits that low, Safari slides the whole page up to
+   keep it in sight, and nothing a page does can stop it (user, 2026-11-23: nothing should move).
+   Safari leaves the page be only when the box is at least 50 points clear of the top of that
+   bar, and the bar takes about 69 points (measured from the user's iPad screenshot). So here the
+   box sits that high. Without a keyboard attached, the box still slides up above the keyboard. */
+#game.tablet .chat {
+  padding-bottom: calc(130px + var(--safe-b));
+}
 
 /* ------------------------------------------------------------------ the game picker (Switch game) */
 

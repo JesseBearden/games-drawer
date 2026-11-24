@@ -58,8 +58,8 @@ body {
   }
 }
 
-/* Tanks in a phone's browser, held sideways (tankView adds "tuck-bars"): the page scrolls a
-   little, so a swipe up on the battlefield tucks the browser's tabs and address bar away (user,
+/* Tanks and Mahjong in a phone's browser, held sideways (tuckBars.ts adds "tuck-bars"): the page
+   scrolls a little, so a swipe up tucks the browser's tabs and address bar away (user,
    2026-11-23). The game stays pinned to the screen and grows into the room they leave. */
 @media (orientation: landscape) {
   html.tuck-bars,
@@ -73,6 +73,33 @@ body {
   }
   html.tuck-bars .arena {
     touch-action: pan-y;
+  }
+}
+
+/* "Swipe up for fullscreen" (tuckBars.ts): faint, across the middle of the game (Tanks leaves out
+   its controls with --field-r), and taps go straight through it. */
+#game .swipe-hint {
+  position: absolute;
+  top: 50%;
+  left: calc((100% - var(--field-r, 0px)) / 2);
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  padding: 10px 22px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  color: var(--ink);
+  font: 800 1.3rem var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: swipe-hint-in 250ms ease-out;
+  transition: opacity 400ms ease-in;
+}
+#game .swipe-hint.gone {
+  opacity: 0;
+}
+@keyframes swipe-hint-in {
+  from {
+    opacity: 0;
   }
 }
 

@@ -61,32 +61,6 @@
   font: 800 1rem var(--font);
 }
 
-/* "Swipe up for fullscreen": faint, across the middle, and taps go straight through it. */
-#game .swipe-hint {
-  position: absolute;
-  top: 50%;
-  left: calc((100% - var(--field-r, 0px)) / 2);
-  transform: translate(-50%, -50%);
-  z-index: 5;
-  padding: 10px 22px;
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--paper) 70%, transparent);
-  color: var(--ink);
-  font: 800 1.3rem var(--font);
-  white-space: nowrap;
-  pointer-events: none;
-  animation: swipe-hint-in 250ms ease-out;
-  transition: opacity 400ms ease-in;
-}
-#game .swipe-hint.gone {
-  opacity: 0;
-}
-@keyframes swipe-hint-in {
-  from {
-    opacity: 0;
-  }
-}
-
 /* "Liz wins!": big ink letters with a paper edge. */
 #game .banner {
   font: 800 clamp(30px, 6vw, 60px) / 1.1 var(--font);

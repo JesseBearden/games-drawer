@@ -170,7 +170,14 @@ Mahjong.
 - **The way in keeps still from page to page** (user, 2026-11-20): home, Start a table and a
   table's invite page show the hands-and-puzzle picture at exactly the same size, and their buttons
   at the same width, so going from one to the next doesn't zoom. Each fits one screen, down to an
-  iPad mini on its side in Safari. Where a page scrolls, its felt moves with it.
+  iPad mini on its side in Safari. Where a page scrolls, its felt moves with it, and it stops at
+  its ends instead of stretching past them: a phone shows black in that gap (2026-11-23), and a
+  still felt behind it looked off.
+- **Typing on an iPad with a keyboard attached** (user, 2026-11-23): nothing moves, as in an
+  app. Safari slides the whole page up whenever the box you pick sits where its little hovering
+  bar comes or within 50 points above it, and a page can't stop that (we tried; putting it back
+  afterwards jumps). So on a tablet the message box sits about 130 points up, clear of all that. With a whole keyboard on the
+  screen, the box still slides up into view.
 - **The bar:** on an iPad or computer, your mic on the left and Messages, Invite, Help and Menu on
   the right. On a phone it folds away: a mic tab in the top-left corner and a caret tab in the
   top-right that drops the rest as a stack (a tomato dot on it means unread messages). Tanks also
@@ -286,7 +293,8 @@ Mahjong.
     side running the full height inside the wall), as big as the room allows; See all discards has the rest. A phone shows the
     wall only for the opening, then the tiles left, and the last few discards of each player.
   - **A phone held sideways** (user, 2026-11-23): in the phone's browser a swipe up on the table
-    tucks the browser's tabs and address bar away, as in Tanks. Your strip is one row: your tag
+    tucks the browser's tabs and address bar away, as in Tanks (the same hint, and the same care
+    that a swipe up always works, even after turning the phone). Your strip is one row: your tag
     (name and wind, your flowers under it) at the left end, your tiles, then a column of buttons
     (Discard, or the claims two to a row), always the same width so the tiles never jump. Scores
     and the line saying what's happening sit on the table under See all discards. The players at the sides keep to the
@@ -363,7 +371,9 @@ Mahjong.
     knock-outs on the same line) sits beside the mic tab, and the wind beside the caret tab, above
     the controls. In the phone's browser a swipe up on the battlefield tucks the browser's tabs
     and address bar away; on an iPhone with them showing, "Swipe up for fullscreen" shows for a
-    few seconds across the middle of the battlefield, faint, and taps go through it. So a swipe
+    few seconds across the middle of the battlefield, faint, and taps go through it. Whenever the
+    bars come back (the phone turned upright and back, say), the page quietly returns to the top
+    once no finger is down, so the next swipe up always works (tuckBars.ts). So a swipe
     can't drop you, on a touch screen only the Drop button drops you from the helicopter (not a
     tap on the battlefield). Messages (knock-outs, the table's notes, chat) take turns one at a
     time in the row's gap between lives and wind, a couple of seconds each; only the winner's

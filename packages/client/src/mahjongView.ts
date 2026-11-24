@@ -5,6 +5,7 @@ import { seatFelts } from './felts';
 import { patchHtml, syncKeyed, type KeyedItem } from './dom';
 import { escapeHtml, nameHtml } from './html';
 import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml, seatRows } from './heartsView';
+import { tuckBars } from './tuckBars';
 import type { ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -139,7 +140,7 @@ export class MahjongTable implements View {
   private observer = new ResizeObserver(() => this.layout());
   private timers: number[] = [];
   /** We asked the page to scroll so the browser's bars can tuck away (undone on leaving). */
-  private tucks = false;
+  private untuck: () => void;
   /** A Pung, Chow or Kong just made (seat and which of their sets): it lifts for a moment. */
   private fresh: { seat: number; index: number } | null = null;
   /** The deal being shown: when it started, and how many steps of it are on screen. */
@@ -180,12 +181,9 @@ export class MahjongTable implements View {
     // (The middle's own size settles after the rest: the wall and discards follow it.)
     this.observer.observe(this.q('.mj-mid'));
     shell.sfx.preloadSounds(CARD_SOUNDS);
-    // In a phone's browser held sideways, a swipe on the table scrolls the page a little, so the
-    // browser tucks its tabs and address bar away, as in Tanks (styles.css "tuck-bars"; main.ts
-    // leaves that scroll alone).
-    const homeScreen = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    this.tucks = shell.device.small && !homeScreen;
-    if (this.tucks) document.documentElement.classList.add('tuck-bars');
+    // In a phone's browser held sideways, a swipe up on the table tucks the browser's bars away,
+    // as in Tanks.
+    this.untuck = tuckBars(shell.device.small);
   }
 
   private handEl() {
@@ -970,10 +968,7 @@ export class MahjongTable implements View {
   };
 
   dispose() {
-    if (this.tucks) {
-      document.documentElement.classList.remove('tuck-bars');
-      window.scrollTo(0, 0);
-    }
+    this.untuck();
     this.observer.disconnect();
     this.stopDeal();
     for (const t of this.timers) clearTimeout(t);

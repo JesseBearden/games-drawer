@@ -618,10 +618,13 @@ for (const ev of ['gesturestart', 'gesturechange'] as const) document.addEventLi
  * the page can be left scrolled by the bar's height: everything sits too high, with an empty band
  * at the bottom (seen 2026-11-20). Nothing here scrolls the page itself (each screen scrolls in
  * its own box), so put it back once a turn has settled, and once the keyboard has gone away.
- * Never while you're typing: then the phone has moved the page to keep the box in sight.
+ * Never while you're typing: then the phone has moved the page to keep the box in sight. (Putting
+ * it back then fights Safari's own slide and jumps, user's recording 2026-11-23. On an iPad the
+ * message box sits clear of a keyboard's hovering bar instead: table.css "#game.tablet".)
  */
 function unscrollPage() {
-  // Tanks in a phone's browser scrolls on purpose, to tuck the browser's bars away (styles.css).
+  // Tanks and Mahjong in a phone's browser scroll on purpose, to tuck the browser's bars away
+  // (tuckBars.ts, which also puts the scroll back when it should).
   if (document.documentElement.classList.contains('tuck-bars') && matchMedia('(orientation: landscape)').matches) return;
   const a = document.activeElement;
   if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) return;
@@ -634,7 +637,7 @@ const unscrollSoon = () => {
 matchMedia('(orientation: portrait)').addEventListener('change', unscrollSoon);
 window.addEventListener('resize', unscrollSoon);
 // The keyboard closing: focus leaves the box, and the visible part of the page grows again.
-document.addEventListener('focusout', () => window.setTimeout(unscrollPage, 150));
+document.addEventListener('focusout', () => window.setTimeout(unscrollSoon, 150));
 window.visualViewport?.addEventListener('resize', unscrollSoon);
 
 showPage();
