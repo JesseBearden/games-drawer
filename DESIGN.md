@@ -308,7 +308,9 @@ Mahjong.
     pause never gives away that someone could have taken it. Whoever can take it gets the buttons
     (the real words: Mahjong, Kong, Pung, Chow, and Pass) with a bar that runs down over 15 s (5
     was far too short: user, 2026-11-23); the tile on offer shows in the line above. Two possible
-    Chows show both.
+    Chows show both. If you take your winning tile as a Pung or Chow instead of Mahjong, Mahjong is
+    still there on your turn (user, 2026-11-23): it counts as winning on that discard, the set's
+    tiles go back in your hand, and the discarder pays.
   - **A Pung, Chow or Kong is made obvious** (user, 2026-11-23): the word ("Pung!") pops up on a
     sunflower chip beside the player's name, the tile they took slides from the middle into their
     set, and the set sits lifted until it settles. Play waits 2.5 s meanwhile (a Kong declared on

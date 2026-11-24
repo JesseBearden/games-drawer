@@ -437,6 +437,12 @@ export class MahjongHand {
   discardsMade = 0;
   /** Someone has taken a set: no heavenly or earthly hand after that. */
   claimed = false;
+  /**
+   * The player whose turn it is just took a discard for a Pung or Chow (whose, and which tile).
+   * If that finished their hand they may still go Mahjong on it, as if they'd called Mahjong
+   * for it in the first place (user, 2026-11-23: his wife called Pung on her winning tile).
+   */
+  justClaimed: { from: number; tile: MjTile } | null = null;
 
   constructor(
     readonly dealer: number,
@@ -496,6 +502,7 @@ export class MahjongHand {
     this.turn = seat;
     this.drawn = t;
     this.justDrew = true;
+    this.justClaimed = null;
     this.kongDraw = fromBack;
     this.step = 'discard';
     return true;
@@ -509,17 +516,24 @@ export class MahjongHand {
   }
 
   /** What winning would be worth (with points) or a zero score (without), or null if it isn't a win. */
-  winScore(seat: number, extra: MjTile | null, how: { robbed?: boolean } = {}): MjScore | null {
-    const concealed = extra ? [...this.hands[seat], extra] : [...this.hands[seat]];
-    const melds = this.melds[seat];
+  winScore(seat: number, extra: MjTile | null, how: { robbed?: boolean; claimed?: boolean } = {}): MjScore | null {
+    let concealed = extra ? [...this.hands[seat], extra] : [...this.hands[seat]];
+    let melds = this.melds[seat];
+    // Going out on a discard just taken for a set: scored as a win on that discard, with the set's
+    // tiles back in the hand.
+    const claim = how.claimed ? this.justClaimed : null;
+    if (claim) {
+      concealed = [...this.hands[seat], ...melds[melds.length - 1].tiles];
+      melds = melds.slice(0, -1);
+    }
     if (!this.rules.points) return mjIsComplete(concealed, melds) ? { faan: 0, items: [], limit: false } : null;
-    const selfDrawn = !extra;
+    const selfDrawn = !extra && !claim;
     const firstGo = !this.claimed;
     const score = mjScore({
       concealed,
       melds,
       flowers: this.flowers[seat],
-      winTile: extra ?? this.drawn ?? concealed[concealed.length - 1],
+      winTile: extra ?? claim?.tile ?? this.drawn ?? concealed[concealed.length - 1],
       selfDrawn,
       seatWind: this.seatWind(seat),
       prevailing: this.prevailing,
@@ -535,7 +549,7 @@ export class MahjongHand {
   /** On your own turn, before throwing away: can you go Mahjong, and which Kongs can you declare? */
   selfOptions(seat: number): { win: boolean; kongs: MjTile[] } | null {
     if (this.step !== 'discard' || this.turn !== seat) return null;
-    const win = this.justDrew && !!this.winScore(seat, null);
+    const win = (this.justDrew && !!this.winScore(seat, null)) || (!!this.justClaimed && !!this.winScore(seat, null, { claimed: true }));
     const kongs: MjTile[] = [];
     if (this.justDrew && this.wall.length) {
       const hand = this.hands[seat];
@@ -584,15 +598,25 @@ export class MahjongHand {
     this.discardsMade++;
     this.drawn = null;
     this.justDrew = false;
+    this.justClaimed = null;
     this.kongDraw = false;
     this.step = 'claim';
     return true;
   }
 
-  /** Go Mahjong on a tile you drew. */
+  /** Go Mahjong on a tile you drew (or on the discard you've just taken for a set). */
   declareWin(seat: number): boolean {
-    const score = this.selfOptions(seat)?.win ? this.winScore(seat, null) : null;
+    if (!this.selfOptions(seat)?.win) return false;
+    const claim = this.justDrew ? null : this.justClaimed;
+    const score = this.winScore(seat, null, { claimed: !!claim });
     if (!score) return false;
+    if (claim) {
+      // The set goes back into the hand: it was the winning tile all along.
+      const m = this.melds[seat].pop()!;
+      this.hands[seat].push(...m.tiles);
+      this.finishWin(seat, claim.from, claim.tile, score);
+      return true;
+    }
     this.finishWin(seat, null, this.drawn, score);
     return true;
   }
@@ -666,7 +690,7 @@ export class MahjongHand {
       removeTiles(this.hands[taker], kong ? [t, t, t] : [t, t]);
       this.takeDiscard();
       this.melds[taker].push({ kind: kong ? 'kong' : 'pung', tiles: kong ? [t, t, t, t] : [t, t, t], from: offer.seat, concealed: false });
-      this.afterClaim(taker);
+      this.afterClaim(taker, offer.seat, t);
       if (kong) this.drawFor(taker, true);
       return;
     }
@@ -679,7 +703,7 @@ export class MahjongHand {
       removeTiles(this.hands[next], mine);
       this.takeDiscard();
       this.melds[next].push({ kind: 'chow', tiles: run, from: offer.seat, concealed: false });
-      this.afterClaim(next);
+      this.afterClaim(next, offer.seat, t);
       return;
     }
     this.lastDiscard = null;
@@ -692,8 +716,9 @@ export class MahjongHand {
     this.log[this.log.length - 1].taken = true;
   }
 
-  private afterClaim(seat: number) {
+  private afterClaim(seat: number, from: number, tile: MjTile) {
     this.claimed = true;
+    this.justClaimed = { from, tile };
     this.lastDiscard = null;
     this.turn = seat;
     this.drawn = null;

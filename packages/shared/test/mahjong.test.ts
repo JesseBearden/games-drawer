@@ -217,6 +217,52 @@ describe('a hand of play', () => {
     expect(h.melds[0][0]).toMatchObject({ kind: 'pung', tiles: T('c5 c5 c5') });
   });
 
+  it('taking your winning tile as a Pung still lets you go Mahjong on it (paid by the discarder)', () => {
+    // Seat 1: d1-3, d4-6, b7-9, a pair of c9 and a pair of c5. Seat 0 throws c5: Mahjong or Pung.
+    for (const rules of [NO_POINTS, POINTS]) {
+      const h = setHand(['c5 we', 'd1 d2 d3 d4 d5 d6 b7 b8 b9 c9 c9 c5 c5', 'd7', 'd8'], { rules });
+      if (rules.points) h.flowers[1] = [];
+      h.discard(0, 'c5');
+      const o = h.options(1);
+      expect(o.pung).toBe(true);
+      if (!rules.points) expect(o.win).toBe(true);
+      h.resolve([null, { t: 'pung' }, null, null]);
+      expect(h.melds[1]).toHaveLength(1);
+      // On their turn, Mahjong is still there.
+      const self = h.selfOptions(1)!;
+      if (!o.win) continue; // (with points it has to be worth 3 faan, which this plain hand may not be)
+      expect(self.win).toBe(true);
+      expect(h.declareWin(1)).toBe(true);
+      expect(h.result).toMatchObject({ winner: 1, from: 0, tile: 'c5', selfDrawn: false });
+      // The Pung went back into the hand: it was the winning tile.
+      expect(h.melds[1]).toEqual([]);
+      expect(h.hands[1]).toHaveLength(14);
+    }
+  });
+
+  it('once you throw a tile away, that chance is gone', () => {
+    const h = setHand(['c5 we', 'd1 d2 d3 d4 d5 d6 b7 b8 b9 c9 c9 c5 c5', 'd7', 'd8'], { wall: 'b1 b2 b3 b4' });
+    h.discard(0, 'c5');
+    h.resolve([null, { t: 'pung' }, null, null]);
+    expect(h.discard(1, 'd1')).toBe(true);
+    h.resolve([null, null, null, null]);
+    expect(h.justClaimed).toBeNull();
+  });
+
+  it('with points, going out on a taken Pung scores as a win on that discard', () => {
+    // A pure one-suit hand: worth plenty. Seat 1 takes the c5 as a Pung, then goes Mahjong.
+    const h = setHand(['c5 we', 'c1 c2 c3 c4 c4 c4 c7 c8 c9 c9 c9 c5 c5', 'd7', 'd8'], { rules: POINTS });
+    h.discard(0, 'c5');
+    expect(h.options(1).win).toBe(true);
+    h.resolve([null, { t: 'pung' }, null, null]);
+    expect(h.declareWin(1)).toBe(true);
+    const r = h.result!;
+    expect(r.selfDrawn).toBe(false);
+    expect(r.score!.items.map((i) => i.name)).toContain('Pure one suit');
+    expect(r.pay[0]).toBeLessThan(0);
+    expect(r.pay[0] + r.pay[1]).toBe(0);
+  });
+
   it('the wall running out ends the hand with no winner', () => {
     const h = setHand(['c5 we', 'd1 d1', 'd2 d2', 'd3 d3'], { wall: '' });
     h.discard(0, 'c5');
