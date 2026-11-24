@@ -534,7 +534,7 @@ export class DominoesTable implements View {
     if (v.phase === 'gameOver') {
       if (v.seat !== null) html += '<button class="pc-btn pc-btn-main" data-act="again" type="button">New game</button>';
       html += '<button class="pc-btn pc-btn-plain" data-act="board" type="button">See the board</button>';
-      if (this.shell.isPrivate) html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
+      html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
     } else if (v.phase === 'handEnd') {
       if (v.seat !== null && !v.ready.includes(v.seat)) {
         html += `<button class="pc-btn pc-btn-main" data-act="ready" type="button"${this.readySent ? ' disabled' : ''}>Ready for hand ${v.hand + 1}</button>`;

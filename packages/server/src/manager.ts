@@ -1,14 +1,11 @@
 import { randomInt } from 'node:crypto';
 import {
-  canPlayPrivately,
-  canPlayPublicly,
-  GAME_NAMES,
+  isOffered,
   normalizeRoomCode,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   slotOfCode,
   type GameId,
-  type RoomKind,
   type RoomRequest,
   type Slot,
 } from '@tank/shared';
@@ -16,14 +13,13 @@ import { WindowCounter } from './guard';
 import { Room, type RoomDeps } from './room';
 
 /**
- * Once half the private tables are open, one address may start another only while it has fewer
+ * Once half the tables are open, one address may start another only while it has fewer
  * than this many: however many it holds open, the rest are left for everyone else. (Not before
  * then: each deploy's smoke tests open about 16 from one address, and families share one.)
  */
 export const TABLES_PER_ADDRESS_WHEN_BUSY = 4;
 
 export interface ManagerOptions extends Omit<RoomDeps, 'seed'> {
-  maxPublicRooms: number;
   maxPrivateRooms: number;
   /** Which deploy slot this server is; its room codes always map to it. */
   slot?: Slot;
@@ -45,46 +41,28 @@ export class RoomManager {
     opts.puzzleStartsFrom = this.puzzleStarts;
   }
 
-  count(kind: RoomKind) {
-    let n = 0;
-    for (const r of this.rooms.values()) if (r.kind === kind) n++;
-    return n;
-  }
-
   /** Find the room a hello asks for, creating one when allowed. `from` is their scrambled address. */
   resolve(req: RoomRequest, session: string, from?: string): RoomLookup {
     if (req.kind === 'private') {
       const room = this.rooms.get(normalizeRoomCode(req.code));
-      if (!room || room.kind !== 'private') return { ok: false, code: 'not-found', message: 'That room has closed or the code is wrong.' };
+      if (!room) return { ok: false, code: 'not-found', message: 'That room has closed or the code is wrong.' };
       if (!room.hasSession(session) && room.openSlots() <= 0) return { ok: false, code: 'room-full', message: 'That room is full.' };
       return { ok: true, room };
     }
-    if (req.kind === 'public') {
-      const game = req.game ?? 'tanks';
-      if (!canPlayPublicly(game)) return { ok: false, code: 'not-found', message: `${GAME_NAMES[game]} isn’t open to everyone yet. Start a private room to play it.` };
-      const playing = (r: Room) => r.kind === 'public' && r.game?.id === game;
-      // Rejoin the public game you were in, if it still has your seat.
-      for (const r of this.rooms.values()) if (playing(r) && r.hasSession(session)) return { ok: true, room: r };
-      if (this.draining) return { ok: false, code: 'capacity', message: 'The game was updated. Press Play to start a new one.' };
-      // Otherwise the busiest one with space, so people play together.
-      const open = [...this.rooms.values()].filter((r) => playing(r) && r.openSlots() > 0).sort((a, b) => b.humansConnected() - a.humansConnected());
-      if (open.length) return { ok: true, room: open[0] };
-      return this.create('public', game);
-    }
-    if (req.game && !canPlayPrivately(req.game)) return { ok: false, code: 'not-found', message: 'That game isn’t available right now.' };
-    return this.create('private', req.game, from);
+    if (req.game && !isOffered(req.game)) return { ok: false, code: 'not-found', message: 'That game isn’t available right now.' };
+    return this.create(req.game, from);
   }
 
-  create(kind: RoomKind, game?: GameId, from?: string): RoomLookup {
+  create(game?: GameId, from?: string): RoomLookup {
     if (this.draining) return { ok: false, code: 'capacity', message: 'The game was just updated. Try again.' };
-    const limit = kind === 'public' ? this.opts.maxPublicRooms : this.opts.maxPrivateRooms;
-    if (this.count(kind) >= limit) {
+    const limit = this.opts.maxPrivateRooms;
+    if (this.rooms.size >= limit) {
       this.rejectedAtCapacity++;
-      this.opts.log.event('room_rejected_capacity', { roomKind: kind });
+      this.opts.log.event('room_rejected_capacity', {});
       return { ok: false, code: 'capacity', message: 'Try again later.' };
     }
-    if (kind === 'private' && from && this.count(kind) >= limit / 2 && this.startedFrom(from) >= TABLES_PER_ADDRESS_WHEN_BUSY) {
-      this.opts.log.event('room_rejected_address', { roomKind: kind });
+    if (from && this.rooms.size >= limit / 2 && this.startedFrom(from) >= TABLES_PER_ADDRESS_WHEN_BUSY) {
+      this.opts.log.event('room_rejected_address', {});
       return { ok: false, code: 'rate-limited', message: 'There are several tables open from your internet connection. Use one of those, or try again in a minute.' };
     }
     let code = '';
@@ -93,7 +71,7 @@ export class RoomManager {
       // crypto.randomInt: private codes must not be predictable.
       for (let i = 0; i < ROOM_CODE_LENGTH; i++) code += ROOM_CODE_ALPHABET[randomInt(ROOM_CODE_ALPHABET.length)];
     } while (this.rooms.has(code) || (this.opts.slot && slotOfCode(code) !== this.opts.slot));
-    const room = new Room(code, kind, this.opts, game);
+    const room = new Room(code, this.opts, game);
     room.startedFrom = from ?? null;
     this.rooms.set(code, room);
     return { ok: true, room };
@@ -101,7 +79,7 @@ export class RoomManager {
 
   private startedFrom(from: string) {
     let n = 0;
-    for (const r of this.rooms.values()) if (r.kind === 'private' && r.startedFrom === from) n++;
+    for (const r of this.rooms.values()) if (r.startedFrom === from) n++;
     return n;
   }
 
@@ -121,7 +99,7 @@ export class RoomManager {
         try {
           room.close(close);
         } catch (err) {
-          this.opts.log.event('room_error', { room: code, roomKind: room.kind, error: String(err) });
+          this.opts.log.event('room_error', { room: code, error: String(err) });
         }
         this.rooms.delete(code);
       }
@@ -134,7 +112,7 @@ export class RoomManager {
       try {
         room.close(reason);
       } catch (err) {
-        this.opts.log.event('room_error', { room: code, roomKind: room.kind, error: String(err) });
+        this.opts.log.event('room_error', { room: code, error: String(err) });
       }
       this.rooms.delete(code);
     }
@@ -178,7 +156,7 @@ export class RoomManager {
 
   private fail(code: string, room: Room, err: unknown) {
     this.roomErrors++;
-    this.opts.log.event('room_error', { room: code, roomKind: room.kind, error: String(err), stack: (err as Error)?.stack?.split('\n').slice(0, 6).join(' | ') });
+    this.opts.log.event('room_error', { room: code, error: String(err), stack: (err as Error)?.stack?.split('\n').slice(0, 6).join(' | ') });
     console.error(`Room ${code} crashed and was closed:`, err);
     try {
       room.close('error');

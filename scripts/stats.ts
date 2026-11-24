@@ -54,7 +54,7 @@ console.log('Progression resets by reason/death number:', count(resets, (r) => (
 console.log(`Average level at death reset: ${avg(resets.filter((r) => r.reason === 'deaths').map((r) => Number(r.levelBefore)))}`);
 console.log('Perk milestones reached:', count(of('milestone'), (m) => `L${m.level} ${m.controller}`));
 console.log('Wins:', of('win').length, count(of('win'), (w) => w.controller));
-console.log('Joins:', of('join').length, count(of('join'), (j) => `${j.roomKind}/${j.device}`));
+console.log('Joins:', of('join').length, count(of('join'), (j) => j.device));
 console.log('Disconnects:', of('disconnect').length, ' Bot handoffs:', of('bot_handoff').length);
 console.log('Reclaims:', count(of('reclaim'), (r) => (r.success ? 'success' : 'failed')));
 console.log('Rooms created / closed / rejected at capacity:', of('room_created').length, of('room_closed').length, of('room_rejected_capacity').length);

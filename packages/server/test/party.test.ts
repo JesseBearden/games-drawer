@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { botPass, botPlay, DOMINOES_RULES, dominoesBotMove, gameInfo, Rng, spadesBotBid, spadesBotPlay, type DominoesView, type HeartsView, type RoomRequest, type ServerMessage, type SpadesView, type GameId } from '@tank/shared';
+import { botPass, botPlay, DOMINOES_RULES, dominoesBotMove, gameInfo, GAMES, Rng, spadesBotBid, spadesBotPlay, type DominoesView, type HeartsView, type ServerMessage, type SpadesView, type GameId } from '@tank/shared';
 import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import { HAND_END_MS, HeartsGame, TRICK_PAUSE_MS } from '../src/games/hearts';
@@ -48,8 +48,6 @@ function setup(over: Partial<RoomDeps> = {}) {
     log,
     moderator: new ChatModerator(),
     emptyRoomMs: 60_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms: 10,
     chatHistorySize: 10,
     randomInt: (n) => rng.int(0, n - 1),
@@ -315,69 +313,15 @@ describe('private rooms are parties', () => {
     expect(lookup.room.game?.id).toBe('hearts');
   });
 
-  it('public rooms always play tanks', () => {
+  it('every game that’s switched on can be picked when a table is made', () => {
     const { mgr } = setup();
-    const lookup = mgr.resolve({ kind: 'public' }, 'session-aaaa');
-    if (!lookup.ok) throw new Error();
-    const conn = new FakeConn();
-    const r = lookup.room.join(conn, 'session-aaaa', 'a', 'desktop');
-    if (!r.ok) throw new Error();
-    lookup.room.sendWelcome('session-aaaa', r);
-    lookup.room.handle('session-aaaa', { t: 'lobby' });
-    play(lookup.room, 'hearts');
-    expect(lookup.room.game?.id).toBe('tanks');
+    for (const { id } of GAMES.filter((g) => g.offered)) expect(mgr.resolve({ kind: 'create-private', game: id }, `session-${id}`).ok).toBe(true);
   });
 
-  it('public players are matched by game, and a newcomer takes a bot’s seat at once', () => {
-    const { mgr } = setup();
-    const join = (session: string, room: RoomRequest) => {
-      const lookup = mgr.resolve(room, session);
-      if (!lookup.ok) throw new Error(lookup.code);
-      const r = lookup.room.join(new FakeConn(), session, session, 'desktop');
-      if (!r.ok) throw new Error(r.code);
-      lookup.room.sendWelcome(session, r);
-      return lookup.room;
-    };
-    // Hearts is private-only while it's finished; open it up here to test public card tables.
-    const info = gameInfo('hearts');
-    const was = info.availability;
-    info.availability = 'public';
-    try {
-      const h1 = join('session-h1', { kind: 'public', game: 'hearts' });
-      const t1 = join('session-t1', { kind: 'public', game: 'tanks' });
-      const h2 = join('session-h2', { kind: 'public', game: 'hearts' });
-      const t2 = join('session-t2', { kind: 'public' });
-      const j1 = join('session-j1', { kind: 'public', game: 'jigsaw' });
-      const j2 = join('session-j2', { kind: 'public', game: 'jigsaw' });
-      expect(h1.game?.id).toBe('hearts');
-      expect(h2).toBe(h1);
-      expect(t1.game?.id).toBe('tanks');
-      expect(t2).toBe(t1);
-      expect(j1.game?.id).toBe('jigsaw');
-      expect(j2).toBe(j1);
-      expect(j1.kind).toBe('public');
-      const hearts = h1.game as HeartsGame;
-      expect(hearts.seatOf('session-h1')).not.toBeNull();
-      expect(hearts.seatOf('session-h2')).not.toBeNull();
-    } finally {
-      info.availability = was;
-    }
-  });
-
-  it('only Tanks and Jigsaw are open to everyone; the card and tile games are private rooms only', () => {
-    const { mgr } = setup();
-    for (const game of ['tanks', 'jigsaw'] as const) expect(mgr.resolve({ kind: 'public', game }, `session-${game}`).ok).toBe(true);
-    for (const game of ['hearts', 'spades', 'dominoes'] as const) {
-      expect(mgr.resolve({ kind: 'public', game }, `session-${game}`).ok).toBe(false);
-      expect(mgr.resolve({ kind: 'create-private', game }, `session-p-${game}`).ok).toBe(true);
-    }
-  });
-
-  it('a private room made from a game’s page opens at the table with that game picked', () => {
+  it('a table made from a game’s page opens with that game picked', () => {
     const { mgr } = setup();
     const lookup = mgr.resolve({ kind: 'create-private', game: 'hearts' }, 'session-aaaa');
     if (!lookup.ok) throw new Error();
-    expect(lookup.room.kind).toBe('private');
     expect(lookup.room.game).toBeNull();
     expect(lookup.room.tableSetup().pick).toBe('hearts');
     // Without a game nothing is picked, as before.
@@ -385,25 +329,22 @@ describe('private rooms are parties', () => {
     expect(plain.ok && plain.room.tableSetup().pick).toBeNull();
   });
 
-  it('respects each game’s rollout: private-only games can’t be played publicly, off games not at all', () => {
+  it('respects each game’s on/off switch: a game that’s off can’t be picked or opened', () => {
     const { mgr } = setup();
     const info = gameInfo('hearts');
-    const was = info.availability;
+    const was = info.offered;
     try {
-      info.availability = 'private';
-      const pub = mgr.resolve({ kind: 'public', game: 'hearts' }, 'session-aaaa');
-      expect(pub.ok).toBe(false);
-      const priv = joinPrivate(mgr, 'session-bbbb');
-      play(priv.room, 'hearts');
-      expect(priv.room.game?.id).toBe('hearts');
+      const on = joinPrivate(mgr, 'session-bbbb');
+      play(on.room, 'hearts');
+      expect(on.room.game?.id).toBe('hearts');
 
-      info.availability = 'off';
+      info.offered = false;
       const other = joinPrivate(mgr, 'session-cccc');
       play(other.room, 'hearts');
       expect(other.room.game).toBeNull();
       expect(mgr.resolve({ kind: 'create-private', game: 'hearts' }, 'session-dddd').ok).toBe(false);
     } finally {
-      info.availability = was;
+      info.offered = was;
     }
   });
 
@@ -881,17 +822,6 @@ describe('chat filter', () => {
     expect(chats(b.conn).some((m) => m.text.includes(slur))).toBe(false);
   });
 
-  it('public rooms always block, and the setting cannot be changed there', () => {
-    const { mgr } = setup();
-    const lookup = mgr.resolve({ kind: 'public' }, 'session-aaaa');
-    if (!lookup.ok) throw new Error();
-    const r = lookup.room.join(new FakeConn(), 'session-aaaa', 'a', 'desktop');
-    if (!r.ok) throw new Error();
-    expect(lookup.room.chatFilter).toBe('block');
-    lookup.room.handle('session-aaaa', { t: 'filter', mode: 'none' });
-    expect(lookup.room.chatFilter).toBe('block');
-  });
-
   it('three caught messages in a minute pause chat for 30 seconds', () => {
     const { a, b, room, clock } = twoInARoom();
     room.handle('session-aaaa', { t: 'filter', mode: 'block' });
@@ -969,17 +899,6 @@ describe('voice relay credentials', () => {
     expect(pass('session-aaaa', '0a1b2c3d')).toBe('0a1b2c3d');
     expect(pass('session-bbbb', '0a1b2c3d')).toBe('0a1b2c3d');
     expect(pass('session-cccc', 'ffffffff')).toBe('ffffffff');
-  });
-
-  it('a public game has no voice, so no servers and no pass', () => {
-    const { mgr } = setup({ iceServers: [{ urls: 'stun:stun.example.com:3478' }], turn: { urls: ['turn:turn.example.com:3478'], secret: 'shh', ttlSeconds: 600 } });
-    const lookup = mgr.resolve({ kind: 'public' }, 'session-aaaa');
-    if (!lookup.ok) throw new Error(lookup.code);
-    const conn = new FakeConn();
-    const joined = lookup.room.join(conn, 'session-aaaa', 'Liz', 'phone');
-    if (!joined.ok) throw new Error(joined.code);
-    lookup.room.sendWelcome('session-aaaa', joined);
-    expect(conn.of('welcome')[0].voice).toEqual({ enabled: false, iceServers: [] });
   });
 
   it('logs a browser’s device number only scrambled, so the admin page can count devices', () => {

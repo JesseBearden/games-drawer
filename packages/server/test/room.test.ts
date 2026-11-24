@@ -35,8 +35,6 @@ function setup(overrides: Partial<ConstructorParameters<typeof RoomManager>[0]> 
     log,
     moderator: new ChatModerator(),
     emptyRoomMs: 60_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms: 10,
     chatHistorySize: 10,
     ...overrides,
@@ -44,13 +42,19 @@ function setup(overrides: Partial<ConstructorParameters<typeof RoomManager>[0]> 
   return { clock, log, mgr };
 }
 
-function join(mgr: RoomManager, session: string, req: Parameters<RoomManager['resolve']>[0] = { kind: 'public' }) {
-  const lookup = mgr.resolve(req, session);
+/**
+ * Join the table `req` asks for. Without one: the Tanks table, which the first to join starts
+ * (Tanks picked and under way), and everyone after drops in by its code.
+ */
+function join(mgr: RoomManager, session: string, req?: Parameters<RoomManager['resolve']>[0]) {
+  const first: Room | undefined = mgr.rooms.values().next().value;
+  const lookup = mgr.resolve(req ?? (first ? { kind: 'private', code: first.code } : { kind: 'create-private', game: 'tanks' }), session);
   if (!lookup.ok) throw new Error(lookup.code);
   const conn = new FakeConn();
   const r = lookup.room.join(conn, session, session, 'desktop');
   if (!r.ok) throw new Error(r.code);
   lookup.room.sendWelcome(session, r);
+  if (!req && !lookup.room.game) play(lookup.room, 'tanks');
   return { room: lookup.room, conn, tankId: lookup.room.tanks?.tankIdOf(session) ?? -1, reclaimed: r.reclaimed };
 }
 
@@ -88,20 +92,6 @@ describe('rooms and bots', () => {
     expect(tank.controller).toBe('human');
     expect(tank.level).toBe(7);
     expect(log.events.some((e) => e.type === 'bot_handoff')).toBe(true);
-  });
-
-  it('public reservations expire after 60 seconds; a newcomer then gets a fresh tank', () => {
-    const { mgr, clock } = setup();
-    const a = join(mgr, 'session-aaaa');
-    const b = join(mgr, 'session-bbbb');
-    a.room.tanks!.world.tanks.get(a.tankId)!.level = 9;
-    a.room.disconnect('session-aaaa', a.conn, 'disconnect');
-    clock.now += 61_000;
-    mgr.housekeeping();
-    expect(a.room.hasSession('session-aaaa')).toBe(false);
-    const again = join(mgr, 'session-aaaa');
-    expect(again.room).toBe(b.room);
-    expect(a.room.tanks!.world.tanks.get(again.tankId)!.level).toBe(0);
   });
 
   it('private reservations last for the room lifetime', () => {
@@ -173,9 +163,6 @@ describe('rooms and bots', () => {
     expect(first.room.tanks!.world.tanks.size).toBe(max);
     expect([...first.room.tanks!.world.tanks.values()].every((t) => t.controller === 'human')).toBe(true);
     expect(first.room.openSlots()).toBe(0);
-    // The next player lands in a new public room.
-    const next = join(mgr, 'session-0009');
-    expect(next.room).not.toBe(first.room);
   });
 
   it('a full private room turns away one more player', () => {
@@ -233,6 +220,7 @@ describe('chat', () => {
     const a = join(mgr, 'session-aaaa');
     join(mgr, 'session-bbbb');
     const name = a.room.players.get('session-aaaa')!.name;
+    a.room.handle('session-aaaa', { t: 'filter', mode: 'block' });
     a.room.handle('session-aaaa', { t: 'chat', text: 'meet me at noon' });
     clock.now += 3000;
     a.room.handle('session-aaaa', { t: 'chat', text: 'you are a f u c k i n g idiot' });
@@ -248,6 +236,7 @@ describe('chat', () => {
     const { mgr, log } = setup();
     const a = join(mgr, 'session-aaaa');
     const b = join(mgr, 'session-bbbb');
+    a.room.handle('session-aaaa', { t: 'filter', mode: 'block' });
     a.room.handle('session-aaaa', { t: 'chat', text: 'you are a f u c k i n g idiot' });
     expect(a.conn.chats().some((m) => m.text.includes('idiot'))).toBe(true);
     expect(b.conn.chats().some((m) => m.text.includes('idiot'))).toBe(false);

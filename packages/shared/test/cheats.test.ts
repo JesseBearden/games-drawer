@@ -181,8 +181,10 @@ describe('protocol parsing', () => {
       '{"t":"chat","text":5}',
       `{"t":"chat","text":"${'x'.repeat(1001)}"}`,
       '{"t":"name","name":null}',
-      '{"t":"hello","v":1,"session":null,"name":"a","device":"fridge","room":{"kind":"public"}}',
+      '{"t":"hello","v":1,"session":null,"name":"a","device":"fridge","room":{"kind":"create-private"}}',
       '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"secret"}}',
+      // Public games (strangers matched together) are gone; only tables are asked for now.
+      '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"public"}}',
       '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"private","code":7}}',
       '{"t":"nuke"}',
       // Top-level game input is no longer accepted; it travels inside {"t":"g"}.
@@ -205,13 +207,13 @@ describe('protocol parsing', () => {
     expect(m).toEqual({ t: 'g', m: { t: 'fire', angle: 45, power: 50 } });
     expect(({} as Record<string, unknown>).admin).toBeUndefined();
     const hello = parseClientMessage(
-      '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"public","code":"ZZZZZ","admin":1}}',
+      '{"t":"hello","v":1,"session":null,"name":"a","device":"phone","room":{"kind":"create-private","code":"ZZZZZ","admin":1}}',
     )!;
-    expect(hello).toEqual({ t: 'hello', v: 1, session: null, name: 'a', device: 'phone', room: { kind: 'public' } });
+    expect(hello).toEqual({ t: 'hello', v: 1, session: null, name: 'a', device: 'phone', room: { kind: 'create-private' } });
   });
 
   it('keeps a device number only if it looks like one of ours', () => {
-    const hello = (deviceId: unknown) => parseClientMessage(JSON.stringify({ t: 'hello', v: 1, session: null, name: 'a', device: 'phone', room: { kind: 'public' }, deviceId }));
+    const hello = (deviceId: unknown) => parseClientMessage(JSON.stringify({ t: 'hello', v: 1, session: null, name: 'a', device: 'phone', room: { kind: 'create-private' }, deviceId }));
     const id = '0123456789abcdef0123456789abcdef';
     expect(hello(id)).toMatchObject({ t: 'hello', deviceId: id });
     // Anything else is just left off; the player still gets in.

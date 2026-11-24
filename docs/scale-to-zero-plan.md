@@ -263,7 +263,7 @@ No codes, names, players or addresses of players. The controller is invoked four
 |---|---|
 | Full: no new tables | 60% of the task's CPU over 30 s (game and coturn together), 80% memory, 80% of relay slots, or 150 tables |
 | Start the next server | the fullest one passes 40%, and no other has room |
-| Placement | pack the fullest server that has room, so the others can empty (and public Tanks players meet) |
+| Placement | pack the fullest server that has room, so the others can empty |
 | Live servers | at most 5 until the quota rises, then at most 15 |
 | Numbers kept back | 5 of the 20, for draining and staging |
 | Idle stop | 10 minutes with no tables and no connections |

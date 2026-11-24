@@ -160,7 +160,6 @@ NODE_ENV=production
 HOST=127.0.0.1
 TRUST_PROXY=1
 ALLOWED_ORIGINS=https://${DOMAIN},https://staging.${DOMAIN}
-MAX_PUBLIC_ROOMS=${MAX_PUBLIC_ROOMS:-10}
 MAX_PRIVATE_ROOMS=${MAX_PRIVATE_ROOMS:-50}
 # 30 new tables per address per 10 minutes (the server's own default is 5): each deploy's smoke
 # tests open about 16 from one address, and a family on one home connection shares an address.

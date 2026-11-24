@@ -1,4 +1,4 @@
-import { canPlayPrivately, choosesPlayers, GAMES, SEAT_FILL_ORDER, gameInfo, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
+import { isOffered, choosesPlayers, GAMES, SEAT_FILL_ORDER, gameInfo, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
 import { patchHtml } from './dom';
 import { personFelt } from './felts';
 import { escapeHtml } from './html';
@@ -11,7 +11,7 @@ const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', he
 const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'threethirteen', 'mahjong', 'tanks'];
 
 /** Games a table can pick: everything not switched off (see games.ts). */
-const pickable = () => GAMES.filter((g) => canPlayPrivately(g.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
+const pickable = () => GAMES.filter((g) => isOffered(g.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
 
 /** "Liz", "Liz and Sam", "Liz, Sam and Mory": each name kept on one line. */
 const namesHtml = (names: string[]) => {
@@ -227,7 +227,7 @@ export class LobbyView implements View {
   private onClick = (e: Event) => {
     const t = e.target as HTMLElement;
     const game = t.closest<HTMLElement>('[data-game]')?.dataset.game;
-    if (isGameId(game) && canPlayPrivately(game)) {
+    if (isGameId(game) && isOffered(game)) {
       if (game === this.table.pick) return;
       this.shell.play('lobbyJoin');
       this.showSeats = isSeated(game);

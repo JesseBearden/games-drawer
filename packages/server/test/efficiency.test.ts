@@ -37,8 +37,6 @@ function table(game: GameId, batches: boolean[]) {
     log: new MemoryLog(),
     moderator: new ChatModerator(),
     emptyRoomMs: 60_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms: 10,
     chatHistorySize: 10,
     randomInt: (n) => rng.int(0, n - 1),
@@ -71,7 +69,7 @@ function table(game: GameId, batches: boolean[]) {
 
 describe('asking for batches', () => {
   it('is an opt-in on the hello, so pages from before still work', () => {
-    const hello = { t: 'hello', v: 4, session: null, name: 'Liz', room: { kind: 'public' }, device: 'phone' };
+    const hello = { t: 'hello', v: 4, session: null, name: 'Liz', room: { kind: 'create-private' }, device: 'phone' };
     expect(parseClientMessage(JSON.stringify(hello))).not.toHaveProperty('batch');
     expect(parseClientMessage(JSON.stringify({ ...hello, batch: 'yes' }))).not.toHaveProperty('batch');
     expect(parseClientMessage(JSON.stringify({ ...hello, batch: true }))).toMatchObject({ batch: true });

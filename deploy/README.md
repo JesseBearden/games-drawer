@@ -206,7 +206,7 @@ box adds up every box's logs from the shared disk.
 
 ## Your own photos (jigsaw)
 
-People at a private table can add their own photo for a jigsaw. The phone shrinks it, the box
+People at a table can add their own photo for a jigsaw. The phone shrinks it, the box
 checks it with Amazon Rekognition (`DetectModerationLabels`, the photo sent in the request) and
 keeps it in memory only until the table closes (packages/server/src/photos.ts). The boxes' role
 may call it (infra/lib/stack.ts); if the check can't run, the photo is refused with "couldn't be
@@ -240,7 +240,7 @@ hasn't connected directly within 5 seconds
 ([voiceRelay.ts](../packages/client/src/voiceRelay.ts)), so a relayed link takes about 6 seconds
 to come up and a direct one holds no room on the relay.
 
-**Testing it:** open a private room with `?relay=1` on the end of the URL (for example
+**Testing it:** open a table with `?relay=1` on the end of the URL (for example
 `https://<domain>/r/BCDFGH?relay=1`) on two phones on cell data. That forces every voice
 link through the relay. They should hear each other, and the admin page's Voice section counts
 those links as through the relay.
@@ -286,6 +286,5 @@ them on it stops answering a long call's renewals, and the call drops. The voice
 browser for mono at 32 kbit/s, which those numbers allow for (voice.ts `speechBitrate`). When
 all are taken, further links retry each minute and the games carry on. More slots means a higher
 spending ceiling: change the numbers in [turnserver.conf](turnserver.conf) and deploy. The admin
-page's Voice section shows how often voice needs the relay. Public games have no voice, so they
-get no relay credentials. Networks that only allow port 443 aren't covered; that would need a
+page's Voice section shows how often voice needs the relay. Networks that only allow port 443 aren't covered; that would need a
 second address for the relay.

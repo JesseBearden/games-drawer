@@ -91,7 +91,7 @@ export class Net {
   /** When the open socket last heard anything from the server. */
   private lastHeard = 0;
   private room: RoomRequest;
-  /** The room's code once known (public rooms have one too), for reconnecting to the same copy. */
+  /** The table's code once known, for reconnecting to the same copy. */
   private roomCode: string | null = null;
 
   constructor(
@@ -129,7 +129,7 @@ export class Net {
         this.retry = 0;
         setSession(msg.session);
         // Reconnects go straight back to the same room.
-        this.room = msg.room.kind === 'private' ? { kind: 'private', code: msg.room.code } : { kind: 'public' };
+        this.room = { kind: 'private', code: msg.room.code };
         this.roomCode = msg.room.code;
       }
       if (msg.t === 'error') {

@@ -1,7 +1,7 @@
 /**
  * Every game on Games Drawer, in the order the home page and lobby show them. This one list
- * drives the home page, each game's own page (gamesdrawer.com/<slug>), the private-room
- * lobby, link previews, and which games the server will start.
+ * drives the home page, each game's own page (gamesdrawer.com/<slug>), the table's game
+ * picker, link previews, and which games the server will start.
  */
 
 import { DOMINOES_RULES } from './dominoes';
@@ -11,13 +11,6 @@ const DOMINO_ICON =
   '<svg class="domino-icon" viewBox="0 0 24 44" width="1em" height="1.8em" aria-hidden="true"><rect x="1" y="1" width="22" height="42" rx="4" fill="#fffdf6" stroke="#1b1b28" stroke-width="2"/><line x1="4" y1="22" x2="20" y2="22" stroke="#1b1b28" stroke-width="2"/><circle cx="7" cy="7" r="2.4" fill="#1b1b28"/><circle cx="12" cy="12" r="2.4" fill="#1b1b28"/><circle cx="17" cy="17" r="2.4" fill="#1b1b28"/><circle cx="7" cy="27" r="2.4" fill="#1b1b28"/><circle cx="17" cy="27" r="2.4" fill="#1b1b28"/><circle cx="7" cy="37" r="2.4" fill="#1b1b28"/><circle cx="17" cy="37" r="2.4" fill="#1b1b28"/></svg>';
 
 export type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'threethirteen' | 'mahjong' | 'jigsaw';
-
-/**
- * How far a game is rolled out. A new game ships as 'private' (only private rooms can pick
- * it, so friends try it first), then goes 'public' (its own page and public matchmaking).
- * 'off' hides it everywhere without removing the code.
- */
-export type Availability = 'off' | 'private' | 'public';
 
 export interface GameInfo {
   id: GameId;
@@ -36,7 +29,9 @@ export interface GameInfo {
   blurb: string;
   howTo: string[];
   players: string;
-  availability: Availability;
+  /** Offered at the table and on its own page. False hides it everywhere without removing
+   *  the code (a new game can ship hidden and be switched on later). */
+  offered: boolean;
   /** Still being finished: its tile at the table says "Work in Progress". (All off since
    *  2026-11-20, at the user's request: switch one back on when it needs it.) */
   underConstruction: boolean;
@@ -60,7 +55,7 @@ export const GAMES: GameInfo[] = [
       'On a computer: arrow keys aim, Space fires, A and D drive. On a phone, use the buttons on screen.',
     ],
     players: '1–4 players · bots fill in',
-    availability: 'public',
+    offered: true,
     underConstruction: false,
     landscape: true,
   },
@@ -79,8 +74,7 @@ export const GAMES: GameInfo[] = [
       'Take every heart and the queen to shoot the moon.',
     ],
     players: '4 seats · bots fill in',
-    // Back to private rooms while it's finished (it was public).
-    availability: 'private',
+    offered: true,
     underConstruction: false,
     landscape: false,
   },
@@ -99,8 +93,7 @@ export const GAMES: GameInfo[] = [
       'Make your team’s bid for 10 a trick; every 10 extra tricks costs 100. First to 500 wins.',
     ],
     players: '2 teams of 2 · bots fill in',
-    // New: private rooms first, then everyone (see Availability).
-    availability: 'private',
+    offered: true,
     underConstruction: false,
     landscape: false,
   },
@@ -119,7 +112,7 @@ export const GAMES: GameInfo[] = [
       `Go out first to score everyone’s leftover pips. First to ${DOMINOES_RULES.target} wins.`,
     ],
     players: '4 seats · bots fill in',
-    availability: 'private',
+    offered: true,
     underConstruction: false,
     landscape: false,
   },
@@ -139,7 +132,7 @@ export const GAMES: GameInfo[] = [
       'Cards left over count against you: Aces 1, number cards their number, J/Q/K 10, jokers 20. Lowest total after 11 rounds wins.',
     ],
     players: '4 seats · computers fill in',
-    availability: 'private',
+    offered: true,
     underConstruction: false,
     landscape: false,
   },
@@ -158,7 +151,7 @@ export const GAMES: GameInfo[] = [
       'Four sets and a pair is Mahjong. With points on, the hand needs at least 3 points (faan) to win.',
     ],
     players: '4 seats · computers fill in',
-    availability: 'private',
+    offered: true,
     underConstruction: false,
     landscape: false,
   },
@@ -178,7 +171,7 @@ export const GAMES: GameInfo[] = [
       'Or use your own photo: only your table sees it, and it’s deleted when the table closes.',
     ],
     players: 'Up to 4 together',
-    availability: 'public',
+    offered: true,
     underConstruction: false,
     landscape: false,
   },
@@ -215,14 +208,9 @@ export function gameInfo(id: GameId): GameInfo {
   return GAMES.find((g) => g.id === id)!;
 }
 
-/** Private rooms can pick it. */
-export function canPlayPrivately(id: GameId) {
-  return gameInfo(id).availability !== 'off';
-}
-
-/** It has its own page and public matchmaking. */
-export function canPlayPublicly(id: GameId) {
-  return gameInfo(id).availability === 'public';
+/** A table can pick it (and it has its own page). */
+export function isOffered(id: GameId) {
+  return gameInfo(id).offered;
 }
 
 /**
@@ -234,5 +222,5 @@ export function gameForPath(pathname: string): GameInfo | null {
   if (!m) return null;
   const slug = m[1].toLowerCase();
   const g = GAMES.find((x) => x.slug === slug || x.aliases.includes(slug));
-  return g && g.availability !== 'off' ? g : null;
+  return g && g.offered ? g : null;
 }

@@ -57,9 +57,8 @@ export default defineConfig({
           // Photo uploads with the pretend check (no AWS here): it refuses a photo 404 px wide.
           PHOTO_CHECK: 'pretend',
           ADMIN_PASSWORD_HASH: hashAdminPassword(E2E_ADMIN_PASSWORD),
-          // Many tests open rooms at once; production keeps the 10-room caps.
+          // Many tests open tables at once; production keeps its 50-table cap.
           MAX_PRIVATE_ROOMS: '200',
-          MAX_PUBLIC_ROOMS: '100',
           EMPTY_ROOM_MS: '5000',
           // Every test comes from this one machine.
           LIMITS: JSON.stringify({ privateRoomsPer10Min: 1000, maxConnectionsPerIp: 500, connectsPerMinute: 5000 }),

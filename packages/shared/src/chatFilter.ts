@@ -10,8 +10,8 @@
  * - EXTRA_BLOCKED words are blocked everywhere as well;
  * - ALLOWED_WORDS are ordinary words that happen to contain a blocked one ("cockpit").
  *
- * Private rooms pick how swearing is handled: 'none' lets it through, 'hide' stars it out,
- * 'block' doesn't send the message. Public rooms always use 'block'.
+ * Each table picks how swearing is handled: 'none' lets it through, 'hide' stars it out,
+ * 'block' doesn't send the message.
  */
 import { asteriskCensorStrategy, DataSet, englishDataset, englishRecommendedTransformers, RegExpMatcher, TextCensor } from 'obscenity';
 import { MAX_CHAT_LENGTH, type ChatFilterMode } from './chatModes';
@@ -165,7 +165,7 @@ export function checkChat(raw: string, mode: ChatFilterMode, extraBlocked: strin
   return { ok: true, text: out, censored: out !== text };
 }
 
-/** Player names: always held to the strictest setting (they follow people into public games). */
+/** Player names: always held to the strictest setting (they show on invites and the join page too). */
 export function nameAllowed(name: string, extraBlocked: string[] = []): boolean {
   return checkChat(name, 'block', extraBlocked).ok;
 }

@@ -29,21 +29,22 @@ function setup() {
     log,
     moderator: new ChatModerator(),
     emptyRoomMs: 60_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms: 10,
     chatHistorySize: 10,
   });
   return { clock, log, mgr };
 }
 
+/** Join the Tanks table: the first to join starts it, and everyone after drops in by its code. */
 function join(mgr: RoomManager, session: string, name = session) {
-  const lookup = mgr.resolve({ kind: 'public' }, session);
+  const first = mgr.rooms.values().next().value;
+  const lookup = mgr.resolve(first ? { kind: 'private', code: first.code } : { kind: 'create-private', game: 'tanks' }, session);
   if (!lookup.ok) throw new Error(lookup.code);
   const conn = new FakeConn();
   const r = lookup.room.join(conn, session, name, 'desktop');
   if (!r.ok) throw new Error(r.code);
   lookup.room.sendWelcome(session, r);
+  if (!lookup.room.game) lookup.room.handle(session, { t: 'ready', ready: true });
   return { room: lookup.room, conn, tankId: lookup.room.tanks!.tankIdOf(session)!, name: r.name };
 }
 
@@ -224,7 +225,6 @@ describe('messages from a hostile client', () => {
         { t: 'g', m: { t: 'pass', cards: ['2C', '3C', '4C'] } },
         { t: 'g', m: { t: 'again' } },
         { t: 'pick', game: 'hearts' },
-        { t: 'lobby' },
       ];
       expect(() => a.room.handle('session-aaaa', rng.pick(msgs))).not.toThrow();
       if (i % 5 === 0) mgr.stepAll();
@@ -326,14 +326,6 @@ describe('voice signalling', () => {
   const voiceMsgs = (c: FakeConn) => c.sent.filter((m): m is Extract<ServerMessage, { t: 'voice' }> => m.t === 'voice');
   const rtcMsgs = (c: FakeConn) => c.sent.filter((m): m is Extract<ServerMessage, { t: 'rtc' }> => m.t === 'rtc');
   const offer = { sdp: { type: 'offer' as const, sdp: 'v=0' } };
-
-  it('is not available in public rooms', () => {
-    const { mgr } = setup();
-    const a = join(mgr, 'session-aaaa');
-    a.room.handle('session-aaaa', { t: 'voice', join: true });
-    expect(a.room.voicePeers()).toHaveLength(0);
-    expect(a.room.welcome('session-aaaa', { ok: true, reclaimed: false, name: a.name })).toMatchObject({ voice: { enabled: false } });
-  });
 
   it('relays set-up messages only between voice members of the room', () => {
     const { mgr } = setup();

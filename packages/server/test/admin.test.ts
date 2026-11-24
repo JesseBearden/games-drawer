@@ -56,10 +56,10 @@ describe('the admin numbers', () => {
       { type: 'game_start', at: at('2026-11-17'), game: 'hearts' },
       // Outside the 7 days: ignored.
       session('2026-11-01', 'tanks', { activeMs: 9 * H, personMs: 9 * H, peak: 1, pids: ['old'] }),
-      { type: 'join', at: at('2026-11-16'), pid: 'p1', roomKind: 'private' },
-      { type: 'join', at: at('2026-11-17'), pid: 'p1', roomKind: 'private' },
-      { type: 'join', at: at('2026-11-17'), pid: 'p4', roomKind: 'public' },
-      { type: 'room_created', at: at('2026-11-16'), roomKind: 'private' },
+      { type: 'join', at: at('2026-11-16'), pid: 'p1' },
+      { type: 'join', at: at('2026-11-17'), pid: 'p1' },
+      { type: 'join', at: at('2026-11-17'), pid: 'p4' },
+      { type: 'room_created', at: at('2026-11-16') },
     ];
     const chats = [
       ...Array.from({ length: 12 }, () => ({ at: at('2026-11-16'), outcome: 'delivered' })),
@@ -72,7 +72,7 @@ describe('the admin numbers', () => {
     expect(jigsaw).toMatchObject({ sessions: 2, playHours: 3, personHours: 6, groupShare: 0.83, groupSessions: 2, avgPeak: 2.5, maxPeak: 3, players: 3, avgMinutes: 90, chats: 12, chatsPerPersonHour: 2 });
     expect(s.games.find((g) => g.game === 'tanks')).toMatchObject({ sessions: 1, groupShare: 0, groupSessions: 0 });
     expect(s.games.find((g) => g.game === 'hearts')).toMatchObject({ sessions: 0, picks: 1 });
-    expect(s).toMatchObject({ players: 2, privateRooms: 1, publicJoins: 1, sessions: 3, personHours: 6.5 });
+    expect(s).toMatchObject({ players: 2, tables: 1, sessions: 3, personHours: 6.5 });
     expect(s.chat).toMatchObject({ delivered: 12, blocked: 1, reported: 1, sessionsWithChat: 1 });
     expect(s.daily.find((d) => d.day === '2026-11-16')).toMatchObject({ players: 1, rooms: 1, sessions: 1, personHours: 4, chats: 12 });
     expect(s.voice).toEqual({ links: 0, relayed: 0, failed: 0, people: 0, peopleRelayed: 0, peopleFailed: 0 });
@@ -80,7 +80,7 @@ describe('the admin numbers', () => {
 
   it('counts people by device: several tabs on one computer are one person', () => {
     const days = dayRange('2026-11-17', 7);
-    const join = (pid: string, did?: string) => ({ type: 'join', at: at('2026-11-17'), pid, roomKind: 'private', ...(did && { did }) });
+    const join = (pid: string, did?: string) => ({ type: 'join', at: at('2026-11-17'), pid, ...(did && { did }) });
     // You test in three tabs on the computer and one on the phone; a friend plays once; an old
     // tab from before device numbers counts on its own.
     const events = [
@@ -116,7 +116,7 @@ describe('the admin numbers', () => {
   it('adds up every box’s logs: the folder given and the folders inside it', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gd-logs-'));
     try {
-      const line = (pid: string) => JSON.stringify({ type: 'join', at: '2026-11-17T12:00:00.000Z', pid, roomKind: 'private' }) + '\n';
+      const line = (pid: string) => JSON.stringify({ type: 'join', at: '2026-11-17T12:00:00.000Z', pid }) + '\n';
       // On AWS each box writes to logs/<instance>; one box has shut down since.
       for (const [box, pid] of [['i-old', 'p1'], ['i-new', 'p2']]) {
         fs.mkdirSync(path.join(root, box));
@@ -185,8 +185,6 @@ describe('the admin page', () => {
       clientDist: '',
       log: new MemoryLog(),
       emptyRoomMs: 60_000,
-      publicReclaimMs: 60_000,
-      maxPublicRooms: 10,
       maxPrivateRooms: 10,
       allowedOrigins: null,
       trustProxy: false,

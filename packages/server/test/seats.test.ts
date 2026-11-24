@@ -20,8 +20,6 @@ function table() {
     moderator: new ChatModerator(),
     emptyRoomMs: 3_600_000,
     idleRoomMs: 3_600_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms: 10,
     chatHistorySize: 10,
     randomInt: (n) => rng.int(0, n - 1),

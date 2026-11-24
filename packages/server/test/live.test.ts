@@ -23,8 +23,6 @@ function baseOptions(over: Partial<ServerOptions> = {}): ServerOptions {
     clientDist: '',
     log: new MemoryLog(),
     emptyRoomMs: 60_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms: 10,
     sessionSecret: 'test-secret',
     allowedOrigins: null,
@@ -71,18 +69,20 @@ function connect(port: number, origin?: string): Client {
   };
 }
 
-function hello(c: Client, room: RoomRequest = { kind: 'public' }, session: string | null = null, v = PROTOCOL_VERSION) {
+function hello(c: Client, room: RoomRequest = { kind: 'create-private' }, session: string | null = null, v = PROTOCOL_VERSION) {
   c.send({ t: 'hello', v, session, name: 'Tester', room, device: 'desktop' });
 }
 
-async function joined(port: number, room: RoomRequest = { kind: 'public' }, session: string | null = null) {
+/** Join a table. With none named, start a new one playing Tanks. */
+async function joined(port: number, room: RoomRequest = { kind: 'create-private', game: 'tanks' }, session: string | null = null) {
   const c = connect(port);
   await c.opened;
   hello(c, room, session);
   const w = (await c.waitFor('welcome')) as Welcome;
-  // Public rooms play tanks straight away; the tank game's start-up message follows the welcome.
+  // A new Tanks table starts once its one person is ready; the tank game's start-up message follows.
+  if (!w.game && w.table.pick === 'tanks') c.send({ t: 'ready', ready: true });
   let tankId = -1;
-  if (w.game === 'tanks') {
+  if (w.game === 'tanks' || w.table.pick === 'tanks') {
     const start = Date.now();
     while (Date.now() - start < 3000) {
       const init = c.messages.find((m) => m.t === 'g' && m.m.t === 'init');
@@ -103,12 +103,13 @@ async function startWith(limits: Partial<Limits> = {}, over: Partial<ServerOptio
 describe('live server: sessions and joining', () => {
   let s: GameServer;
   beforeAll(async () => {
-    s = await startWith();
+    // Each test here opens a table of its own, all from this one machine.
+    s = await startWith({ privateRoomsPer10Min: 50 }, { maxPrivateRooms: 50 });
   });
   afterAll(() => s.close());
 
   it('replaces a client-invented session with a signed one', async () => {
-    const { c, w } = await joined(s.port, { kind: 'public' }, 'session-i-made-up-1234');
+    const { c, w } = await joined(s.port, undefined, 'session-i-made-up-1234');
     expect(w.session).not.toBe('session-i-made-up-1234');
     expect(w.session).toMatch(/^[0-9a-f-]{36}\.[0-9a-f]{32}$/);
     c.ws.close();
@@ -119,7 +120,7 @@ describe('live server: sessions and joining', () => {
     first.c.ws.close();
     await first.c.closed;
     await new Promise((r) => setTimeout(r, 50));
-    const again = await joined(s.port, { kind: 'public' }, first.w.session);
+    const again = await joined(s.port, { kind: 'private', code: first.w.room.code }, first.w.session);
     expect(again.tankId).toBeGreaterThanOrEqual(0);
     expect(again.tankId).toBe(first.tankId);
     expect(again.w.reclaimed).toBe(true);
@@ -150,7 +151,7 @@ describe('live server: sessions and joining', () => {
   it('rejects an old protocol version', async () => {
     const c = connect(s.port);
     await c.opened;
-    hello(c, { kind: 'public' }, null, PROTOCOL_VERSION + 99);
+    hello(c, { kind: 'create-private' }, null, PROTOCOL_VERSION + 99);
     const err = await c.waitFor('error');
     expect(err.code).toBe('version');
     await c.closed;
@@ -163,7 +164,6 @@ describe('live server: sessions and joining', () => {
     c.send({ t: 'chat', text: 'hi' });
     hello(c);
     const w = await c.waitFor('welcome');
-    expect(w.game).toBe('tanks');
     expect(w.chat.some((m) => m.text === 'hi')).toBe(false);
     c.ws.close();
   });
@@ -497,7 +497,7 @@ describe('live server: abuse limits', () => {
       await c.opened;
       hello(c, { kind: 'create-private' });
       expect((await c.waitFor('error')).code).toBe('rate-limited');
-      expect(s.manager.count('private')).toBe(2);
+      expect(s.manager.rooms.size).toBe(2);
       a.c.ws.close();
       b.c.ws.close();
     } finally {
@@ -510,7 +510,7 @@ describe('live server: abuse limits', () => {
     try {
       const codes = new Set<string>();
       for (let i = 0; i < 4; i++) {
-        const r = s.manager.create('private');
+        const r = s.manager.create();
         if (r.ok) codes.add(r.room.code);
       }
       for (const code of codes) expect(code).toMatch(/^[BCDFGHJKLMNPQRSTVWXZ]{6}$/);
@@ -749,15 +749,12 @@ describe('live server: deploy slots and draining', () => {
       // A friend can still join the room in progress...
       const friend = await joined(s.port, { kind: 'private', code });
       expect(friend.w.room.code).toBe(code);
-      // ...but nobody can start a new room or public game here.
-      for (const room of [{ kind: 'create-private' }, { kind: 'public' }] as RoomRequest[]) {
-        const c = connect(s.port);
-        await c.opened;
-        hello(c, room);
-        const err = await c.waitFor('error');
-        expect(err.code).toBe('capacity');
-        c.ws.close();
-      }
+      // ...but nobody can start a new table here.
+      const c = connect(s.port);
+      await c.opened;
+      hello(c, { kind: 'create-private' });
+      expect((await c.waitFor('error')).code).toBe('capacity');
+      c.ws.close();
 
       // Once everyone leaves, the room closes and the drain finishes.
       host.c.ws.close();

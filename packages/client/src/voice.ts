@@ -17,7 +17,7 @@ import {
 } from './voiceRelay';
 
 /**
- * Peer-to-peer voice chat for private rooms.
+ * Peer-to-peer voice chat at the table.
  *
  * Every player in voice connects directly to every other (a "mesh"; fine for 4 players). The
  * game server only relays the WebRTC set-up messages between voice members of the same room;

@@ -26,7 +26,7 @@ export class ChatModerator {
     }
   }
 
-  /** What happens to a message in a room with this filter setting (public rooms use 'block'). */
+  /** What happens to a message at a table with this filter setting. */
   screen(text: string, mode: ChatFilterMode = 'block'): ScreenResult {
     return checkChat(text, mode, this.extra);
   }

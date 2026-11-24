@@ -51,8 +51,8 @@ $0.09/GB. Behind CloudFront it would count against CloudFront's free terabyte in
   `project=games-drawer` tag, since boxes change with every deploy). Billing data lags by a few
   hours, so it's a backstop, not a hard cap.
 - **No surprise CPU bills:** boxes use "standard" CPU credits, which can't bill extra.
-- **Bandwidth caps in the software:** at most 10 public and 50 private rooms of 4 at once per box
-  (`MAX_PUBLIC_ROOMS` and `MAX_PRIVATE_ROOMS` in [deploy/setup.sh](../deploy/setup.sh)), and the
+- **Bandwidth caps in the software:** at most 50 tables of 4 at once per box
+  (`MAX_PRIVATE_ROOMS` in [deploy/setup.sh](../deploy/setup.sh)), and the
   voice relay is capped at 40 slots and 620 KB/s out per box
   ([deploy/turnserver.conf](../deploy/turnserver.conf), [deploy/relay-firewall.sh](../deploy/relay-firewall.sh)).
   A table closes a minute after its last person leaves, and after 10 minutes with nobody playing

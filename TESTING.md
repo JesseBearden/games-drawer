@@ -368,11 +368,10 @@ The real check (Amazon Rekognition) only runs on the site.
       anything 10 seconds, then someone fires: it starts at once. Wind and helicopter sounds
       work and go quiet back at a card table.
 - [ ] Tanks a second time (Switch game, Tanks again): no Move or TRIPLE READY until earned.
-- [ ] A public Tanks game still starts and plays (no voice). No iPhone lock-ups.
 
 ## Chat, privacy and the admin page
 
-- [ ] **Chat filter**: private tables start on Hide (****); Menu → message filter switches None,
+- [ ] **Chat filter**: every table starts on Hide (****); Menu → message filter switches None,
       Hide, Block, and chat says who changed it; slurs stay blocked on None; names with swearing
       are refused; Send greys out for a caught word right after joining. Tell me any harmless
       message it stops.

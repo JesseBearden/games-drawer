@@ -286,7 +286,7 @@ export class SpadesTable implements View {
     html += '<div class="actions">';
     if (v.phase === 'gameOver') {
       if (v.seat !== null) html += '<button class="pc-btn pc-btn-main" data-act="again" type="button">New game</button>';
-      if (this.shell.isPrivate) html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
+      html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
     } else if (this.scoresOpen) {
       html += '<button class="pc-btn pc-btn-main" data-act="close-scores" type="button">Close</button>';
     }

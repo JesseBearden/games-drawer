@@ -6,7 +6,7 @@ import {
   freshName,
   GAME_NAMES,
   isReservedName,
-  canPlayPrivately,
+  isOffered,
   CHAT_FILTER_LABELS,
   type ChatFilterMode,
   INVITE_TOKEN_ALPHABET,
@@ -27,7 +27,6 @@ import {
   type GameId,
   type GameServerMessage,
   type MemberInfo,
-  type RoomKind,
   type ServerMessage,
   type TableInfo,
   type MjRules,
@@ -70,8 +69,6 @@ export interface RoomDeps {
    * (someone who left a game open and walked away). Everyone gets IDLE_WARNING_MS of warning.
    */
   idleRoomMs?: number;
-  /** Public-room reclaim window. Private rooms hold reservations for the room's lifetime. */
-  publicReclaimMs: number;
   cfg?: Partial<GameConfig>;
   seed?: number;
   chatHistorySize: number;
@@ -83,7 +80,7 @@ export interface RoomDeps {
   randomInt?: (n: number) => number;
   /** Where jigsaw puzzles are saved (in memory if not given). */
   puzzles?: PuzzleStore;
-  /** People at private tables may upload their own photos for a jigsaw (photos.ts). */
+  /** People at a table may upload their own photos for a jigsaw (photos.ts). */
   photoUploads?: boolean;
   /** Puzzles started per scrambled address, shared by every table. */
   puzzleStartsFrom?: WindowCounter;
@@ -132,8 +129,6 @@ interface Player extends Member {
   conn: Conn | null;
   device: Device;
   connectedAt: number;
-  /** When a disconnected player's reservation ends (Infinity in private rooms). */
-  reservedUntil: number;
   /** When they dropped out (null while connected). */
   awaySince: number | null;
   limiter: RateLimiter;
@@ -195,9 +190,8 @@ export function pseudonym(session: string) {
 }
 
 /**
- * A room is a group of people (the "party") with chat and voice, playing one game at a time.
- * Public rooms always play tanks. Private rooms open on a lobby where anyone picks the game,
- * and chat and voice carry on across games.
+ * A room is a table: a group of people (the "party") with chat and voice, playing one game at a
+ * time. It opens on a lobby where anyone picks the game, and chat and voice carry on across games.
  */
 export class Room {
   readonly players = new Map<string, Player>();
@@ -210,7 +204,7 @@ export class Room {
   emptySince: number | null;
   closed = false;
   private rng: Rng;
-  /** How swearing in chat is handled. Public rooms always block; private rooms start on hide. */
+  /** How swearing in chat is handled. Every table starts on hide. */
   chatFilter: ChatFilterMode;
   private readonly cfg: GameConfig;
   private host: GameHost;
@@ -224,7 +218,7 @@ export class Room {
   /** When puzzles started here, over the last hour. Kept by the table, so it outlives each game. */
   private puzzleStarts: number[] = [];
   /**
-   * Between games (private tables): the game picked to play next, who picked which seat
+   * Between games: the game picked to play next, who picked which seat
    * (sessions; seated games only) and who is ready. It starts once everyone here is ready.
    */
   private setup: { pick: GameId | null; seats: (string | null)[]; ready: Set<string>; players: number } = { pick: null, seats: [], ready: new Set(), players: SEAT_COUNT };
@@ -233,28 +227,21 @@ export class Room {
 
   constructor(
     readonly code: string,
-    readonly kind: RoomKind,
     private deps: RoomDeps,
-    /** The game it opens on. Public rooms always have one (tanks if not given); private rooms
-     *  open on the lobby unless created from a game's page. */
+    /** The game picked when it opens (made from a game's own page). Otherwise nothing's picked yet. */
     firstGame?: GameId,
   ) {
     this.rng = new Rng((deps.seed ?? randomInt(2 ** 31)) ^ 0x2c1b3c6d);
-    this.chatFilter = kind === 'public' ? 'block' : 'hide';
+    this.chatFilter = 'hide';
     this.cfg = { ...DEFAULT_CONFIG, ...deps.cfg };
     this.createdAt = deps.now();
     // A brand-new room is "empty" until its creator's connection lands.
     this.emptySince = this.createdAt;
     this.host = this.makeHost();
     this.log('room_created', {});
-    if (kind === 'public') {
-      // Public tables go straight into their game (Tanks unless another was asked for).
-      const first = firstGame ?? 'tanks';
-      this.game = this.makeGame(first);
-      this.beginSession(first);
-    } else if (firstGame) {
-      // Private tables open at the table, with this game picked: people gather, take seats and
-      // start it together once everyone is ready.
+    if (firstGame) {
+      // It opens with this game picked: people gather, take seats and start it together once
+      // everyone is ready.
       this.setPick(firstGame);
     }
   }
@@ -322,7 +309,6 @@ export class Room {
     const room = this;
     return {
       code: this.code,
-      kind: this.kind,
       now: () => this.deps.now(),
       members: () => [...this.players.values()],
       member: (session) => this.players.get(session),
@@ -340,7 +326,7 @@ export class Room {
       puzzleStarted: (m) => this.puzzleStarted(m),
       photos: () =>
         [...this.photos.values()].map((p) => ({ image: photoImageId(p.id), url: photoUrl(this.code, p.id), title: `${p.byName}’s photo`, width: p.width, height: p.height })),
-      photoUploads: !!this.deps.photoUploads && this.kind === 'private',
+      photoUploads: !!this.deps.photoUploads,
     };
   }
 
@@ -371,7 +357,7 @@ export class Room {
     return n;
   }
 
-  /** People the room holds: the tank cap in public rooms (bots make way), and for parties. */
+  /** People the table holds. */
   capacity() {
     return this.cfg.maxTanksPerRoom;
   }
@@ -382,12 +368,11 @@ export class Room {
   }
 
   /**
-   * At a private table, someone who dropped out and is still gone after QUIET_DROP_MS (the table
+   * Someone who dropped out and is still gone after QUIET_DROP_MS (the table
    * has said "Liz left.") keeps their place only until someone new needs it: longest gone first.
    * Otherwise a few dropped phones (each coming back in a new tab, as a new person) fill the table.
    */
   private makingWay(now = this.deps.now()) {
-    if (this.kind !== 'private') return [];
     return [...this.players.values()]
       .filter((p) => !p.conn && p.awaySince !== null && now - p.awaySince >= QUIET_DROP_MS)
       .sort((a, b) => a.awaySince! - b.awaySince!);
@@ -456,7 +441,6 @@ export class Room {
       this.cancelIdleWarning();
       existing.device = device;
       existing.connectedAt = now;
-      existing.reservedUntil = Infinity;
       existing.awaySince = null;
       const seatBack = this.game ? this.game.reconnect(existing) : true;
       this.countPeople();
@@ -498,7 +482,6 @@ export class Room {
       color: old?.color ?? this.freeColor(),
       did,
       connectedAt: now,
-      reservedUntil: Infinity,
       awaySince: null,
       limiter: new RateLimiter(),
       lastRename: -Infinity,
@@ -544,13 +527,12 @@ export class Room {
   }
 
   /**
-   * Who a newcomer at a private table really is, if they're someone who dropped out: the same
+   * Who a newcomer at the table really is, if they're someone who dropped out: the same
    * device (its scrambled number) at once, or the same name once they've been gone long enough
    * for the table to have said so. Only ever someone with no connection, so two tabs open side
    * by side stay two people, and nobody can take the place of someone who is here.
    */
   private returning(name: string | null, did: string | null, now: number): Player | null {
-    if (this.kind !== 'private') return null;
     const away = [...this.players.values()].filter((p) => !p.conn && p.awaySince !== null);
     const sameDevice = away.filter((p) => did !== null && p.did === did);
     const sameName = away.filter((p) => name !== null && p.name === name && now - p.awaySince! >= QUIET_DROP_MS);
@@ -562,7 +544,7 @@ export class Room {
     const name = cleanName(raw);
     if (!name || isReservedName(name)) return null;
     try {
-      // Names follow people into public games, so they're held to the strictest setting.
+      // A name shows on invites and the join page too, so it's held to the strictest setting.
       return this.deps.moderator.screen(name, 'block').ok ? name : null;
     } catch {
       return null;
@@ -596,7 +578,6 @@ export class Room {
       this.announce(p, 'leave', `${p.name} left.`);
       this.removeForGood(p);
     } else {
-      p.reservedUntil = this.kind === 'public' ? now + this.deps.publicReclaimMs : Infinity;
       const note = this.game?.disconnect(p, reason) ?? null;
       // Posted by housekeeping once they've been gone QUIET_DROP_MS (a quick reload says nothing).
       p.pendingLeave = { at: now, text: note ? `${p.name} left. ${note}` : `${p.name} left.` };
@@ -642,19 +623,11 @@ export class Room {
     }
   }
 
-  /** Expire public reservations; returns why the room should close (empty, or idle), or false. */
+  /** Once a second: post who left, and say why the room should close (empty, or idle), or false. */
   housekeeping(): false | 'empty' | 'idle' {
     const now = this.deps.now();
     this.flushRateLimitCounts();
     this.postPendingLeaves(now);
-    let changed = false;
-    for (const p of [...this.players.values()]) {
-      if (!p.conn && now >= p.reservedUntil) {
-        this.removeForGood(p, 'reservation_expired');
-        changed = true;
-      }
-    }
-    if (changed) this.broadcastMembers();
     if (this.emptySince !== null) return now - this.emptySince >= this.deps.emptyRoomMs ? 'empty' : false;
     // People are connected: close it if none of them has played or talked for a long while,
     // after a minute's warning (anything anyone does in that minute keeps it open).
@@ -722,8 +695,7 @@ export class Room {
 
 /** Anyone at the table picks the game to play next. Seats and readiness start over. */
   private pickGame(p: Player, id: GameId) {
-    if (this.kind !== 'private') return;
-    if (!canPlayPrivately(id)) {
+    if (!isOffered(id)) {
       this.notice(p, 'That game isn’t available right now.');
       return;
     }
@@ -787,7 +759,7 @@ export class Room {
    */
   private startIfReady() {
     const pick = this.setup.pick;
-    if (this.game || !pick || this.kind !== 'private') return;
+    if (this.game || !pick) return;
     const here = [...this.players.values()].filter((m) => m.conn);
     if (!here.length || !here.every((m) => this.setup.ready.has(m.session))) return;
     this.startGame(pick);
@@ -839,7 +811,7 @@ export class Room {
 
   private endGame(p: Player) {
     // (No cooldown: a game only starts again once everyone at the table is ready.)
-    if (this.kind !== 'private' || !this.game) return;
+    if (!this.game) return;
     const id = this.game.id;
     this.endSession('lobby');
     this.game.dispose();
@@ -958,7 +930,6 @@ export class Room {
    * vouches for. Tokens last as long as the room.
    */
   private makeInvite(p: Player, forName: string | null) {
-    if (this.kind !== 'private') return;
     // At most 10 new links a minute each, so nobody can push everyone else's links out.
     const now = this.deps.now();
     const times = (this.inviteTimes.get(p.session) ?? []).filter((t) => now - t < 60_000);
@@ -1023,10 +994,6 @@ export class Room {
   }
 
   private setVoice(p: Player, join: boolean) {
-    if (this.kind !== 'private') {
-      this.notice(p, 'Voice chat is available in private rooms.');
-      return;
-    }
     if (p.inVoice === join) return;
     p.inVoice = join;
     this.log(join ? 'voice_join' : 'voice_leave', { pid: p.pid, inVoice: this.voicePeers().length });
@@ -1039,8 +1006,6 @@ export class Room {
    * the page can't be used to relay traffic for long.
    */
   voiceSettings(p: Member): VoiceSettings {
-    // No voice, so no servers for it, and no pass to our relay.
-    if (this.kind !== 'private') return { enabled: false, iceServers: [] };
     const iceServers = [...(this.deps.iceServers ?? [])];
     const turn = this.deps.turn;
     // coturn's user-quota counts by the name in the pass: the household's, so that joining again
@@ -1069,7 +1034,6 @@ export class Room {
     // the table closes. Everything else said at the table is gone when the table is.
     this.deps.log.chat({
       room: this.code,
-      roomKind: this.kind,
       outcome: 'reported',
       msgId,
       reporter: p.pid,
@@ -1078,16 +1042,16 @@ export class Room {
       text: target.text,
       ruleVersion: RULE_VERSION,
     });
-    this.deps.log.event('chat_report', { room: this.code, roomKind: this.kind });
+    this.deps.log.event('chat_report', { room: this.code });
     this.notice(p, 'Thanks. That message was reported for review.');
   }
 
   /** Rate-limited chat attempts since the last housekeeping, logged as counts (not text). */
   private rateLimited = { rapid: 0, repeat: 0 };
 
-  /** Private rooms: anyone can change how swearing is handled; everyone is told. */
+  /** Anyone at the table can change how swearing is handled; everyone is told. */
   private setChatFilter(p: Player, mode: ChatFilterMode) {
-    if (this.kind !== 'private' || mode === this.chatFilter) return;
+    if (mode === this.chatFilter) return;
     this.chatFilter = mode;
     const label = CHAT_FILTER_LABELS[mode];
     this.broadcast({ t: 'filter', mode });
@@ -1110,7 +1074,7 @@ export class Room {
     }
     const msgId = randomUUID();
     // The log counts messages (for the admin page) but never keeps what was said or who said it.
-    const base = { room: this.code, roomKind: this.kind, ruleVersion: RULE_VERSION };
+    const base = { room: this.code, ruleVersion: RULE_VERSION };
     let result;
     try {
       result = this.deps.moderator.screen(text, this.chatFilter);
@@ -1214,7 +1178,7 @@ export class Room {
   flushRateLimitCounts() {
     const { rapid, repeat } = this.rateLimited;
     if (rapid + repeat === 0) return;
-    this.deps.log.chat({ room: this.code, roomKind: this.kind, outcome: 'rate-limited-summary', rapid, repeat, ruleVersion: RULE_VERSION });
+    this.deps.log.chat({ room: this.code, outcome: 'rate-limited-summary', rapid, repeat, ruleVersion: RULE_VERSION });
     this.rateLimited = { rapid: 0, repeat: 0 };
   }
 
@@ -1230,7 +1194,7 @@ export class Room {
       reclaimed: r.reclaimed,
       alias: p.alias,
       voice: this.voiceSettings(p),
-      room: { code: this.code, kind: this.kind },
+      room: { code: this.code, kind: 'private' },
       game: this.game?.id ?? null,
       members: this.members(),
       chat: this.chatHistory.slice(),
@@ -1245,7 +1209,7 @@ export class Room {
     if (!p?.conn) return;
     p.conn.send(JSON.stringify(this.welcome(session, r)));
     p.welcomed = true;
-    if (this.kind === 'private') p.conn.send(JSON.stringify({ t: 'voice', peers: this.voicePeers() } satisfies ServerMessage));
+    p.conn.send(JSON.stringify({ t: 'voice', peers: this.voicePeers() } satisfies ServerMessage));
     this.game?.sendInit(p, r.reclaimed);
   }
 
@@ -1262,7 +1226,6 @@ export class Room {
 
   stats() {
     return {
-      kind: this.kind,
       game: this.game?.id ?? null,
       humans: this.humansConnected(),
       ...this.game?.stats(),
@@ -1301,7 +1264,7 @@ export class Room {
   }
 
   private log(type: string, fields: Record<string, unknown>) {
-    this.deps.log.event(type, { room: this.code, roomKind: this.kind, ...fields });
+    this.deps.log.event(type, { room: this.code, ...fields });
   }
 }
 

@@ -42,7 +42,7 @@ export interface Limits {
   maxStrikes: number;
   /** Private rooms an IP may create per 10 minutes. */
   privateRoomsPer10Min: number;
-  /** Failed private-room lookups (wrong codes) per IP per 5 minutes. */
+  /** Failed table lookups (wrong codes) per IP per 5 minutes. */
   failedJoinsPer5Min: number;
   /** Close a client whose unsent backlog grows past this many bytes (slow or stalled reader). */
   maxBufferedBytes: number;
@@ -88,8 +88,6 @@ export interface ServerOptions {
   emptyRoomMs: number;
   /** Close a table after this long with nobody playing or talking (default 10 minutes). */
   idleRoomMs?: number;
-  publicReclaimMs: number;
-  maxPublicRooms: number;
   maxPrivateRooms: number;
   /** Signs session credentials. Random per boot if unset (rooms reset on restart anyway). */
   sessionSecret?: string;
@@ -146,8 +144,6 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     moderator: new ChatModerator(o.blocklistPath),
     emptyRoomMs: o.emptyRoomMs,
     idleRoomMs: o.idleRoomMs,
-    publicReclaimMs: o.publicReclaimMs,
-    maxPublicRooms: o.maxPublicRooms,
     maxPrivateRooms: o.maxPrivateRooms,
     slot: o.slot,
     chatHistorySize: CHAT_HISTORY_SIZE,
@@ -252,7 +248,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     if (failedJoins.count(ip, now) >= limits.failedJoinsPer5Min) return { ok: false, reason: 'busy' };
     const code = normalizeRoomCode(url.searchParams.get('code') ?? '');
     const room = isRoomCode(code) ? manager.rooms.get(code) : undefined;
-    if (!room || room.kind !== 'private' || room.closed) {
+    if (!room || room.closed) {
       failedJoins.add(ip, now);
       return { ok: false, reason: 'closed' };
     }

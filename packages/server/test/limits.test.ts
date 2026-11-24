@@ -15,8 +15,6 @@ function setup(maxPrivateRooms = 50) {
     moderator: new ChatModerator(),
     emptyRoomMs: 2 * 3_600_000,
     idleRoomMs: 2 * 3_600_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms,
     chatHistorySize: 10,
   });
@@ -44,7 +42,7 @@ describe('private tables per address', () => {
   it('two addresses can’t hold them all', () => {
     const { open, mgr } = setup();
     for (const from of ['one', 'two']) for (let i = 0; i < 60; i++) open(from);
-    expect(mgr.count('private')).toBe(25 + TABLES_PER_ADDRESS_WHEN_BUSY);
+    expect(mgr.rooms.size).toBe(25 + TABLES_PER_ADDRESS_WHEN_BUSY);
     expect(open('family').ok).toBe(true);
     expect(open('one')).toMatchObject({ ok: false, code: 'rate-limited' });
   });

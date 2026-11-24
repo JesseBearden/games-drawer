@@ -13,7 +13,7 @@ import './jigsaw.css';
 import './tanks.css';
 import './felt.css';
 import {
-  canPlayPrivately,
+  isOffered,
   cleanName,
   gameForPath,
   gameInfo,
@@ -88,11 +88,11 @@ function pageFor(): Page {
   if (path === '/rules') return { kind: 'rules' };
   if (path === '/start') {
     const g = params.get('game');
-    return { kind: 'start', game: isGameId(g) && canPlayPrivately(g) ? g : null };
+    return { kind: 'start', game: isGameId(g) && isOffered(g) ? g : null };
   }
   // A game's own address (/jigsaw, /tanks…) starts a table with that game picked.
   const game = gameForPath(path);
-  if (game && canPlayPrivately(game.id)) return { kind: 'start', game: game.id };
+  if (game) return { kind: 'start', game: game.id };
   return { kind: 'home' };
 }
 

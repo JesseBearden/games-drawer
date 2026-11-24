@@ -48,8 +48,6 @@ async function table(o: { checker?: PhotoChecker | null; deps?: Partial<RoomDeps
     log,
     moderator: new ChatModerator(),
     emptyRoomMs: 60_000,
-    publicReclaimMs: 60_000,
-    maxPublicRooms: 10,
     maxPrivateRooms: 10,
     chatHistorySize: 10,
     randomInt: (n) => rng.int(0, n - 1),

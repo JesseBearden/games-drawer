@@ -12,7 +12,7 @@ export interface GameStats {
   name: string;
   /** Games played (each start-to-finish, in any room). */
   sessions: number;
-  /** Times someone picked it in a private room (counted since before session summaries). */
+  /** Times someone picked it at a table (counted since before session summaries). */
   picks: number;
   /** Hours with at least one person playing. */
   playHours: number;
@@ -44,8 +44,8 @@ export interface AdminStats {
   to: string;
   days: number;
   players: number;
-  privateRooms: number;
-  publicJoins: number;
+  /** Tables opened. */
+  tables: number;
   sessions: number;
   personHours: number;
   chat: { delivered: number; blocked: number; reported: number; perPersonHour: number; sessionsWithChat: number };
@@ -207,7 +207,7 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
     return {
       day,
       players: new Set(dayEv.filter((e) => e.type === 'join').map((j) => who(j.pid))).size,
-      rooms: dayEv.filter((e) => e.type === 'room_created' && e.roomKind === 'private').length,
+      rooms: dayEv.filter((e) => e.type === 'room_created').length,
       sessions: daySessions.filter((s) => num(s.activeMs) > 0).length,
       personHours: round(daySessions.reduce((t, s) => t + num(s.personMs), 0) / HOUR),
       chats: ch.filter((c) => dayOf(c.at) === day && c.outcome === 'delivered').length,
@@ -219,8 +219,7 @@ export function summarize(events: Row[], chats: Row[], days: string[]): AdminSta
     to: days.at(-1)!,
     days: days.length,
     players: new Set(joins.map((j) => who(j.pid))).size,
-    privateRooms: ev.filter((e) => e.type === 'room_created' && e.roomKind === 'private').length,
-    publicJoins: joins.filter((j) => j.roomKind === 'public').length,
+    tables: ev.filter((e) => e.type === 'room_created').length,
     sessions: sessions.filter((s) => num(s.activeMs) > 0).length,
     personHours: round(personMs / HOUR),
     chat: {

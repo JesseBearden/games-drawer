@@ -14,7 +14,6 @@ export interface ShellApi {
   /** Your alias in this room. */
   readonly alias: string;
   readonly roomCode: string;
-  readonly isPrivate: boolean;
   members(): MemberInfo[];
   sendGame(input: GameInput): void;
   /** At the table between games: the game picked to play next, the seats, and who's ready. */

@@ -443,7 +443,7 @@ export class ThreeThirteenTable implements View {
     html += '<div class="actions">';
     if (v.phase === 'gameOver') {
       if (v.seat !== null) html += '<button class="pc-btn pc-btn-main" data-act="again" type="button">New game</button>';
-      if (this.shell.isPrivate) html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
+      html += '<button class="pc-btn pc-btn-plain" data-act="lobby" type="button">Switch game</button>';
     } else if (v.phase === 'roundEnd') {
       if (v.seat !== null && !v.ready.includes(v.seat)) {
         html += `<button class="pc-btn pc-btn-main" data-act="ready" type="button"${this.readySent ? ' disabled' : ''}>Ready for round ${v.round + 1}</button>`;

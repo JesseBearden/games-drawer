@@ -137,9 +137,6 @@ export class RoomApp {
       get roomCode() {
         return shell.room.code;
       },
-      get isPrivate() {
-        return shell.room.kind === 'private';
-      },
       members: () => this.membersList,
       sendGame: (m) => this.net.send({ t: 'g', m }),
       table: () => this.tableState,
@@ -191,7 +188,7 @@ export class RoomApp {
     // Help: how to play what's on screen (the game picker has its own few words).
     $('help-title').textContent = id ? `How to play ${gameInfo(id).name}` : 'At the table';
     $('help-body').innerHTML = '';
-    $('menu-lobby').hidden = !(this.room.kind === 'private' && id !== null);
+    $('menu-lobby').hidden = id === null;
     if (!$('menu').hidden) this.openSheet(null);
     this.updateRoomInfo();
     document.title = id ? `${gameInfo(id).title} · Games Drawer` : `Table ${this.room.code} · Games Drawer`;
@@ -488,17 +485,16 @@ export class RoomApp {
       return;
     }
     input.disabled = false;
-    input.placeholder = this.room.kind === 'public' ? 'Write a message (keep it family friendly)' : 'Write a message';
+    input.placeholder = 'Write a message';
     const { ok, caught } = this.checkMessage(input.value);
     send.disabled = !ok;
     hint.hidden = !caught;
     input.classList.toggle('caught', caught);
   }
 
-  /** The None / Hide / Block switch in the menu (private rooms only). */
+  /** The None / Hide / Block switch in the menu. */
   private renderFilterSetting() {
     const box = $('menu-filter');
-    box.hidden = this.room.kind !== 'private';
     for (const b of box.querySelectorAll<HTMLElement>('[data-filter]')) {
       const on = b.dataset.filter === this.chatFilter;
       b.classList.toggle('active', on);
@@ -692,11 +688,9 @@ export class RoomApp {
   }
 
   private updateRoomInfo() {
-    const priv = this.room.kind === 'private';
-    $('btn-share').hidden = !priv;
     $('invite-code').textContent = this.room.code;
-    // A table's address is its invite link; public games show the game's own page.
-    const path = priv ? `/r/${this.room.code}` : this.gameId ? `/${gameInfo(this.gameId).slug}` : '/';
+    // A table's address is its invite link.
+    const path = `/r/${this.room.code}`;
     if (location.pathname !== path) history.replaceState(null, '', path);
   }
 

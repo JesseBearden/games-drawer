@@ -7,8 +7,8 @@ describe('settings from the environment', () => {
   const defaults = readSettings({});
 
   it('have defaults, and a blank one means the default rather than 0', () => {
-    expect(defaults).toMatchObject({ port: 8787, emptyRoomMs: 60_000, idleRoomMs: IDLE_ROOM_MS, maxPrivateRooms: 50, maxPublicRooms: 10, turnTtlSeconds: 86_400, limits: {} });
-    const blank = Object.fromEntries(['GAME_PORT', 'EMPTY_ROOM_MS', 'IDLE_ROOM_MS', 'RECLAIM_MS', 'MAX_PUBLIC_ROOMS', 'MAX_PRIVATE_ROOMS', 'TURN_TTL_SECONDS', 'DRAIN_MAX_MS', 'LIMITS', 'VOICE_ICE_SERVERS'].map((n) => [n, ' ']));
+    expect(defaults).toMatchObject({ port: 8787, emptyRoomMs: 60_000, idleRoomMs: IDLE_ROOM_MS, maxPrivateRooms: 50, turnTtlSeconds: 86_400, limits: {} });
+    const blank = Object.fromEntries(['GAME_PORT', 'EMPTY_ROOM_MS', 'IDLE_ROOM_MS', 'MAX_PRIVATE_ROOMS', 'TURN_TTL_SECONDS', 'DRAIN_MAX_MS', 'LIMITS', 'VOICE_ICE_SERVERS'].map((n) => [n, ' ']));
     expect(readSettings(blank)).toEqual(defaults);
   });
 

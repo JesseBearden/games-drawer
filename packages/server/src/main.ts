@@ -19,7 +19,7 @@ import { isSlot, type GameConfig } from '@tank/shared';
  *                      first X-Forwarded-For (only behind our own Caddy, which only CloudFront and
  *                      our other boxes can reach)
  *   STATS_TOKEN        required as ?token= for /stats in production
- *   EMPTY_ROOM_MS, RECLAIM_MS, MAX_PUBLIC_ROOMS, MAX_PRIVATE_ROOMS   timers/caps (shorten to test)
+ *   EMPTY_ROOM_MS, MAX_PRIVATE_ROOMS   timers/caps (shorten to test)
  *   IDLE_ROOM_MS       close a table after this long with nobody playing or talking (default 10 min)
  *   LOG_DIR            where JSONL logs go (default ./logs)
  *   GAME_CONFIG        JSON gameplay overrides for playtesting, e.g. {"winLevel":3}
@@ -115,8 +115,6 @@ const server = await startGameServer({
   blocklistPath: env.BLOCKLIST_PATH ?? (bundled ? path.join(root, 'blocklist.txt') : path.join(root, 'packages/server/blocklist.txt')),
   emptyRoomMs: settings.emptyRoomMs,
   idleRoomMs: settings.idleRoomMs,
-  publicReclaimMs: settings.publicReclaimMs,
-  maxPublicRooms: settings.maxPublicRooms,
   maxPrivateRooms: settings.maxPrivateRooms,
   sessionSecret: env.SESSION_SECRET,
   allowedOrigins: env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean) : null,

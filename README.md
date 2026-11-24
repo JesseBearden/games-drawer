@@ -100,7 +100,7 @@ itself down, so a deploy doesn't cut anyone off (a table still going after 3 hou
 ## Adding a game
 
 1. Add it to [packages/shared/src/games.ts](packages/shared/src/games.ts) with
-   `availability: 'private'` (`'off'` hides it everywhere). If where people sit matters, add it
+   `offered: true` (`false` hides it everywhere: no tile at the table, no page). If where people sit matters, add it
    to `SEATED_GAMES` too: the table then offers seats before it starts.
 2. Rules and computer players go in `packages/shared`; the server side in
    `packages/server/src/games/` (a `ServerGame`), hooked into `makeGame` in `room.ts`.
@@ -144,9 +144,9 @@ itself down, so a deploy doesn't cut anyone off (a table still going after 3 hou
 | `ALLOWED_ORIGINS` | same origin | Comma-separated origins allowed to open sockets |
 | `TRUST_PROXY=1` | off | Read client IPs from CloudFront's `CloudFront-Viewer-Address`, else `X-Forwarded-For` (only behind our own Caddy) |
 | `STATS_TOKEN` | none | Required as `?token=` for `/stats` in production |
-| `EMPTY_ROOM_MS`, `RECLAIM_MS` | 60000 | Shorten to test room expiry and reclaim |
+| `EMPTY_ROOM_MS` | 60000 | How long a table stays open after its last person leaves (shorten to test) |
 | `IDLE_ROOM_MS` | 10 minutes | Close a table after this long with nobody playing or talking (after a minute's warning) |
-| `MAX_PUBLIC_ROOMS`, `MAX_PRIVATE_ROOMS` | 10, 50 | Room caps |
+| `MAX_PRIVATE_ROOMS` | 50 | Most tables open at once |
 | `LOG_DIR` | `./logs` | Where the JSONL logs go. Files more than 30 days old are deleted, here and in every `ADMIN_LOG_DIRS` folder (the privacy page promises it) |
 | `VOICE_ICE_SERVERS` | our relay's STUN, or Google's public STUN without a relay | JSON list of STUN servers for voice chat |
 | `TURN_URLS`, `TURN_SECRET` | none | Our own voice relay (coturn); players get expiring credentials. See [deploy/README.md](deploy/README.md) |

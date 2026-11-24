@@ -1,4 +1,4 @@
-import type { Device, GameId, GameInput, GameServerMessage, RoomKind, TablePhotoInfo } from '@tank/shared';
+import type { Device, GameId, GameInput, GameServerMessage, TablePhotoInfo } from '@tank/shared';
 
 /** A client connection. `send` takes pre-serialised JSON so broadcasts serialise once. */
 export interface Conn {
@@ -66,7 +66,6 @@ export interface Outgoing {
 /** Services the room gives the game it's running. */
 export interface GameHost {
   readonly code: string;
-  readonly kind: RoomKind;
   now(): number;
   members(): Member[];
   member(session: string): Member | undefined;

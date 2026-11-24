@@ -73,16 +73,13 @@ export function slotOfCode(code: string): Slot {
   return SLOTS[sum % SLOTS.length];
 }
 
-export type RoomKind = 'public' | 'private';
 export type Device = 'desktop' | 'phone';
 
 /**
- * Which room a hello asks for. Public rooms play one game (tanks if none is named). A new
- * private room opens on the lobby, or straight into a game when one is named (a game page's
- * "Play with friends").
+ * Which table a hello asks for: a new one, or one already open (by its code). A new table
+ * opens with the game already picked when one is named (a game's own page).
  */
 export type RoomRequest =
-  | { kind: 'public'; game?: GameId }
   | { kind: 'create-private'; game?: GameId }
   | { kind: 'private'; code: string };
 
@@ -169,11 +166,11 @@ export type ClientMessage =
   | { t: 'leave' }
   /** Report a chat message (by id) to moderators. */
   | { t: 'report'; msgId: string }
-  /** Join or leave the room's voice chat (private rooms only). */
+  /** Join or leave the table's voice chat. */
   | { t: 'voice'; join: boolean }
   /** WebRTC set-up for one other voice member, relayed by the server. */
   | { t: 'rtc'; to: string; data: RtcSignal }
-  /** At the table between games (private rooms): pick the game to play next (it starts once everyone is ready). */
+  /** At the table between games: pick the game to play next (it starts once everyone is ready). */
   | { t: 'pick'; game: GameId }
   /** At the table: sit at a seat (0-3) for the picked game (Hearts, Spades, Dominoes). */
   | { t: 'sit'; seat: number }
@@ -183,7 +180,7 @@ export type ClientMessage =
   | { t: 'players'; n: number }
   /** At the table, for Mahjong: play with points or not, and (with points) one round or all four. */
   | { t: 'mj-rules'; points: boolean; full: boolean }
-  /** End the current game and take everyone back to the lobby (private rooms). */
+  /** End the current game and take everyone back to the table. */
   | { t: 'lobby' }
   /** Private rooms: change how swearing in chat is handled (anyone in the room can). */
   | { t: 'filter'; mode: ChatFilterMode }
@@ -245,7 +242,7 @@ export interface VoicePeer {
 }
 
 export interface VoiceSettings {
-  /** Voice is offered in private rooms only. */
+  /** Whether voice is offered here (every table offers it). */
   enabled: boolean;
   /** STUN/TURN servers for WebRTC (RTCIceServer shape). */
   iceServers: { urls: string | string[]; username?: string; credential?: string }[];
@@ -326,7 +323,8 @@ export interface Snapshot {
 
 export interface RoomInfo {
   code: string;
-  kind: RoomKind;
+  /** Always 'private' now. Still sent so pages opened before an update keep reconnecting. */
+  kind: 'private';
 }
 
 /** Messages from the tank game. */
@@ -400,7 +398,7 @@ export type ServerMessage =
       members: MemberInfo[];
       /** Recent chat, oldest first. */
       chat: ChatMessage[];
-      /** How swearing in chat is handled here (public rooms: always 'block'). */
+      /** How swearing in chat is handled here. */
       chatFilter: ChatFilterMode;
       /** Between games: what the table is setting up. */
       table: TableSetup;
@@ -513,8 +511,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       let req: RoomRequest;
       if (room.game !== undefined && !isGameId(room.game)) return null;
       const game = room.game as GameId | undefined;
-      if (room.kind === 'public') req = game ? { kind: 'public', game } : { kind: 'public' };
-      else if (room.kind === 'create-private') req = game ? { kind: 'create-private', game } : { kind: 'create-private' };
+      if (room.kind === 'create-private') req = game ? { kind: 'create-private', game } : { kind: 'create-private' };
       else if (room.kind === 'private' && str(room.code, 12)) req = { kind: 'private', code: room.code };
       else return null;
       // A device number that isn't one of ours is just left off (it only feeds the admin counts).

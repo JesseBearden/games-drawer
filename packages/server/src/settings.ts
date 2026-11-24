@@ -53,8 +53,6 @@ export function readSettings(env: Env) {
     port: whole(env, 'GAME_PORT', 8787, 0, 65_535),
     emptyRoomMs: whole(env, 'EMPTY_ROOM_MS', 60_000, 0, LONGEST_MS),
     idleRoomMs: whole(env, 'IDLE_ROOM_MS', IDLE_ROOM_MS, 1, LONGEST_MS),
-    publicReclaimMs: whole(env, 'RECLAIM_MS', 60_000, 0, LONGEST_MS),
-    maxPublicRooms: whole(env, 'MAX_PUBLIC_ROOMS', 10, 0, 10_000),
     maxPrivateRooms: whole(env, 'MAX_PRIVATE_ROOMS', 50, 0, 10_000),
     turnTtlSeconds: whole(env, 'TURN_TTL_SECONDS', 86_400, 60, 30 * 86_400),
     drainMaxMs: whole(env, 'DRAIN_MAX_MS', 3 * 60 * 60 * 1000, 0, LONGEST_MS),

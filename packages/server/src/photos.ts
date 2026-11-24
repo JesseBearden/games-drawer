@@ -165,7 +165,7 @@ export function photoRoutes(o: PhotoRoutesOptions) {
     const code = normalizeRoomCode(url.searchParams.get('table') ?? '');
     const session = String(req.headers['x-gd-session'] ?? '');
     const room = o.rooms.get(code);
-    if (!room || room.closed || room.kind !== 'private' || !session || !room.hasSession(session)) return refuse(res, 403, 'not-at-table');
+    if (!room || room.closed || !session || !room.hasSession(session)) return refuse(res, 403, 'not-at-table');
     if (!/^image\/jpeg\b/.test(String(req.headers['content-type'] ?? ''))) return refuse(res, 415, 'not-image');
     const t = now();
     if (perIp.count(ip, t) >= PHOTO_LIMITS.perIpPerHour || perTable.count(code, t) >= PHOTO_LIMITS.perTablePerHour || perServer.count('all', t) >= PHOTO_LIMITS.perServerPerDay) {
