@@ -285,7 +285,10 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
     tabs are a fifth shorter than in other games; your lives tag (small hearts, then level and
     knock-outs on the same line) sits beside the mic tab, and the wind beside the caret tab, above
     the controls. In the phone's browser a swipe up on the battlefield tucks the browser's tabs
-    and address bar away. Messages (knock-outs, the table's notes, chat) take turns one at a
+    and address bar away; on an iPhone with them showing, "Swipe up for fullscreen" shows for a
+    few seconds across the middle of the battlefield, faint, and taps go through it. So a swipe
+    can't drop you, on a touch screen only the Drop button drops you from the helicopter (not a
+    tap on the battlefield). Messages (knock-outs, the table's notes, chat) take turns one at a
     time in the row's gap between lives and wind, a couple of seconds each; only the winner's
     banner takes the middle. The controls hug the right edge when the notch is on the left.
   - **Spawn protection** is shown only by the bubble round the tank, which blinks in its last 3

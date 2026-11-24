@@ -124,6 +124,31 @@ describe('the Tanks screen', () => {
     view.dispose();
   });
 
+  it('an iPhone held sideways with Safari’s bars showing gets a brief swipe-up hint', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('landscape') }));
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' });
+    vi.stubGlobal('screen', { width: 393, height: 852 });
+    vi.stubGlobal('document', { getElementById: el, documentElement: { classList: { add() {}, remove() {}, contains: (c: string) => c === 'tuck-bars' } } });
+    const show = (innerHeight: number) => {
+      els = new Map();
+      el('swipe-hint').hidden = true;
+      vi.stubGlobal('window', { innerHeight, addEventListener() {}, removeEventListener() {}, scrollTo() {}, setTimeout: (f: () => void, ms: number) => setTimeout(f, ms) });
+      return new TankView({ ...(shell() as object), device: { touch: true, small: true } } as never);
+    };
+    const view = show(330);
+    vi.advanceTimersByTime(700);
+    expect(el('swipe-hint').hidden).toBe(false);
+    vi.advanceTimersByTime(2800 + 450);
+    expect(el('swipe-hint').hidden).toBe(true);
+    view.dispose();
+    // The bars already tucked away: nothing to say.
+    const tucked = show(393);
+    vi.advanceTimersByTime(5000);
+    expect(el('swipe-hint').hidden).toBe(true);
+    tucked.dispose();
+  });
+
   it('elsewhere, leaves messages to pop up as usual', () => {
     const view = new TankView(shell());
     expect(view.showNote('Your mic is on.')).toBe(false);

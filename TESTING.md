@@ -20,6 +20,14 @@ _Last updated: 2026-11-23 (Tanks on an iPhone held sideways)_
       zooming to catch up. Smoother? If it still shakes, is it the battlefield, the buttons and
       tags, or the whole page? Turn the phone upright and back: does everything still line up?
       From the home screen icon nothing should scroll.
+- [ ] **"Swipe up for fullscreen":** start Tanks with the phone sideways and Safari's bars showing:
+      the hint shows faintly across the middle for about 3 seconds (and goes as soon as you swipe).
+      Readable but not in the way? It shouldn't show with the bars already tucked away, or from
+      the home screen icon. Start upright, then turn the phone: it shows then instead.
+- [ ] **The controls hold still:** tap Power + and − a few times: the box stays the same width as
+      the ".5" comes and goes.
+- [ ] **Only the Drop button drops you:** on the helicopter, tapping or swiping the battlefield
+      no longer drops you; the Drop button does.
 - [ ] **One row along the top:** the mic tab is a little shorter, with your hearts and "LV · kills"
       on one line beside it, and the wind beside the caret tab. Nothing overlaps (try "Turn on
       mic", and Mute once it's on). Is the text big enough to read?
