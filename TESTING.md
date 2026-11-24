@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-23 (trimmed: ticked items and ones about looks that have since changed are gone)_
+_Last updated: 2026-11-23 (talking ripples on every name tag)_
 
 ## Getting set up
 
@@ -13,7 +13,16 @@ _Last updated: 2026-11-23 (trimmed: ticked items and ones about looks that have 
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player table.
 
-## Newest: only buttons stand up, colours that stay with the name (2026-11-22)
+## Newest: talking ripples from every name tag (2026-11-23)
+
+- [ ] **Two tabs (or a phone) with mics on, at Your table and in a game:** while someone talks,
+      rings of their tag's colour ripple out from their name tag and their seat on Your table,
+      and from their tag in Hearts, Spades, Three Thirteen and Dominoes (the three little bars
+      are gone from tags). Easy to see who's talking? The Ready tick still sits on the corner.
+      In Dominoes on a phone held upright, the side tags ripple too. The mic list in Menu still
+      has the bars.
+
+## Only buttons stand up, colours that stay with the name (2026-11-22)
 
 - [ ] **Flat felt:** anything you can't tap lies flat on the table or page (a thin shadow, no
       rounded lit edge): name tags in every card game, the people and taken seats on Your table,
@@ -36,7 +45,7 @@ _Last updated: 2026-11-23 (trimmed: ticked items and ones about looks that have 
       read, and is the board comfortable late in a hand?
 - [ ] **A colour each:** every tag is its player's own light felt; the computers take the
       colours nobody has. Whose turn it is: a band of yellow round the tag. Talking: rings of
-      their colour ripple out. Too busy, or nice?
+      their colour ripple out (now on every tag). Too busy, or nice?
 - [ ] **Held sideways:** the player across is one line along the top; left and right are turned
       on their side halfway up the edges, the name on one line and "pts · tiles" beside it. Your
       tiles (a fifth smaller) run along the bottom, your name over Scores to their left and "Ends
@@ -159,7 +168,7 @@ _Last updated: 2026-11-23 (trimmed: ticked items and ones about looks that have 
 - [ ] **Names never wrap**, anywhere: name tags, score sheets, the mic list, Messages, Tanks
       scores, and lines like "takes the trick" and "wins!". A long one shrinks a little, then "…".
 - [ ] **Reduce motion** (phone setting): cards and sheets don't slide, the nuke doesn't shake,
-      talking still shows.
+      talking still shows (a steady ring round the tag).
 - [ ] **Quicker second visits**: reload at a table and the felt and card backs are there at once;
       a puzzle opened before starts quickly; new art after a deploy shows within ten minutes.
       "Łukasz" looks right on the join page and name tags.

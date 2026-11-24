@@ -46,22 +46,7 @@
   --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
 }
-/* Talking bars only while that person talks. */
-#game .ht-seat .pc-talk {
-  display: none;
-}
-#game .ht-seat.speaking .pc-talk {
-  display: inline-flex;
-}
-#game .ht-seat.speaking .pc-talk i {
-  animation: pc-talk 0.7s ease-in-out infinite alternate;
-}
-#game .ht-seat.speaking .pc-talk i:nth-child(2) {
-  animation-delay: -0.25s;
-}
-#game .ht-seat.speaking .pc-talk i:nth-child(3) {
-  animation-delay: -0.5s;
-}
+/* (Talking: rings ripple out from the tag, paper.css.) */
 #game .ht-name {
   font-weight: 800;
   font-size: 1rem;
@@ -646,7 +631,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   }
   /* The marks are pictures, which sideways writing leaves standing up: turn them a quarter too
      (the left one's line is already turned over, which finishes the job). */
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) :is(.pc-talk, .ht-cpu) {
+  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-cpu {
     writing-mode: horizontal-tb;
     transform: rotate(90deg);
   }
@@ -855,7 +840,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
    ("Robo-Bob · 5 pts · 5 tiles"), so they're thin (the user, 2026-11-22: two lines gave back too
    little of the board), and all four are the same length. Yours leaves out your tile count (your
    tiles are right there), and what the open ends add up to sits just above it. The marks
-   (talking bars, computer, zzz) turn with the writing. fitOneLine measures a sideways line by
+   (computer, zzz) turn with the writing. fitOneLine measures a sideways line by
    its height. */
 @media (max-width: 600px) and (min-height: 461px) {
   #game .dominoes-view .ht {
@@ -946,7 +931,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   }
   /* The marks are pictures, which sideways writing leaves standing up: turn them a quarter too
      (the left one's piece is already turned over, which finishes the job). */
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) :is(.pc-talk, .ht-cpu) {
+  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-cpu {
     writing-mode: horizontal-tb;
     transform: rotate(90deg);
   }
@@ -956,7 +941,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
    A trial (the user's idea): each player's name tag is their own light felt, the one their name
    has on Your table (felts.ts). Whose turn it is: the tag keeps its colour and sits on a band of
    sunflower felt a little bigger than it, its shadow falling on the yellow. Talking: rings of the
-   tag's own colour ripple out from it, as round someone's dot in Jigsaw. */
+   tag's own colour ripple out from it, outside the band (paper.css, as on every tile). */
 #game .dominoes-view .ht-seat[data-felt],
 #game .dominoes-view .ht-seat.turn[data-felt] {
   --fc: var(--own);
@@ -981,41 +966,6 @@ body.pad-mode #game .dm-mine.pad-cursor {
     0 0 1px var(--ring-w) rgb(var(--shade) / 0.4),
     0 1px 1.5px var(--ring-w) rgb(var(--shade) / 0.4),
     0 2px 5px var(--ring-w) rgb(var(--shade) / 0.16);
-}
-#game .dominoes-view .ht-seat[data-felt].speaking::before,
-#game .dominoes-view .ht-seat[data-felt].speaking::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  outline: 3px solid var(--own);
-  outline-offset: var(--ring-w);
-  pointer-events: none;
-  animation: dm-talk 1.4s ease-out infinite;
-}
-#game .dominoes-view .ht-seat[data-felt].speaking::after {
-  animation-delay: 0.7s;
-}
-@keyframes dm-talk {
-  from {
-    outline-offset: var(--ring-w);
-    opacity: 0.95;
-  }
-  to {
-    outline-offset: calc(var(--ring-w) + 14px);
-    opacity: 0;
-  }
-}
-/* Less motion: one steady ring instead of ripples. */
-@media (prefers-reduced-motion: reduce) {
-  #game .dominoes-view .ht-seat[data-felt].speaking::before {
-    animation: none;
-    outline-offset: calc(var(--ring-w) + 3px);
-    opacity: 0.9;
-  }
-  #game .dominoes-view .ht-seat[data-felt].speaking::after {
-    display: none;
-  }
 }
 
 /* ------------------------------------------------------------------ Three Thirteen */

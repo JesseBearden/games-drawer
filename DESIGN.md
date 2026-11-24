@@ -73,9 +73,12 @@ ours out like it. Add a colour when something needs it; each one needs its own f
   Dominoes are all in it; the computers take the colours nobody has. They're sky, lilac, peach and
   mint first, then blush, kraft, white and dove. Never sunflower or butter (whose turn it is),
   tomato (something's off), cobalt (a button) or grass (it vanishes into the green table). In
-  Dominoes whose turn it is shows as a band of sunflower round that person's tag, and while
-  someone talks rings of their own colour ripple out from it. Ready on Your table is a cobalt
-  tick on the tag's corner.
+  Dominoes whose turn it is shows as a band of sunflower round that person's tag. Ready on Your
+  table is a cobalt tick on the tag's corner.
+- **Talking shows as rings** of the tile's own colour rippling out from a person's tile: their
+  name tag and seat on Your table and their name tag in every card game (user 2026-11-23), as
+  round a Jigsaw pointer. With less motion asked for, it's one steady ring. Only a list (who's on
+  the mic) uses the three little bars.
 - **Playing cards are ivory card stock**, thin (a soft shadow close under them, no thick edge).
   - **Code draws everything that has to be exact:** corners, numbers, suit marks, the layouts of the
     number cards, and the layered Aces. Generated pictures get pips and corners wrong, so never

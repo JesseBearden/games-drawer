@@ -41,7 +41,7 @@ export function showTrick(root: HTMLElement, trick: readonly { seat: number; car
   }
 }
 
-/** A seat's name tag: talking bars, the name, and words for computer players and people who are away. */
+/** A seat's name tag: its talking rings, the name, and words for computer players and people who are away. */
 /** Rows for a score sheet with one row per seat: you first, then in turn order. */
 export function seatRows(seats: { name: string; score: number }[], history: number[][], mySeat: number | null) {
   const first = mySeat ?? 0;
@@ -116,7 +116,7 @@ export function seatNameHtml(name: string, opts: { bot?: boolean; away?: boolean
   // Marks, not words, so every name tag keeps the same two lines (user, 2026-11-20): someone
   // who dropped out gets a small "zzz", a computer player a small computer screen.
   const mark = opts.away ? AWAY_MARK : opts.bot ? COMPUTER_MARK : '';
-  return `<div class="ht-name"><span class="pc-talk"><i></i><i></i><i></i></span><span class="ht-nm">${escapeHtml(name)}</span>${mark}</div>`;
+  return `<div class="ht-name"><span class="pc-talk"></span><span class="ht-nm">${escapeHtml(name)}</span>${mark}</div>`;
 }
 
 /**

@@ -480,7 +480,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   opacity: 0.55;
 }
 
-/* Talking: three small bars that move while someone speaks. */
+/* Talking. In a list (who's on the mic): three small bars that move while someone speaks. */
 .pc-talk {
   display: inline-flex;
   align-items: center;
@@ -499,10 +499,7 @@ body.pad-mode .pc-choice:has(input:focus) {
 .is-talking .pc-talk i {
   animation: pc-talk 0.7s ease-in-out infinite alternate;
 }
-/* On a name tag the bars only appear while that person talks; in a list they stay, faint. */
-.pc-tag:not(.is-talking) .pc-talk {
-  display: none;
-}
+/* In a list the bars stay, faint, while that person is quiet. */
 :not(.is-talking) > .pc-talk {
   opacity: 0.3;
 }
@@ -515,6 +512,59 @@ body.pad-mode .pc-choice:has(input:focus) {
 @keyframes pc-talk {
   to {
     transform: scaleY(1);
+  }
+}
+
+/* On a person's tile (their name tag or seat on Your table, their name tag in a game), talking is
+   rings of the tile's own colour rippling out from it, as round someone's dot in Jigsaw (the
+   user, 2026-11-23). The .pc-talk inside covers the tile and draws the rings, so the tile's own
+   ::after stays free for the Ready tick; it takes no room, so a name never shifts when they talk.
+   --ring-w: a band round the tile the rings start outside (whose turn it is in Dominoes). */
+.pc-tag,
+.tb-seat,
+#game .ht-seat {
+  position: relative;
+}
+.pc-tag .pc-talk,
+.tb-seat .pc-talk,
+#game .ht-seat .pc-talk {
+  position: absolute;
+  inset: 0;
+  display: block;
+  height: auto;
+  border-radius: var(--radius);
+  opacity: 1;
+  pointer-events: none;
+}
+.pc-tag .pc-talk i,
+.tb-seat .pc-talk i,
+#game .ht-seat .pc-talk i {
+  display: none;
+}
+:is(.pc-tag, .tb-seat).is-talking .pc-talk::before,
+:is(.pc-tag, .tb-seat).is-talking .pc-talk::after,
+#game .ht-seat.speaking .pc-talk::before,
+#game .ht-seat.speaking .pc-talk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  outline: 3px solid var(--fc);
+  outline-offset: var(--ring-w, 0px);
+  animation: pc-ripple 1.4s ease-out infinite;
+}
+:is(.pc-tag, .tb-seat).is-talking .pc-talk::after,
+#game .ht-seat.speaking .pc-talk::after {
+  animation-delay: 0.7s;
+}
+@keyframes pc-ripple {
+  from {
+    outline-offset: var(--ring-w, 0px);
+    opacity: 0.95;
+  }
+  to {
+    outline-offset: calc(var(--ring-w, 0px) + 14px);
+    opacity: 0;
   }
 }
 
@@ -691,10 +741,19 @@ body.pad-mode .pc-choice:has(input:focus) {
     transition: none !important;
     animation: none !important;
   }
-  /* Talking still shows: the bars stand up instead of bouncing. */
-  .is-talking .pc-talk i,
-  #game .ht-seat.speaking .pc-talk i {
+  /* Talking still shows: the bars stand up instead of bouncing, and a tile has one steady ring
+     instead of ripples. */
+  .is-talking .pc-talk i {
     transform: scaleY(1);
+  }
+  :is(.pc-tag, .tb-seat).is-talking .pc-talk::before,
+  #game .ht-seat.speaking .pc-talk::before {
+    outline-offset: calc(var(--ring-w, 0px) + 3px);
+    opacity: 0.9;
+  }
+  :is(.pc-tag, .tb-seat).is-talking .pc-talk::after,
+  #game .ht-seat.speaking .pc-talk::after {
+    display: none;
   }
 }
 
