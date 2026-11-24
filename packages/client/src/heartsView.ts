@@ -112,11 +112,12 @@ const COMPUTER_MARK =
 const AWAY_MARK =
   '<span class="ht-cpu ht-away" role="img" aria-label="Away" title="Away"><svg viewBox="0 0 18 14" aria-hidden="true"><path d="M1 8.5h3.6l-3.6 4h3.6M6.5 4.8h4.4l-4.4 4.6h4.4M12.6 1h4.4l-4.4 4.8h4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 
-export function seatNameHtml(name: string, opts: { bot?: boolean; away?: boolean }) {
+export function seatNameHtml(name: string, opts: { bot?: boolean; away?: boolean; after?: string }) {
   // Marks, not words, so every name tag keeps the same two lines (user, 2026-11-20): someone
   // who dropped out gets a small "zzz", a computer player a small computer screen.
   const mark = opts.away ? AWAY_MARK : opts.bot ? COMPUTER_MARK : '';
-  return `<div class="ht-name"><span class="pc-talk"></span><span class="ht-nm">${escapeHtml(name)}</span>${mark}</div>`;
+  // (`after`: a game's own mark beside the name, like Mahjong's seat wind.)
+  return `<div class="ht-name"><span class="pc-talk"></span><span class="ht-nm">${escapeHtml(name)}</span>${opts.after ?? ''}${mark}</div>`;
 }
 
 /**

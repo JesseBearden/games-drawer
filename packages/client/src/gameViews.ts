@@ -10,6 +10,7 @@ const FETCH: Record<GameId, () => Promise<ViewClass>> = {
   spades: () => import('./spadesView').then((m) => m.SpadesTable),
   dominoes: () => import('./dominoesView').then((m) => m.DominoesTable),
   threethirteen: () => import('./threeThirteenView').then((m) => m.ThreeThirteenTable),
+  mahjong: () => import('./mahjongView').then((m) => m.MahjongTable),
   jigsaw: () => import('./jigsawView').then((m) => m.JigsawTable),
 };
 

@@ -264,7 +264,7 @@ const namesHtml = (people: string[]) => {
 };
 
 /** How each game reads in "Join Jesse for …". */
-const GAME_PHRASE: Record<GameId, string> = { jigsaw: 'a puzzle', dominoes: 'Dominoes', hearts: 'Hearts', spades: 'Spades', threethirteen: 'Three Thirteen', tanks: 'Tanks' };
+const GAME_PHRASE: Record<GameId, string> = { jigsaw: 'a puzzle', dominoes: 'Dominoes', hearts: 'Hearts', spades: 'Spades', threethirteen: 'Three Thirteen', mahjong: 'Mahjong', tanks: 'Tanks' };
 
 /** The join page re-checks who's there this often, so someone arriving or leaving shows before you join. */
 const JOIN_REFRESH_MS = 8000;

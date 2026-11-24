@@ -5,9 +5,9 @@ chat that keep going from one game to the next. It's made for people who aren't 
 started as a way to play with a mom and a brother), so it works the same on a phone, a tablet
 or a computer, with big buttons, plain words and nothing to install.
 
-Six games so far: **Hearts**, **Spades**, **Dominoes** (All Fives), **Three Thirteen** (rummy in 11
-rounds, with jokers), a co-op **Jigsaw** puzzle and **Tanks** ("Tank You For Being A Friend"), all
-in a felt look, like a games table.
+Seven games so far: **Hearts**, **Spades**, **Dominoes** (All Fives), **Three Thirteen** (rummy in 11
+rounds, with jokers), **Mahjong** (Hong Kong style, with points if you like), a co-op **Jigsaw**
+puzzle and **Tanks** ("Tank You For Being A Friend"), all in a felt look, like a games table.
 
 ![The home page: felt hands fitting two puzzle pieces together, "Play a game together.", a Start a table button and a box for a table code](docs/screenshots/home.webp)
 
@@ -37,7 +37,8 @@ in a felt look, like a games table.
 2. **Invite people**: a link (it says who sent it, and can name who it's for) or the table's
    six-letter code. Before joining, the join page says who's already at the table.
 3. **Gather at the table**: talk, pick a game together (anyone can pick or change it), and for
-   the card and tile games pick where you sit (Three Thirteen also picks how many play, 2 to 4).
+   the card and tile games pick where you sit (Three Thirteen also picks how many play, 2 to 4;
+   Mahjong picks points or not, and with points, one round or a full game).
 4. **Play**: the game starts once everyone at the table taps **I'm ready**. Someone whose phone
    drops doesn't hold it up, and the computer plays any empty seat. **Switch game** in the menu
    brings everyone back to the table.
@@ -110,7 +111,7 @@ itself down, so a deploy doesn't cut anyone off (a table still going after 3 hou
 
 ## Layout
 
-- `packages/shared` — game rules and computer players (Hearts, Spades, Dominoes, Three Thirteen, the jigsaw's
+- `packages/shared` — game rules and computer players (Hearts, Spades, Dominoes, Three Thirteen, Mahjong, the jigsaw's
   cutting, and the deterministic tank simulation), the WebSocket message contract, names and
   the chat filter. The server runs them; the client reuses what it needs.
 - `packages/server` — the authoritative Node server. A room (`room.ts`) is the table: the people,
@@ -120,7 +121,7 @@ itself down, so a deploy doesn't cut anyone off (a table still going after 3 hou
   which is saved for review.
 - `packages/client` — the Vite + TypeScript client. `main.ts` is the way in (home, start, join);
   `shell.ts` is the table (bar, menu, messages, voice). The views it swaps in: `lobby.ts` (the
-  table between games), `heartsView.ts`, `spadesView.ts`, `dominoesView.ts`, `threeThirteenView.ts`, `jigsawView.ts` and
+  table between games), `heartsView.ts`, `spadesView.ts`, `dominoesView.ts`, `threeThirteenView.ts`, `mahjongView.ts`, `jigsawView.ts` and
   `tankView.ts` (Canvas 2D).
 - `e2e/` — browser tests (Playwright) that play the site like people do, at computer and phone
   sizes.
@@ -128,7 +129,8 @@ itself down, so a deploy doesn't cut anyone off (a table still going after 3 hou
   each box (machine setup, Caddy routing between boxes, coturn, the rollout tool).
 - `infra/` — the AWS stacks (CDK): DNS, the boxes' launch template, shared disk, firewall, the
   pipeline, budgets, kill switch, and CloudFront for later.
-- `scripts/` — releases, stats, the admin password, and the felt art.
+- `scripts/` — releases, stats, the admin password, and the felt art (`mahjong-tiles.cjs` cuts the
+  Mahjong tiles from `scripts/art/mahjong/` into one sprite sheet).
 - `docs/screenshots/` — the pictures in this README.
 
 ## Server settings (environment variables)

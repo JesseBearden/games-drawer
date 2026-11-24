@@ -61,7 +61,7 @@ ours out like it. Add a colour when something needs it; each one needs its own f
 "Where things live").
 
 - **Each game has its own colour**, used for its tile: Jigsaw sky, Dominoes mint, Hearts butter,
-  Spades lilac, Tanks peach, Three Thirteen blush.
+  Spades lilac, Tanks peach, Three Thirteen blush, Mahjong kraft.
 - **Ink on any felt needs a contrast ratio of at least 4.5:1.** On the deeper colours use full ink,
   even for small notes.
 - **One cobalt main button per screen.** Other buttons are white felt with cobalt words.
@@ -115,7 +115,8 @@ Use one word for each thing, everywhere.
 | Your turn / Liz's turn | waiting for Liz… |
 | Work in Progress | under construction, beta, still being built |
 
-Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsaw, Three Thirteen.
+Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsaw, Three Thirteen,
+Mahjong.
 
 **How to write:**
 - **Buttons say what will happen, starting with a verb:** "Start with mic on", not "OK",
@@ -152,7 +153,8 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
 
 - **Use one column on phones.** A desktop gets more room, not more things.
 - **Never arrange four things in a rotating pinwheel** (it can look like a swastika). Mirror them
-  instead, the way a domino cross has mirrored arms.
+  instead, the way a domino cross has mirrored arms. The one exception is Mahjong's wall (user,
+  2026-11-23): a closed square whose four sides interlock at the corners, like a real table's.
 
 ## At the table
 
@@ -254,6 +256,79 @@ Game names are exactly as in the catalog: Tanks, Hearts, Spades, Dominoes, Jigsa
     the card that does it is outlined.
   - **Between rounds:** everyone's hand, melds first, then the score sheet (headed Round), and
     Ready for the next round.
+- **Mahjong** (user, 2026-11-22/23; the user's phone mockups): Hong Kong style, 144 tiles, always
+  four (computers fill in), no passing and no card. **Points are a choice at the table**: without
+  them any four sets and a pair wins and the table counts wins; with them it's Hong Kong faan (3
+  to win, limit hands allowed), the dealer keeps the deal on a win, and the table picks one round
+  or a full game. Points are play points, never money. Seats come from Your table, which shows
+  them counter-clockwise (the next player is on your right).
+  - **Tiles are the one exception to "only buttons stand up"** (user): every tile is a real tile
+    with depth, its face on a sliver of its own back (blue under a face, cream under a back). The
+    faces are the user's felt set (`scripts/art/mahjong/`, cut by `scripts/mahjong-tiles.cjs`);
+    the Tile and Paper sets may become a choice later.
+  - **The table:** your tiles on a cream felt strip at the bottom (two rows of 7 on an upright
+    phone, one row otherwise), Discard beside or under them. Everyone else's tiles are small backs
+    along their edge, all one size (the side players' no thinner than the top's: user), up the
+    sides in one column or two when one won't fit. The side players have the whole height
+    of their edge, beside the top player too (except on a phone held sideways, where the tabs sit
+    in the top corners), so their column only wraps when it truly must. Their name tags run up the sides like
+    Dominoes (mirrored), all three the same thickness (never squeezed thinner on a narrow edge:
+    user), and the wind letter turns with the name. **Face-up sets lie on
+    kraft felt** everywhere, yours at the front of your hand (your flowers sit by your name); tap
+    someone's tiles to see their sets big. Each person's discards lie in front of them, mirrored
+    (not a pinwheel), the one on offer lifted and bigger; "See all discards" shows everything,
+    taken ones faded. The round's wind sits small in a corner; each tag has its seat's wind letter.
+  - **The wall** is four sides of 18 stacks round a square, each running from one corner on past
+    the next, so every end sticks out beyond the side it meets by about one and a half stacks (a
+    pinwheel, like the user's photos of real tables). A stack of two stands one tile's thickness
+    higher than a lone tile, so taking the top tile leaves the lower one a step down. Tablets and computers keep it all hand
+    with each player's last 5 discards inside it (a row of 5 top and bottom, a column of 5 up each
+    side running the full height inside the wall), as big as the room allows; See all discards has the rest. A phone shows the
+    wall only for the opening, then the tiles left, and the last few discards of each player.
+  - **A phone held sideways** (user, 2026-11-23): in the phone's browser a swipe up on the table
+    tucks the browser's tabs and address bar away, as in Tanks. Your strip is one row: your tag
+    (name and wind, your flowers under it) at the left end, your tiles, then a column of buttons
+    (Discard, or the claims two to a row), always the same width so the tiles never jump. Scores
+    and the line saying what's happening sit on the table under See all discards. The players at the sides keep to the
+    lower part of their edges, clear of the mic and caret tabs, with their sets beside their tiles;
+    the player across is one line along the top with bigger tiles. The side discards lie in rows
+    (mirrored), and See all discards sits beside the tiles left.
+  - **No turn words** (user, 2026-11-23): whose turn it is shows only by the yellow tag. The
+    status line carries news only: a discard you can take, "You can go Mahjong!", "Waiting for
+    the others…", and the opening.
+  - **Kongs** are three tiles with the fourth on top of the middle one (a concealed Kong shows its
+    ends face down); every strip and close-up leaves room above for it. Upright, your face-up sets
+    always fit one row, up to four Kongs: the set tiles shrink (your own don't).
+  - **Upright, your tiles are always two rows** (user, 2026-11-23): if they wouldn't fit (a new
+    tile's gap, sets at the front, a wider or narrower phone) they shrink a little rather than run
+    onto a third row.
+  - **Your turn:** the tile you drew sits a little apart, marked New. Tap a tile to lift it, then
+    Discard (or tap it again). Drag tiles into any order; a new hand starts sorted.
+  - **Claims:** after every discard everyone waits 1.5-2 s, a little different each time, so a
+    pause never gives away that someone could have taken it. Whoever can take it gets the buttons
+    (the real words: Mahjong, Kong, Pung, Chow, and Pass) with a bar that runs down over 15 s (5
+    was far too short: user, 2026-11-23); the tile on offer shows in the line above. Two possible
+    Chows show both.
+  - **A Pung, Chow or Kong is made obvious** (user, 2026-11-23): the word ("Pung!") pops up on a
+    sunflower chip beside the player's name, the tile they took slides from the middle into their
+    set, and the set sits lifted until it settles. Play waits 2.5 s meanwhile (a Kong declared on
+    someone's own turn too).
+  - **Messages keeps a log of the claims** (user, 2026-11-23): a grey line for every Pung, Chow and
+    Kong ("Sam took Liz's 5 dots for a Pung."), as well as wins. They show as they happen but
+    aren't kept for people who arrive later, so they never push the table's own messages out.
+    Ordinary discards aren't logged (See all discards has them).
+  - **The opening:** on an empty table the tiles swirl round on three rings, each its own way at
+    its own speed, so they keep changing places but never land on each other (each stays upright:
+    no spinning), with a clatter of tiles knocking together. They gather up and the wall is built
+    from them, a stack at a time along every side at once. The dealer taps Roll the dice (they
+    roll by themselves after 6 s). Then the deal, as at a real table: from the dealer round the
+    table, four tiles each, three times over, then one each and the dealer's extra; the wall
+    opens handful by handful, everyone's tiles appear as they're dealt, each handful clicks, and
+    yours drop in from out of sight (never from above your name).
+  - **Sounds:** tiles clack (made in code, `tileClack`, `tileShuffle` in audio.ts): every
+    discard, three for a set taken, one per tile dealt, and the shuffle.
+  - **After a hand:** the winner's tiles face up, and with points each item it scored with a
+    plain explanation, then the score sheet and Ready for the next hand.
 - **Jigsaw** is played on calm light-grey felt. Every loose piece casts a small shadow; joined
   seams have none; pieces locked into the frame lie flat. The frame is a sheet of cream felt with
   a dashed edge. The tools are a strip along the bottom, one row on phones. Chosen options are

@@ -7,8 +7,8 @@ import type { ShellApi, View } from './views';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** Each game's felt colour and the order they're listed (the same as home). */
-const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', hearts: 'butter', spades: 'lilac', threethirteen: 'blush', tanks: 'peach' };
-const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'threethirteen', 'tanks'];
+const GAME_PAPER: Record<GameId, string> = { jigsaw: 'sky', dominoes: 'mint', hearts: 'butter', spades: 'lilac', threethirteen: 'blush', mahjong: 'kraft', tanks: 'peach' };
+const ORDER: GameId[] = ['jigsaw', 'dominoes', 'hearts', 'spades', 'threethirteen', 'mahjong', 'tanks'];
 
 /** Games a table can pick: everything not switched off (see games.ts). */
 const pickable = () => GAMES.filter((g) => canPlayPrivately(g.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
@@ -32,6 +32,8 @@ function focusKey(el: HTMLElement): string | null {
 /** Where each seat sits around the little table: seat 0 nearest you, then on round the table the
  *  way play goes (the same way round as the game shows it). */
 const SEAT_PLACE = ['s-near', 's-left', 's-far', 's-right'];
+/** Mahjong goes round the other way (counter-clockwise): the next player is on your right. */
+const SEAT_PLACE_CCW = ['s-near', 's-right', 's-far', 's-left'];
 
 /**
  * The table, between games: where people gather before playing. Who's here (and who's ready),
@@ -120,6 +122,7 @@ export class LobbyView implements View {
     }
     html += '</div>';
 
+    if (t.pick === 'mahjong') html += this.mahjongHtml();
     if (t.pick && isSeated(t.pick)) html += this.seatsHtml(t.pick);
 
     if (t.pick) html += this.goHtml(t.pick);
@@ -129,6 +132,22 @@ export class LobbyView implements View {
     const key = focused && this.el.contains(focused) ? focusKey(focused) : null;
     patchHtml(this.el, html);
     if (key && !this.el.contains(document.activeElement)) this.el.querySelector<HTMLElement>(key)?.focus({ preventScroll: true });
+  }
+
+  /** Mahjong's choices: points or not, and with points, how long. Anyone can change them. */
+  private mahjongHtml() {
+    const r = this.table.mahjong;
+    const choice = (attr: string, value: string, on: boolean, label: string) =>
+      `<button class="pc-btn ${on ? 'pc-btn-main' : 'pc-btn-plain'}" ${attr}="${value}" role="radio" aria-checked="${on}" type="button">${label}</button>`;
+    let html = '<section class="tb-mj" data-key="mahjong"><h2 class="pc-h3">Points</h2><div class="tb-count tb-mj-choice" role="radiogroup" aria-label="Points">';
+    html += choice('data-mj-points', '0', !r.points, 'No points') + choice('data-mj-points', '1', r.points, 'With points');
+    html += `</div><p class="tb-sub">${r.points ? 'Hong Kong scoring: each hand needs at least 3 points to win, and the end of each hand shows what it was worth.' : 'Any four sets and a pair wins. The table counts who won each hand.'}</p>`;
+    if (r.points) {
+      html += '<h2 class="pc-h3">How long?</h2><div class="tb-count tb-mj-choice" role="radiogroup" aria-label="How long">';
+      html += choice('data-mj-full', '0', !r.full, 'One round') + choice('data-mj-full', '1', r.full, 'Full game');
+      html += `</div><p class="tb-sub">${r.full ? 'Four rounds, one for each wind: often 2 hours or more.' : 'Until everyone has dealt: usually 4 to 6 hands.'}</p>`;
+    }
+    return html + '</section>';
   }
 
   /** The seats around a little table: tap one to sit there. */
@@ -160,7 +179,7 @@ export class LobbyView implements View {
       const name = who ? this.nameOf(who) : '';
       const off = !who && !inPlay.has(seat);
       const note = off ? 'Not playing' : !who ? 'Tap to sit' : [mine ? 'You' : '', away.has(who) ? 'Away' : '', ready.has(who) ? 'Ready' : ''].filter(Boolean).join(' · ');
-      const cls = `tb-seat ${SEAT_PLACE[seat]}${!who ? ' is-open' : ''}${off ? ' is-off' : ''}${mine ? ' is-mine' : ''}${who && ready.has(who) ? ' is-ready' : ''}${who && this.speaking.has(who) ? ' is-talking' : ''}`;
+      const cls = `tb-seat ${(game === 'mahjong' ? SEAT_PLACE_CCW : SEAT_PLACE)[seat]}${!who ? ' is-open' : ''}${off ? ' is-off' : ''}${mine ? ' is-mine' : ''}${who && ready.has(who) ? ' is-ready' : ''}${who && this.speaking.has(who) ? ' is-talking' : ''}`;
       const label = off ? 'Empty' : !who ? 'Open seat' : name;
       // A taken seat is in its person's own felt, and ripples while they talk, as their name tag does.
       const color = who ? this.members.find((m) => m.id === who)?.color : undefined;
@@ -213,6 +232,16 @@ export class LobbyView implements View {
       this.shell.play('lobbyJoin');
       this.showSeats = isSeated(game);
       this.shell.pickGame(game);
+      return;
+    }
+    const mjPoints = t.closest<HTMLElement>('[data-mj-points]')?.dataset.mjPoints;
+    if (mjPoints !== undefined) {
+      this.shell.setMahjongRules({ points: mjPoints === '1', full: this.table.mahjong.full });
+      return;
+    }
+    const mjFull = t.closest<HTMLElement>('[data-mj-full]')?.dataset.mjFull;
+    if (mjFull !== undefined) {
+      this.shell.setMahjongRules({ points: true, full: mjFull === '1' });
       return;
     }
     const players = t.closest<HTMLElement>('[data-players]')?.dataset.players;

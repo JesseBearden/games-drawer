@@ -76,6 +76,12 @@ export interface GameHost {
   broadcastTogether(out: readonly Outgoing[]): void;
   /** A line in room chat (and its history). */
   systemChat(text: string): void;
+  /**
+   * A line in Messages about a move in the game ("Sam took Liz's 5 dots for a Pung."): everyone
+   * here sees it, but it isn't kept for people who arrive later, so it never pushes the table's
+   * own messages out of what they're shown.
+   */
+  gameNote?(text: string): void;
   log(type: string, fields: Record<string, unknown>): void;
   /** Uniform random integer in [0, n): crypto-strength on the server, seeded in tests. */
   randomInt(n: number): number;

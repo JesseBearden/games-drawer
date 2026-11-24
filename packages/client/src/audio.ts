@@ -39,7 +39,10 @@ export type SoundName =
   | 'queenSpades'
   | 'yourTurn'
   | 'handEnd'
-  | 'lobbyJoin';
+  | 'lobbyJoin'
+  // Mahjong
+  | 'tileClack'
+  | 'tileShuffle';
 
 /** Sounds of the tank game: the Tanks screen loads their samples when it opens. */
 export const TANK_SOUNDS: SoundName[] = [
@@ -79,7 +82,10 @@ export const CARD_SOUNDS: SoundName[] = [
   'lobbyJoin',
 ];
 
-export const SOUND_NAMES: SoundName[] = [...TANK_SOUNDS, ...CARD_SOUNDS];
+/** Mahjong's tiles (made in code: no samples to load). */
+export const TILE_SOUNDS: SoundName[] = ['tileClack', 'tileShuffle'];
+
+export const SOUND_NAMES: SoundName[] = [...TANK_SOUNDS, ...CARD_SOUNDS, ...TILE_SOUNDS];
 
 /** What any table can play: the only samples that load as soon as audio unlocks (the default `preload`). */
 export const SHARED_SOUNDS: SoundName[] = ['chat', 'win'];
@@ -227,6 +233,33 @@ export class Synth {
       case 'lobbyJoin':
         this.notes(t, v, [783.99, 587.33], 0.12, 0.18, 0.15, 0.3, 'sine');
         return;
+      case 'tileClack':
+        this.clack(t, v, 1);
+        return;
+      case 'tileShuffle':
+        this.shuffle(t, v);
+        return;
+    }
+  }
+
+  /** One Mahjong tile knocking another: a hard, bright click and a tiny bounce. */
+  private clack(t: number, dest: AudioNode, strength: number, pitch = 1) {
+    this.noiseHit(t, dest, 'bandpass', 3400 * pitch, 2600 * pitch, 0.03, 0.8 * strength, 0.0008, 2.2);
+    this.tone(t, dest, 'sine', 2100 * pitch, 1800 * pitch, 0.035, 0.14 * strength, 0.0008);
+    this.noiseHit(t + 0.016 + Math.random() * 0.01, dest, 'bandpass', 3000 * pitch, 2400 * pitch, 0.02, 0.2 * strength, 0.0008, 2);
+  }
+
+  /**
+   * Washing the tiles: many hands pushing them about on the felt, so a soft slide under a run of
+   * clacks at uneven times and strengths (about 2 s, as long as the shuffle shows).
+   */
+  private shuffle(t: number, dest: AudioNode) {
+    for (let k = 0; k < 4; k++) this.noiseHit(t + k * 0.5, dest, 'lowpass', 900, 500, 0.55, 0.2, 0.08, 0.7);
+    let at = t;
+    for (let i = 0; i < 34; i++) {
+      at += 0.025 + Math.random() * 0.085;
+      if (at > t + 2.1) break;
+      this.clack(at, dest, 0.5 + Math.random() * 0.5, 0.85 + Math.random() * 0.3);
     }
   }
 

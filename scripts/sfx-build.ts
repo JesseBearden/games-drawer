@@ -51,6 +51,8 @@ const TARGET_DB: Record<string, number> = {
   yourTurn: -28.4,
   handEnd: -27,
   lobbyJoin: -29.9,
+  tileClack: -30,
+  tileShuffle: -30,
   rotor: -24.9,
   wind: -13.8,
 };
@@ -406,6 +408,9 @@ const slots: Record<string, SlotSpec> = {
       { file: 'ui/pluck-002', label: 'Pluck' },
     ],
   },
+  // Mahjong's tiles: made in code, no samples yet.
+  tileClack: { default: 'synth', candidates: [] },
+  tileShuffle: { default: 'synth', candidates: [] },
   rotor: {
     default: 'helicopter-wuxiascrub',
     candidates: [

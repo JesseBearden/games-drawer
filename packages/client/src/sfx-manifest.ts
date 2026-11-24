@@ -874,6 +874,16 @@ export const SFX_MANIFEST: Record<SfxSlot, SfxEntry> = {
       },
     ],
   },
+  tileClack: {
+    default: 'synth',
+    candidates: [
+    ],
+  },
+  tileShuffle: {
+    default: 'synth',
+    candidates: [
+    ],
+  },
   rotor: {
     default: 'helicopter-wuxiascrub',
     candidates: [

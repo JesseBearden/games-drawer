@@ -1,4 +1,4 @@
-import type { ChatFilterMode, GameId, GameInput, GameServerMessage, MemberInfo, TableSetup } from '@tank/shared';
+import type { ChatFilterMode, GameId, GameInput, GameServerMessage, MemberInfo, MjRules, TableSetup } from '@tank/shared';
 import type { PlayOptions, Sfx, SoundName } from './audio';
 import type { Gamepads, PadPress } from './gamepad';
 
@@ -23,6 +23,8 @@ export interface ShellApi {
   sit(seat: number): void;
   /** How many play the picked game (2 to 4), for games that let the table choose. */
   setPlayers(n: number): void;
+  /** Mahjong at the table: with points or not, and with points, one round or a full game. */
+  setMahjongRules(rules: MjRules): void;
   setReady(ready: boolean): void;
   toLobby(): void;
   toast(text: string): void;

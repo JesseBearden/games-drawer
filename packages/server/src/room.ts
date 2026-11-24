@@ -30,6 +30,7 @@ import {
   type RoomKind,
   type ServerMessage,
   type TableInfo,
+  type MjRules,
   type TableSetup,
   type VoicePeer,
   type VoiceSettings,
@@ -41,6 +42,7 @@ import { HeartsGame } from './games/hearts';
 import { SpadesGame } from './games/spades';
 import { DominoesGame } from './games/dominoes';
 import { ThreeThirteenGame } from './games/threeThirteen';
+import { MahjongGame } from './games/mahjong';
 import { JigsawGame } from './games/jigsaw';
 import { PuzzleStore } from './puzzleStore';
 import { TanksGame } from './games/tanks';
@@ -94,7 +96,7 @@ export const IDLE_WARNING_MS = 60_000;
 export const RECENT_MESSAGES = 200;
 /** Picking a game, sitting, ready, back to the table, the filter, the mic: at most this many, per person. */
 export const TABLE_ACTS = { max: 12, windowMs: 10_000 };
-const TABLE_ACT_TYPES: ReadonlySet<string> = new Set(['pick', 'sit', 'players', 'ready', 'lobby', 'filter', 'voice']);
+const TABLE_ACT_TYPES: ReadonlySet<string> = new Set(['pick', 'sit', 'players', 'mj-rules', 'ready', 'lobby', 'filter', 'voice']);
 
 /** Chat reports per player per minute. */
 export const REPORTS_PER_MINUTE = 5;
@@ -226,6 +228,8 @@ export class Room {
    * (sessions; seated games only) and who is ready. It starts once everyone here is ready.
    */
   private setup: { pick: GameId | null; seats: (string | null)[]; ready: Set<string>; players: number } = { pick: null, seats: [], ready: new Set(), players: SEAT_COUNT };
+  /** Mahjong's choices at the table (points, and with points how long). Kept between games. */
+  private mahjongRules: MjRules = { points: false, full: false };
 
   constructor(
     readonly code: string,
@@ -309,6 +313,7 @@ export class Room {
     if (id === 'spades') return new SpadesGame(this.host);
     if (id === 'dominoes') return new DominoesGame(this.host);
     if (id === 'threethirteen') return new ThreeThirteenGame(this.host, table);
+    if (id === 'mahjong') return new MahjongGame(this.host, { ...this.mahjongRules });
     if (id === 'jigsaw') return new JigsawGame(this.host, (this.deps.puzzles ??= new PuzzleStore(null)));
     return new TanksGame(this.host, { cfg: this.deps.cfg, seed: this.deps.seed });
   }
@@ -328,6 +333,7 @@ export class Room {
       broadcast: (msg: GameServerMessage) => this.broadcast({ t: 'g', m: msg }),
       broadcastTogether: (out) => this.broadcastTogether(out),
       systemChat: (text) => this.systemChat(text),
+      gameNote: (text) => this.broadcast({ t: 'chat', msg: { id: randomUUID(), from: '', color: -1, text, at: this.deps.now(), system: true } }),
       log: (type, fields) => room.log(type, { game: room.game?.id, ...fields }),
       randomInt: (n) => (this.deps.randomInt ?? randomInt)(n),
       mayStartPuzzle: (m) => this.mayStartPuzzle(m),
@@ -742,6 +748,16 @@ export class Room {
     this.broadcastTable();
   }
 
+  /** Mahjong: play with points or not, and with points, one round or all four. */
+  private setMahjongRules(p: Player, rules: MjRules) {
+    if (this.game || this.setup.pick !== 'mahjong') return;
+    const full = rules.points && rules.full;
+    if (rules.points === this.mahjongRules.points && full === this.mahjongRules.full) return;
+    this.mahjongRules = { points: rules.points, full };
+    this.systemChat(`${p.name} chose ${rules.points ? `Mahjong with points, ${full ? 'a full game' : 'one round'}` : 'Mahjong without points'}.`);
+    this.broadcastTable();
+  }
+
   /** Sit at a seat for the picked game (Hearts, Spades, Dominoes); moving leaves your old one. */
   private sit(p: Player, seat: number) {
     if (this.game || !isSeated(this.setup.pick) || seat < 0 || seat >= SEAT_COUNT) return;
@@ -806,6 +822,7 @@ export class Room {
       seats: this.setup.seats.map(alias),
       ready: [...this.setup.ready].map((s) => this.players.get(s)?.alias).filter((a): a is string => !!a),
       players: this.setup.players,
+      mahjong: { ...this.mahjongRules },
     };
   }
 
@@ -902,6 +919,9 @@ export class Room {
         return;
       case 'players':
         this.setPlayers(p, msg.n);
+        return;
+      case 'mj-rules':
+        this.setMahjongRules(p, msg);
         return;
       case 'ready':
         this.setReady(p, msg.ready);

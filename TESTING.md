@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-23 (Tanks on an iPhone held sideways)_
+_Last updated: 2026-11-23 (Mahjong)_
 
 ## Getting set up
 
@@ -13,7 +13,41 @@ _Last updated: 2026-11-23 (Tanks on an iPhone held sideways)_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player table.
 
-## Newest: Tanks on an iPhone held sideways, in Safari (2026-11-23)
+## Newest: Mahjong (2026-11-23)
+
+- [ ] **Your table:** pick Mahjong. Points (No points / With points) and, with points, How long
+      (One round / Full game) show above the seats, and the seats go round the other way (the
+      next player on your right). Do the words make sense?
+- [ ] **The opening** (a phone upright): on an empty table the tiles swirl round in rings without
+      ever landing on each other, with a clatter (sound on); then they gather up and the wall
+      is built from them; Roll the dice if you're East. Your tiles now
+      appear one by one with a click, a short drop, never from above your name. Too long?
+- [ ] **iPhone held sideways, in Safari:** swipe up on the table: Safari's tabs and address bar
+      tuck away and the table grows. Your strip is one row (your name at the left, Discard at the
+      right); Scores and the news line ("Botley threw away…") are on the table under See all discards. Are
+      your tiles still big enough?
+- [ ] **The deal:** four tiles at a time round the table (then one each, and one more for the
+      dealer); the wall opens as it goes and everyone's tiles appear as they're dealt.
+- [ ] **The wall on a laptop:** a pinwheel square like your photos, with each player's last 5
+      discards inside it (the one on offer a little bigger). Nothing should overlap your tiles, the wall or anyone's
+      tiles. Are the small discards readable? Every discard and set taken clicks.
+- [ ] **No "Your turn" words:** whose turn it is shows only by the yellow tag; the line under
+      your name (or under See all discards sideways) only has news: a discard you can take, "You
+      can go Mahjong!", "Waiting for the others…".
+- [ ] **Your tiles:** two rows of 7 upright, one row sideways (on an iPhone in Safari too: nothing should overlap, and the side players keep clear of the mic and caret tabs). Tap a tile to lift it, then
+      Discard (or tap it twice). Drag one to move it. The tile you drew says New. Big enough?
+- [ ] **Claims:** when a discard is yours to take, the buttons and a 15-second bar appear (it was
+      5), with the tile beside "Robin threw away". Is 15 seconds right?
+- [ ] **Claims stand out:** when anyone makes a Pung, Chow or Kong, the word pops up by their
+      name, the tile slides from the middle into their set, and the set lifts for a moment; the
+      computers wait 2.5 s meanwhile. Clear enough? Too slow?
+- [ ] **Messages:** every Pung, Chow and Kong (yours and the computers') shows as a grey line,
+      like "Sprocket took Jesse's 5 dots for a Pung." Easier to follow?
+- [ ] **The felt tiles:** the blue sliver under each face, the kraft strip under face-up sets
+      (kraft is the nearest felt to the rust I suggested). Do they look like real tiles?
+- [ ] **With points:** the end of a hand lists what it scored and why. Readable for learning?
+
+## Tanks on an iPhone held sideways, in Safari (2026-11-23)
 
 - [ ] **Swipe to tuck Safari away** (works; it was a bit jittery): the battlefield now follows
       the screen frame by frame as Safari's bars slide away, instead of stretching and then

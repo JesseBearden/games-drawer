@@ -241,7 +241,7 @@ const fakeWelcome = (chat: { id: string; text: string }[]) =>
     members: [{ id: 'me', name: 'Ivy', color: 0, connected: true }],
     chat: chat.map((m) => ({ ...m, from: 'Gus', speaker: 'gus', color: 1, at: Date.now() })),
     chatFilter: 'hide',
-    table: { pick: null, seats: [], ready: [], players: 4 },
+    table: { pick: null, seats: [], ready: [], players: 4, mahjong: { points: false, full: false } },
   });
 
 test('Back to home while joining cancels it, even if the answer comes later', async ({ page }) => {

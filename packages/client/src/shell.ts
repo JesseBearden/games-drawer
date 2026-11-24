@@ -146,6 +146,7 @@ export class RoomApp {
       pickGame: (game) => this.net.send({ t: 'pick', game }),
       sit: (seat) => this.net.send({ t: 'sit', seat }),
       setPlayers: (n) => this.net.send({ t: 'players', n }),
+      setMahjongRules: (r) => this.net.send({ t: 'mj-rules', points: r.points, full: r.full }),
       setReady: (ready) => this.net.send({ t: 'ready', ready }),
       toLobby: () => this.net.send({ t: 'lobby' }),
       toast: (t) => this.toast(t),

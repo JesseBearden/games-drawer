@@ -10,7 +10,7 @@ import { DOMINOES_RULES } from './dominoes';
 const DOMINO_ICON =
   '<svg class="domino-icon" viewBox="0 0 24 44" width="1em" height="1.8em" aria-hidden="true"><rect x="1" y="1" width="22" height="42" rx="4" fill="#fffdf6" stroke="#1b1b28" stroke-width="2"/><line x1="4" y1="22" x2="20" y2="22" stroke="#1b1b28" stroke-width="2"/><circle cx="7" cy="7" r="2.4" fill="#1b1b28"/><circle cx="12" cy="12" r="2.4" fill="#1b1b28"/><circle cx="17" cy="17" r="2.4" fill="#1b1b28"/><circle cx="7" cy="27" r="2.4" fill="#1b1b28"/><circle cx="17" cy="27" r="2.4" fill="#1b1b28"/><circle cx="7" cy="37" r="2.4" fill="#1b1b28"/><circle cx="17" cy="37" r="2.4" fill="#1b1b28"/></svg>';
 
-export type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'threethirteen' | 'jigsaw';
+export type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'threethirteen' | 'mahjong' | 'jigsaw';
 
 /**
  * How far a game is rolled out. A new game ships as 'private' (only private rooms can pick
@@ -144,6 +144,25 @@ export const GAMES: GameInfo[] = [
     landscape: false,
   },
   {
+    id: 'mahjong',
+    name: 'Mahjong',
+    title: 'Mahjong',
+    slug: 'mahjong',
+    aliases: ['mah-jong', 'mahjongg', 'majong'],
+    icon: '🀄',
+    tagline: 'Hong Kong Mahjong for four: make four sets and a pair, with points if you like.',
+    blurb: 'Hong Kong Mahjong: make four sets and a pair before anyone else. Play with points, or just for the win.',
+    howTo: [
+      'On your turn you draw a tile, then choose one to throw away.',
+      'Take someone’s discard for a Pung (three alike) or Kong (four alike), or the player before you’s for a Chow (three in a row in one suit).',
+      'Four sets and a pair is Mahjong. With points on, the hand needs at least 3 points (faan) to win.',
+    ],
+    players: '4 seats · computers fill in',
+    availability: 'private',
+    underConstruction: false,
+    landscape: false,
+  },
+  {
     id: 'jigsaw',
     name: 'Jigsaw',
     title: 'Jigsaw Puzzle',
@@ -167,7 +186,7 @@ export const GAMES: GameInfo[] = [
 
 export const GAME_IDS: GameId[] = GAMES.map((g) => g.id);
 /** Games where where you sit matters (turn order, partners): people pick their seats first. */
-export const SEATED_GAMES: readonly GameId[] = ['hearts', 'spades', 'dominoes', 'threethirteen'];
+export const SEATED_GAMES: readonly GameId[] = ['hearts', 'spades', 'dominoes', 'threethirteen', 'mahjong'];
 export const isSeated = (g: GameId | null): boolean => !!g && SEATED_GAMES.includes(g);
 export const SEAT_COUNT = 4;
 

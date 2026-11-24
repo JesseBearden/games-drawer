@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'threethirteen' | 'jigsaw';
+type GameId = 'tanks' | 'hearts' | 'spades' | 'dominoes' | 'threethirteen' | 'mahjong' | 'jigsaw';
 import { expect } from './fixtures';
 export { newPlayer } from './fixtures';
 

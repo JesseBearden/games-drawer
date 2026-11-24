@@ -556,6 +556,10 @@
 .lobby-paper .tb-seats .tb-sub {
   margin-top: 0;
 }
+/* Mahjong's choices at the table (points, and how long): each with its line under it. */
+.lobby-paper .tb-mj .tb-sub {
+  margin: 8px 0 18px;
+}
 /* Who's here, with Invite right beside them: the reason to be at the table before a game. */
 .tb-here {
   display: grid;

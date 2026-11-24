@@ -6,6 +6,7 @@ import { isCard, type HeartsView } from './hearts';
 import type { SpadesView } from './spades';
 import { isTileId, type DominoesView } from './dominoes';
 import { isTTCard, type ThreeThirteenView } from './threeThirteen';
+import { isMjTile, type MahjongView, type MjRules } from './mahjong';
 import { isPuzzleId, type PuzzleState, type PuzzleSummary, type TablePhotoInfo } from './puzzle';
 
 /**
@@ -122,6 +123,20 @@ export type ThreeThirteenInput =
   | { t: 'again' };
 
 /**
+ * Input for Mahjong: the dealer rolls the dice, throw a tile away, answer a discard on offer
+ * (Mahjong, Kong, Pung, Chow by its lowest tile, or pass), go Mahjong on a tile you drew, declare a
+ * Kong on your turn, say you're ready for the next hand, or deal a new game.
+ */
+export type MahjongInput =
+  | { t: 'mj-roll' }
+  | { t: 'mj-discard'; tile: string }
+  | { t: 'mj-claim'; claim: 'win' | 'kong' | 'pung' | 'chow' | 'pass'; chow?: string }
+  | { t: 'mj-win' }
+  | { t: 'mj-kong'; tile: string }
+  | { t: 'ready' }
+  | { t: 'again' };
+
+/**
  * Input for the jigsaw: pick a picture and piece count (or continue a saved puzzle), pick up a
  * piece (its whole group comes with it), drag it, drop it, show where your pointer is, tidy the
  * loose pieces, go back to choosing, or look up saved puzzles. Positions are board coordinates.
@@ -137,7 +152,7 @@ export type PuzzleInput =
   | { t: 'pz-tidy' }
   | { t: 'pz-saves'; ids: string[] };
 
-export type GameInput = TankInput | HeartsInput | SpadesInput | DominoesInput | ThreeThirteenInput | PuzzleInput;
+export type GameInput = TankInput | HeartsInput | SpadesInput | DominoesInput | ThreeThirteenInput | MahjongInput | PuzzleInput;
 
 // ------------------------------------------------------------------ client -> server
 
@@ -166,6 +181,8 @@ export type ClientMessage =
   | { t: 'ready'; ready: boolean }
   /** At the table: how many play the picked game (2 to 4), for games that let the table choose. */
   | { t: 'players'; n: number }
+  /** At the table, for Mahjong: play with points or not, and (with points) one round or all four. */
+  | { t: 'mj-rules'; points: boolean; full: boolean }
   /** End the current game and take everyone back to the lobby (private rooms). */
   | { t: 'lobby' }
   /** Private rooms: change how swearing in chat is handled (anyone in the room can). */
@@ -330,6 +347,8 @@ export type DominoesServerMessage = { t: 'dominoes'; view: DominoesView };
 
 export type ThreeThirteenServerMessage = { t: 'threethirteen'; view: ThreeThirteenView };
 
+export type MahjongServerMessage = { t: 'mahjong'; view: MahjongView };
+
 export type PuzzlePhase = 'setup' | 'playing' | 'done';
 
 export type PuzzleServerMessage =
@@ -358,9 +377,11 @@ export interface TableSetup {
   ready: string[];
   /** How many play the picked game (games in CHOOSE_PLAYERS; SEAT_COUNT for the rest). */
   players: number;
+  /** Mahjong's choices: points or not, and with points, one round or a full game. */
+  mahjong: MjRules;
 }
 
-export type GameServerMessage = TankServerMessage | HeartsServerMessage | SpadesServerMessage | DominoesServerMessage | ThreeThirteenServerMessage | PuzzleServerMessage;
+export type GameServerMessage = TankServerMessage | HeartsServerMessage | SpadesServerMessage | DominoesServerMessage | ThreeThirteenServerMessage | MahjongServerMessage | PuzzleServerMessage;
 
 export type ServerMessage =
   | {
@@ -520,6 +541,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return isGameId(o.game) ? { t: 'pick', game: o.game } : null;
     case 'players':
       return Number.isInteger(o.n) && (o.n as number) >= 2 && (o.n as number) <= 4 ? { t: 'players', n: o.n as number } : null;
+    case 'mj-rules':
+      return typeof o.points === 'boolean' && typeof o.full === 'boolean' ? { t: 'mj-rules', points: o.points, full: o.full } : null;
     case 'sit':
       return Number.isInteger(o.seat) && (o.seat as number) >= 0 && (o.seat as number) < 4 ? { t: 'sit', seat: o.seat as number } : null;
     case 'ready':
@@ -596,6 +619,18 @@ export function parseGameInput(v: unknown): GameInput | null {
       // A whole hand (at most 14 cards), each card once.
       if (!Array.isArray(o.cards) || o.cards.length > 14 || !o.cards.every(isTTCard) || new Set(o.cards).size !== o.cards.length) return null;
       return { t: 'tt-arrange', cards: [...(o.cards as string[])] };
+    }
+    case 'mj-roll':
+      return { t: 'mj-roll' };
+    case 'mj-win':
+      return { t: 'mj-win' };
+    case 'mj-discard':
+    case 'mj-kong':
+      return isMjTile(o.tile) ? { t: o.t, tile: o.tile } : null;
+    case 'mj-claim': {
+      if (o.claim !== 'win' && o.claim !== 'kong' && o.claim !== 'pung' && o.claim !== 'chow' && o.claim !== 'pass') return null;
+      if (o.claim === 'chow') return isMjTile(o.chow) ? { t: 'mj-claim', claim: 'chow', chow: o.chow } : null;
+      return { t: 'mj-claim', claim: o.claim };
     }
     case 'bid':
       return Number.isInteger(o.bid) && (o.bid as number) >= 0 && (o.bid as number) <= 13 ? { t: 'bid', bid: o.bid as number } : null;
