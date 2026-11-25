@@ -15,9 +15,11 @@ bundling them with a site. Their license texts ship with the site, in
 ## Sound effects
 
 Every sample under `packages/client/public/sfx/` is dedicated to the public domain under
-[Creative Commons Zero (CC0 1.0)](https://creativecommons.org/publicdomain/zero/1.0/). Attribution
-isn't required, but thank you to the authors below, especially [Kenney](https://kenney.nl) for the
-bulk of them.
+[Creative Commons Zero (CC0 1.0)](https://creativecommons.org/publicdomain/zero/1.0/), except the
+few marked ElevenLabs: those were generated from a text prompt with
+[ElevenLabs](https://elevenlabs.io/sound-effects) on a paid (Starter) plan, which allows commercial
+use; the originals are in `sfx-sources/elevenlabs/`. Attribution isn't required, but thank you to
+the authors below, especially [Kenney](https://kenney.nl) for the bulk of them.
 
 The Kenney packs' own `License.txt` files state CC0; the OpenGameArt items are listed as CC0 on
 their pages. Files were processed by `scripts/sfx-build.ts` (generated table: re-run it rather
@@ -37,6 +39,8 @@ than editing by hand). Sounds without a sample here are synthesized in code
 | `packages/client/public/sfx/tank/cannon-hit-thimras.wav` | [OpenGameArt "Battle at sea"](https://opengameart.org/content/battle-at-sea), `cannon_hit_1.ogg` | Thimras | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 22.05 kHz; trimmed to 0.00–3.00 s; 0.8 s fade-out; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/tank/mechanical-explosion-springspring.wav` | [OpenGameArt "Mechanical Explosion"](https://opengameart.org/content/mechanical-explosion), `mechanical_explosion.wav` | Spring Spring | CC0 1.0 | 2026-11-16 | converted WAV stereo to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/tank/ship-destroyed-thimras.wav` | [OpenGameArt "Battle at sea"](https://opengameart.org/content/battle-at-sea), `ship_destroyed_short.ogg` | Thimras | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 16 kHz; trimmed to 0.20–6.70 s; 2 s fade-out; peak-normalized to -1 dBFS |
+| `packages/client/public/sfx/tank/cannon-crack-thump-elevenlabs.wav` | [ElevenLabs sound effects](https://elevenlabs.io/sound-effects), `cannon-crack-thump.wav` | ElevenLabs (generated) | ElevenLabs Starter plan (commercial use) | 2026-11-24 | converted WAV stereo to 16-bit mono WAV at 24 kHz; 0.4 s fade-out; peak-normalized to -1 dBFS |
+| `packages/client/public/sfx/tank/explosion-cartoon-puff-elevenlabs.wav` | [ElevenLabs sound effects](https://elevenlabs.io/sound-effects), `explosion-cartoon-puff.wav` | ElevenLabs (generated) | ElevenLabs Starter plan (commercial use) | 2026-11-24 | converted WAV stereo to 16-bit mono WAV at 24 kHz; 0.3 s fade-out; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/tank/metal-latch.wav` | [Kenney RPG Audio](https://kenney.nl/assets/rpg-audio), `metalLatch.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/tank/interface-drop-002.wav` | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds), `drop_002.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/tank/cloth-1.wav` | [Kenney RPG Audio](https://kenney.nl/assets/rpg-audio), `cloth1.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 24 kHz; removed 0.03 s of leading silence; peak-normalized to -1 dBFS |
@@ -47,6 +51,7 @@ than editing by hand). Sounds without a sample here are synthesized in code
 | `packages/client/public/sfx/tank/force-field-000.wav` | [Kenney Sci-Fi Sounds](https://kenney.nl/assets/sci-fi-sounds), `forceField_000.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/tank/force-field-002.wav` | [Kenney Sci-Fi Sounds](https://kenney.nl/assets/sci-fi-sounds), `forceField_002.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/tank/impact-metal-light-003.wav` | [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds), `impactMetal_light_003.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
+| `packages/client/public/sfx/tank/crate-thump-elevenlabs.wav` | [ElevenLabs sound effects](https://elevenlabs.io/sound-effects), `crate-thump.wav` | ElevenLabs (generated) | ElevenLabs Starter plan (commercial use) | 2026-11-24 | converted WAV stereo to 16-bit mono WAV at 24 kHz; 0.25 s fade-out; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/ui/jingle-pizzi-02.wav` | [Kenney Music Jingles](https://kenney.nl/assets/music-jingles), `jingles_PIZZI02.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/ui/jingle-pizzi-07.wav` | [Kenney Music Jingles](https://kenney.nl/assets/music-jingles), `jingles_PIZZI07.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 24 kHz; peak-normalized to -1 dBFS |
 | `packages/client/public/sfx/ui/jingle-pizzi-15.wav` | [Kenney Music Jingles](https://kenney.nl/assets/music-jingles), `jingles_PIZZI15.ogg` | Kenney (kenney.nl) | CC0 1.0 | 2026-11-16 | converted Ogg Vorbis stereo to 16-bit mono WAV at 24 kHz; removed 0.01 s of leading silence; peak-normalized to -1 dBFS |

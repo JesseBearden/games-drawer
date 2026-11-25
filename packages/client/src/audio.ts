@@ -5,7 +5,7 @@
  * same recipes play live (AudioContext) or render offline for testing (OfflineAudioContext). It is
  * also the fallback whenever a sample is missing, still loading or fails to decode.
  * `Sfx` owns the live context: unlocking on a user gesture (required on iPhone), loading the
- * samples picked in sfx-manifest.ts (CC0 files under public/sfx, see CREDITS.md), the master
+ * samples picked in sfx-manifest.ts (files under public/sfx, CC0 or made with ElevenLabs: see CREDITS.md), the master
  * volume/mute, a compressor so a dozen explosions don't clip, and looping ambience
  * (helicopter rotors, wind).
  */

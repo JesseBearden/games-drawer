@@ -13,6 +13,12 @@ _Last updated: 2026-11-23 (Mahjong)_
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player table.
 
+## New sounds made with ElevenLabs (2026-11-24)
+
+- [ ] **Tanks:** the cannon is now a crack and thump, a tank landing is a heavy crate thump, and a
+      shell hitting is a short cartoon boom and puff (the old one felt too big). In a real game,
+      do they sit well with the rest? Is the explosion still too loud, now that it's smaller?
+
 ## Newest: Mahjong (2026-11-23)
 
 - [ ] **Your table:** pick Mahjong. Points (No points / With points) and, with points, How long

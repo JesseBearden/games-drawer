@@ -10,6 +10,7 @@ import {
   Synth,
   synthAmbience,
   TANK_SOUNDS,
+  TILE_SOUNDS,
   type AmbienceName,
   type SfxSlot,
   type SoundName,
@@ -34,7 +35,7 @@ function variantCard(slot: SfxSlot, id: string, c: SfxCandidate | null): HTMLEle
   const title = c ? c.label : 'Synth';
   const meta = c
     ? `${esc(c.file.split('/').pop() ?? c.file)} · ${c.duration.toFixed(2)} s${c.loop ? ' loop' : ''} · gain ${c.gain.toFixed(2)}<br>` +
-      `${esc(c.author)} · <a href="${esc(c.source)}" target="_blank" rel="noopener">source</a> · CC0`
+      `${esc(c.author)} · <a href="${esc(c.source)}" target="_blank" rel="noopener">source</a> · ${esc(c.license ?? 'CC0')}`
     : 'Generated in code (audio.ts)';
   el.innerHTML =
     `<div class="row"><button class="play" title="${esc(title)}">▶ ${esc(title)}</button>` +
@@ -106,6 +107,7 @@ function refreshPicks() {
 renderSlots('tank-slots', TANK_SOUNDS);
 renderSlots('ambience-slots', AMBIENCE_NAMES);
 renderSlots('card-slots', CARD_SOUNDS);
+renderSlots('tile-slots', TILE_SOUNDS);
 refreshPicks();
 
 $('copy-picks').addEventListener('click', async () => {

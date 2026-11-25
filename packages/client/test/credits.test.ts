@@ -32,14 +32,23 @@ describe('sound credits', () => {
     expect(shipped.length).toBeGreaterThan(0);
   });
 
-  it('credits every file under public/sfx as CC0 with a source link', () => {
+  it('credits every file under public/sfx as CC0 (or made on a paid ElevenLabs plan) with a source link', () => {
     const rows = creditRows();
     const missing = shipped.filter((f) => !rows.has(f));
     expect(missing, 'files without a CREDITS.md row').toEqual([]);
     for (const f of shipped) {
       const row = rows.get(f)!;
-      expect(row, f).toMatch(/CC0 1\.0/);
+      expect(row, f).toMatch(/CC0 1\.0|ElevenLabs Starter plan \(commercial use\)/);
       expect(row, f).toMatch(/\]\(https:\/\/[^)]+\)/);
+    }
+  });
+
+  it('keeps the original of every ElevenLabs sound in sfx-sources/elevenlabs', () => {
+    for (const [f, row] of creditRows()) {
+      if (!row.includes('ElevenLabs Starter plan')) continue;
+      const original = row.match(/\(https:\/\/elevenlabs\.io[^)]*\), `([^`]+)`/)?.[1];
+      expect(original, f).toBeTruthy();
+      expect(fs.existsSync(path.join(ROOT, 'sfx-sources/elevenlabs', original!)), `${f}: ${original}`).toBe(true);
     }
   });
 

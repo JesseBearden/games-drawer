@@ -1,6 +1,10 @@
 /**
- * Builds the game's sample sounds from downloaded CC0 packs:
+ * Builds the game's sample sounds from downloaded CC0 packs, plus a few made with ElevenLabs:
  *   npx tsx scripts/sfx-build.ts <downloads-dir>
+ *
+ * The ElevenLabs ones (sound effects generated from a text prompt, on the user's Starter plan,
+ * which allows commercial use) live in the repo under sfx-sources/elevenlabs as they came back
+ * (24 kHz WAV); their prompts are beside them in `files` below.
  *
  * <downloads-dir> holds each pack unpacked in its own folder (the `src` paths below), e.g.
  * kenney-sci-fi-sounds/extracted/Audio/... from https://kenney.nl/assets/sci-fi-sounds. For each
@@ -61,6 +65,12 @@ interface Source {
   pack: string;
   url: string;
   author: string;
+  /** Default CC0 1.0. */
+  license?: string;
+  /** When it was downloaded or made (default DOWNLOADED). */
+  date?: string;
+  /** `src` is under the repo (sfx-sources/), not the downloads dir. */
+  inRepo?: boolean;
 }
 const kenney = (slug: string, title: string): Source => ({
   pack: `Kenney ${title}`,
@@ -86,9 +96,17 @@ const O_MECH = oga('mechanical-explosion', 'Mechanical Explosion', 'Spring Sprin
 const O_HELI = oga('helicopter-sfx', 'Helicopter SFX', 'WuxiaScrub');
 const O_PROP = oga('propeller-cartoon-loop', 'Propeller (Cartoon) Loop', 'Mish7913');
 const O_WIND_LOOP = oga('wind-whoosh-loop', 'wind whoosh loop', 'SketchMan3');
+const ELEVEN: Source = {
+  pack: 'ElevenLabs sound effects',
+  url: 'https://elevenlabs.io/sound-effects',
+  author: 'ElevenLabs (generated)',
+  license: 'ElevenLabs Starter plan (commercial use)',
+  date: '2026-11-24',
+  inRepo: true,
+};
 
 interface FileSpec {
-  /** Path under the downloads dir. */
+  /** Path under the downloads dir (or under sfx-sources/ for a source that's `inRepo`). */
   src: string;
   from: Source;
   /** Output sample rate. */
@@ -120,6 +138,12 @@ const files: Record<string, FileSpec> = {
   'tank/cannon-hit-thimras': { src: 'oga-battle-at-sea/cannon_hit_1.ogg', from: O_BATTLE, rate: 22050, end: 3.0, fadeOut: 0.8 },
   'tank/mechanical-explosion-springspring': { src: 'oga-mechanical-explosion/mechanical_explosion.wav', from: O_MECH, rate: 24000 },
   'tank/ship-destroyed-thimras': { src: 'oga-battle-at-sea/ship_destroyed_short.ogg', from: O_BATTLE, rate: 16000, start: 0.2, end: 6.7, fadeOut: 2 },
+  // ElevenLabs, 1.2 s, prompt influence 0.6: "Small artillery cannon fires once, sharp crack followed
+  // by a deep thump, short outdoor echo, game sound effect" (user's pick, 2026-11-24)
+  'tank/cannon-crack-thump-elevenlabs': { src: 'elevenlabs/cannon-crack-thump.wav', from: ELEVEN, rate: 24000, fadeOut: 0.4 },
+  // ElevenLabs, 0.7 s, 0.6: "Compact cartoon explosion, short muffled boom and a puff of smoke, light
+  // and bouncy, video game, no long tail" (user's pick: the old one felt too big, 2026-11-24)
+  'tank/explosion-cartoon-puff-elevenlabs': { src: 'elevenlabs/explosion-cartoon-puff.wav', from: ELEVEN, rate: 24000, fadeOut: 0.3 },
   // ---- tank: helicopter drop, parachute, landing, shield
   'tank/metal-latch': { src: 'kenney-rpg-audio/extracted/Audio/metalLatch.ogg', from: K_RPG, rate: 24000 },
   'tank/interface-drop-002': { src: 'kenney-interface-sounds/extracted/Audio/drop_002.ogg', from: K_INTERFACE, rate: 24000 },
@@ -131,6 +155,9 @@ const files: Record<string, FileSpec> = {
   'tank/force-field-000': { src: 'kenney-sci-fi-sounds/extracted/Audio/forceField_000.ogg', from: K_SCIFI, rate: 24000 },
   'tank/force-field-002': { src: 'kenney-sci-fi-sounds/extracted/Audio/forceField_002.ogg', from: K_SCIFI, rate: 24000 },
   'tank/impact-metal-light-003': { src: 'kenney-impact-sounds/extracted/Audio/impactMetal_light_003.ogg', from: K_IMPACT, rate: 24000 },
+  // ElevenLabs, 1 s, 0.6: "Heavy crate hits the ground hard, low dull thump with a light rattle of
+  // metal, outdoor" (user's pick for the landing, 2026-11-24)
+  'tank/crate-thump-elevenlabs': { src: 'elevenlabs/crate-thump.wav', from: ELEVEN, rate: 24000, fadeOut: 0.25 },
   // ---- jingles and UI (shared by both games)
   'ui/jingle-pizzi-02': { src: `${J}/Pizzicato jingles/jingles_PIZZI02.ogg`, from: K_JINGLES, rate: 24000 },
   'ui/jingle-pizzi-07': { src: `${J}/Pizzicato jingles/jingles_PIZZI07.ogg`, from: K_JINGLES, rate: 24000 },
@@ -195,17 +222,19 @@ type SlotSpec = { default: string; candidates: Pick[] };
 /** Candidate ids are the file's base name. `default` is a candidate id or "synth". */
 const slots: Record<string, SlotSpec> = {
   fire: {
-    default: 'cannon-fire-thimras',
+    default: 'cannon-crack-thump-elevenlabs',
     candidates: [
+      { file: 'tank/cannon-crack-thump-elevenlabs', label: 'Small cannon, crack and thump (ElevenLabs)' },
       { file: 'tank/cannon-fire-thimras', label: 'Cannon fire (deep boom)' },
       { file: 'tank/bang-09-rubberduck', label: 'Firework bang (sharp)' },
       { file: 'tank/low-explosion-001', label: 'Low boom 1 s' },
     ],
   },
   explosion: {
-    default: 'explosion-crunch-001',
+    default: 'explosion-cartoon-puff-elevenlabs',
     candidates: [
       { file: 'tank/explosion-crunch-001', label: 'Crunchy explosion 1.4 s' },
+      { file: 'tank/explosion-cartoon-puff-elevenlabs', label: 'Cartoon boom and puff (ElevenLabs)' },
       { file: 'tank/explosion-crunch-000', label: 'Crunchy explosion 0.8 s' },
       { file: 'tank/explosion-crunch-003', label: 'Crunchy explosion 1.6 s' },
       { file: 'tank/low-explosion-001', label: 'Low boom 1 s' },
@@ -250,8 +279,9 @@ const slots: Record<string, SlotSpec> = {
     ],
   },
   land: {
-    default: 'impact-soft-heavy-003',
+    default: 'crate-thump-elevenlabs',
     candidates: [
+      { file: 'tank/crate-thump-elevenlabs', label: 'Heavy crate thump (ElevenLabs)' },
       { file: 'tank/impact-soft-heavy-003', label: 'Heavy soft thud' },
       { file: 'tank/impact-plate-heavy-001', label: 'Heavy plate impact' },
       { file: 'tank/impact-punch-heavy-000', label: 'Heavy punch thump' },
@@ -408,7 +438,7 @@ const slots: Record<string, SlotSpec> = {
       { file: 'ui/pluck-002', label: 'Pluck' },
     ],
   },
-  // Mahjong's tiles: made in code, no samples yet.
+  // Mahjong's tiles: made in code. ElevenLabs takes were tried and not kept (user, 2026-11-24).
   tileClack: { default: 'synth', candidates: [] },
   tileShuffle: { default: 'synth', candidates: [] },
   rotor: {
@@ -471,12 +501,12 @@ interface Built {
 }
 
 async function build(key: string, spec: FileSpec, downloads: string): Promise<Built> {
-  const pcm = await readAudio(path.join(downloads, spec.src));
+  const pcm = await readAudio(spec.from.inRepo ? path.join(ROOT, 'sfx-sources', spec.src) : path.join(downloads, spec.src));
   const sr = pcm.sampleRate;
   let x = pcm.data;
   const changes: string[] = [];
   const srcKind = spec.src.toLowerCase().endsWith('.wav') ? 'WAV' : 'Ogg Vorbis';
-  changes.push(`converted ${srcKind}${pcm.channels > 1 ? ' stereo' : ''} to 16-bit mono WAV at ${spec.rate / 1000} kHz`);
+  if (pcm.sampleRate !== spec.rate || pcm.channels > 1 || srcKind !== 'WAV') changes.push(`converted ${srcKind}${pcm.channels > 1 ? ' stereo' : ''} to 16-bit mono WAV at ${spec.rate / 1000} kHz`);
   const isLoop = !!spec.loop || !!spec.periodic;
 
   if (spec.loop) {
@@ -592,6 +622,7 @@ for (const [slot, s] of Object.entries(slots)) {
       `        author: ${JSON.stringify(spec.from.author)},`,
       `        duration: ${r.duration.toFixed(2)},`,
       `        gain: ${gain.toFixed(3)},`,
+      ...(spec.from.license ? [`        license: ${JSON.stringify(spec.from.license)},`] : []),
       ...(r.loop ? ['        loop: true,'] : []),
       '      },',
     );
@@ -601,8 +632,8 @@ for (const [slot, s] of Object.entries(slots)) {
 for (const key of Object.keys(files)) if (!used.has(key)) console.warn(`! ${key} is built but no slot uses it`);
 
 const manifest = `// Generated by scripts/sfx-build.ts: edit the lists there and re-run rather than editing this file.
-// Every file is CC0 (see CREDITS.md). \`gain\` puts each sample at the K-weighted loudness of the synth
-// version it replaces; \`default\` is the candidate the game plays unless this browser overrides it
+// Every file is CC0 unless it says otherwise (see CREDITS.md). \`gain\` puts each sample at the
+// K-weighted loudness of the synth version it replaces; \`default\` is the candidate the game plays unless this browser overrides it
 // (localStorage "tank.sfxPicks", set from the sound lab), or "synth" for the generated version.
 import type { SfxSlot } from './audio';
 
@@ -621,6 +652,8 @@ export interface SfxCandidate {
   gain: number;
   /** Seamless loop (ambience). */
   loop?: boolean;
+  /** When it isn't CC0 (the ElevenLabs ones). */
+  license?: string;
 }
 
 export interface SfxEntry {
@@ -640,16 +673,18 @@ fs.writeFileSync(path.join(ROOT, 'packages/client/src/sfx-manifest.ts'), manifes
 const rows = [...results.values()].map((r) => {
   const spec = files[r.key];
   const original = spec.src.split('/').pop();
-  return `| \`packages/client/public/${r.rel}\` | [${spec.from.pack}](${spec.from.url}), \`${original}\` | ${spec.from.author} | CC0 1.0 | ${DOWNLOADED} | ${r.changes} |`;
+  return `| \`packages/client/public/${r.rel}\` | [${spec.from.pack}](${spec.from.url}), \`${original}\` | ${spec.from.author} | ${spec.from.license ?? 'CC0 1.0'} | ${spec.from.date ?? DOWNLOADED} | ${r.changes} |`;
 });
 const credits = `# Credits
 
 ## Sound effects
 
 Every sample under \`packages/client/public/sfx/\` is dedicated to the public domain under
-[Creative Commons Zero (CC0 1.0)](https://creativecommons.org/publicdomain/zero/1.0/). Attribution
-isn't required, but thank you to the authors below, especially [Kenney](https://kenney.nl) for the
-bulk of them.
+[Creative Commons Zero (CC0 1.0)](https://creativecommons.org/publicdomain/zero/1.0/), except the
+few marked ElevenLabs: those were generated from a text prompt with
+[ElevenLabs](https://elevenlabs.io/sound-effects) on a paid (Starter) plan, which allows commercial
+use; the originals are in \`sfx-sources/elevenlabs/\`. Attribution isn't required, but thank you to
+the authors below, especially [Kenney](https://kenney.nl) for the bulk of them.
 
 The Kenney packs' own \`License.txt\` files state CC0; the OpenGameArt items are listed as CC0 on
 their pages. Files were processed by \`scripts/sfx-build.ts\` (generated table: re-run it rather
