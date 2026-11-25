@@ -78,7 +78,9 @@ ours out like it. Add a colour when something needs it; each one needs its own f
 - **Talking shows as rings** of the tile's own colour rippling out from a person's tile: their
   name tag and seat on Your table and their name tag in every card game (user 2026-11-23), as
   round a Jigsaw pointer. With less motion asked for, it's one steady ring. Only a list (who's on
-  the mic) uses the three little bars.
+  the mic) uses the three little bars. Someone counts as talking until 0.4 s after their voice
+  drops, so the rings carry on through the pauses between words instead of starting over, and
+  each ring is its own layer, so it never redraws the felt under it (2026-11-24).
 - **Playing cards are ivory card stock**, thin (a soft shadow close under them, no thick edge).
   - **Code draws everything that has to be exact:** corners, numbers, suit marks, the layouts of the
     number cards, and the layered Aces. Generated pictures get pips and corners wrong, so never
@@ -264,8 +266,9 @@ Mahjong.
   - **Between rounds:** everyone's hand, melds first, then the score sheet (headed Round), and
     Ready for the next round.
 - **Mahjong** (user, 2026-11-22/23; the user's phone mockups): Hong Kong style, 144 tiles, always
-  four (computers fill in), no passing and no card. **Points are a choice at the table**: without
-  them any four sets and a pair wins and the table counts wins; with them it's Hong Kong faan (3
+  four (computers fill in), no passing and no card. **The table picks a Game type** (user,
+  2026-11-24: one choice of three, not two): Learning, No points or Points. Without points
+  (Learning too) any four sets and a pair wins and the table counts wins; with points it's Hong Kong faan (3
   to win, limit hands allowed), the dealer keeps the deal on a win, and the table picks one round
   or a full game. Points are play points, never money. Seats come from Your table, which shows
   them counter-clockwise (the next player is on your right).
@@ -282,7 +285,9 @@ Mahjong.
     Dominoes (mirrored), all three the same thickness (never squeezed thinner on a narrow edge:
     user), and the wind letter turns with the name. **Face-up sets lie on
     kraft felt** everywhere, yours at the front of your hand (your flowers sit by your name); tap
-    someone's tiles to see their sets big. Each person's discards lie in front of them, mirrored
+    someone's tiles to see their sets big. The side players' sets lie sideways like their tiles
+    (user, 2026-11-24), each set a column, faces turned and in order the way their name reads,
+    when their edge has room; if not, they lie upright in rows. Each person's discards lie in front of them, mirrored
     (not a pinwheel), the one on offer lifted and bigger; "See all discards" shows everything,
     taken ones faded. The round's wind sits small in a corner; each tag has its seat's wind letter.
   - **The wall** is four sides of 18 stacks round a square, each running from one corner on past
@@ -311,14 +316,36 @@ Mahjong.
     tile's gap, sets at the front, a wider or narrower phone) they shrink a little rather than run
     onto a third row.
   - **Your turn:** the tile you drew sits a little apart, marked New. Tap a tile to lift it, then
-    Discard (or tap it again). Drag tiles into any order; a new hand starts sorted.
+    Discard (or tap it again, but not within half a second: a quick double tap from habit only
+    lifts it, user 2026-11-24). Drag tiles into any order; a new hand starts sorted, and your
+    order stays through the phone locking or the page reloading.
   - **Claims:** after every discard everyone waits 1.5-2 s, a little different each time, so a
     pause never gives away that someone could have taken it. Whoever can take it gets the buttons
     (the real words: Mahjong, Kong, Pung, Chow, and Pass) with a bar that runs down over 15 s (5
-    was far too short: user, 2026-11-23); the tile on offer shows in the line above. Two possible
+    was far too short: user, 2026-11-23), or a whole minute when you're the only person at the
+    table (user, 2026-11-24); the tile on offer shows in the line above. Two possible
     Chows show both. If you take your winning tile as a Pung or Chow instead of Mahjong, Mahjong is
     still there on your turn (user, 2026-11-23): it counts as winning on that discard, the set's
     tiles go back in your hand, and the discarder pays.
+  - **Your strip is always one size** (user, 2026-11-24): whatever buttons show (none, Discard,
+    Mahjong and Kong, the claims), they fit the room it has. Mahjong and Kong are seldom used, so
+    they sit side by side above a big Discard on tablets and computers, in one row with it on an
+    upright phone (whose button row is kept even when empty), and stacked small beside it on a
+    phone held sideways.
+  - **Learning Mode** (user, 2026-11-24), the Learning game type (always without points: the
+    reasons a hand can't win with points were left out until they can be tried). Every tile
+    someone else throws away (or adds to a Pung) puts a card over the table, never over your own
+    tiles: who threw it, the tile big with its name, then Pung, Chow, Kong, Mahjong and Pass, all
+    one size with Pass in its own colour, "3 of a kind", "Run" and "4 of a kind" under the first
+    three. Under them, room for a few lines explaining a choice that can't be made ("A Pung is
+    three of a kind: you'd need two 5 dots in your hand, and you have one."; a Chow only from the
+    player right before you; winds and dragons make no runs), with the tiles in your hand it's
+    about lit up, and you choose again. Then See all discards. No timer: the game waits for
+    everyone, and a person stalling it is fine. Pass on your winning tile asks "Are you sure?"
+    first; passing on a set you could have made says so afterwards in a note over your tiles, as
+    does losing a Chow to someone's Pung. On your own turn there's no card: Mahjong and Kong are
+    always beside Discard and explain themselves, throwing away a finished hand asks first, and a
+    Kong you could have made is noted. The explanations work from your own tiles only.
   - **A Pung, Chow or Kong is made obvious** (user, 2026-11-23): the word ("Pung!") pops up on a
     sunflower chip beside the player's name, the tile they took slides from the middle into their
     set, and the set sits lifted until it settles. Play waits 2.5 s meanwhile (a Kong declared on
@@ -334,7 +361,9 @@ Mahjong.
     roll by themselves after 6 s). Then the deal, as at a real table: from the dealer round the
     table, four tiles each, three times over, then one each and the dealer's extra; the wall
     opens handful by handful, everyone's tiles appear as they're dealt, each handful clicks, and
-    yours drop in from out of sight (never from above your name).
+    yours drop in from out of sight (never from above your name). The table holds still through
+    it all (user, 2026-11-24): every hand's room is kept from the start, tiles not dealt yet there
+    but unseen. Only flowers, shown once the deal is done, can still nudge a side player.
   - **Sounds:** tiles clack (made in code, `tileClack`, `tileShuffle` in audio.ts): every
     discard, three for a set taken, one per tile dealt, and the shuffle.
   - **After a hand:** the winner's tiles face up, and with points each item it scored with a

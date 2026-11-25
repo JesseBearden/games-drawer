@@ -244,14 +244,38 @@ const LIMIT_WHY: Record<string, string> = {
   'All Kongs': 'Four Kongs and a pair.',
   'Four concealed Pungs': 'Four Pungs made from your own tiles, none taken from a discard.',
   'Big four winds': 'A Pung of every wind.',
+  'Small four winds': 'Pungs of three winds and a pair of the fourth.',
   'All honours': 'Nothing but winds and dragons.',
   'All terminals': 'Nothing but 1s and 9s.',
   'Nine gates': '1-1-1-2-3-4-5-6-7-8-9-9-9 in one suit, plus any tile of that suit, all your own.',
 };
 
 /**
+ * A limit hand is worth MJ_LIMIT however many limits it makes, so they share one row ("All Kongs
+ * and Four concealed Pungs"): the rows a player sees always add up to the total.
+ */
+function limitScore(names: string[]): MjScore {
+  const name = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+  return { faan: MJ_LIMIT, limit: true, items: [{ name, faan: MJ_LIMIT, why: names.map((n) => LIMIT_WHY[n]).join(' ') }] };
+}
+
+/** What a winner's flowers and seasons are worth: each item 1 faan. */
+function flowerItems(flowers: readonly MjTile[], seatWind: number): MjScoreItem[] {
+  const f = flowers.map(mjIndex);
+  const out: MjScoreItem[] = [];
+  const add = (name: string, why: string) => out.push({ name, faan: 1, why });
+  if (!f.length) add('No flowers', 'No flowers or seasons all hand.');
+  if (f.includes(PLAY_KINDS + seatWind)) add('Your own flower', `Flower ${seatWind + 1} goes with your seat (${WIND_NAMES[seatWind]}).`);
+  if (f.includes(PLAY_KINDS + 4 + seatWind)) add('Your own season', `Season ${seatWind + 1} goes with your seat (${WIND_NAMES[seatWind]}).`);
+  if ([0, 1, 2, 3].every((k) => f.includes(PLAY_KINDS + k))) add('All four flowers', 'Every flower.');
+  if ([4, 5, 6, 7].every((k) => f.includes(PLAY_KINDS + k))) add('All four seasons', 'Every season.');
+  return out;
+}
+
+/**
  * What a winning hand is worth, read the way that scores most. Null if it isn't a winning hand.
- * Limit hands are worth MJ_LIMIT; nothing is worth more.
+ * Limit hands are worth MJ_LIMIT; nothing is worth more (an ordinary hand that adds up to more
+ * ends with an "Over the limit" row taking off the extra, so the rows still add up).
  */
 export function mjScore(w: MjWin): MjScore | null {
   const c = counts(w.concealed);
@@ -263,12 +287,11 @@ export function mjScore(w: MjWin): MjScore | null {
     concealed: m.concealed,
   }));
   const open = w.melds.some((m) => !m.concealed);
-  const limit = (names: string[]): MjScore => ({ faan: MJ_LIMIT, limit: true, items: names.map((name) => ({ name, faan: MJ_LIMIT, why: LIMIT_WHY[name] })) });
 
   const always: string[] = [];
   if (w.heavenly) always.push('Heavenly hand');
   if (w.earthly) always.push('Earthly hand');
-  if (w.melds.length === 0 && thirteenOrphans(c)) return limit([...always, 'Thirteen orphans']);
+  if (w.melds.length === 0 && thirteenOrphans(c)) return limitScore([...always, 'Thirteen orphans']);
 
   let best: MjScore | null = null;
   for (const shape of shapes(c, 4 - w.melds.length)) {
@@ -295,23 +318,20 @@ function scoreShape(w: MjWin, pair: number, sets: ShapeSet[], open: boolean, alw
   const limits = [...always];
   if (sets.every((s) => s.kong)) limits.push('All Kongs');
   if (pungs.length === 4 && pungs.every((s) => s.concealed)) limits.push('Four concealed Pungs');
-  if (pungs.filter((s) => isWind(s.tile)).length === 4) limits.push('Big four winds');
+  const windPungs = pungs.filter((s) => isWind(s.tile));
+  if (windPungs.length === 4) limits.push('Big four winds');
+  else if (windPungs.length === 3 && isWind(pair)) limits.push('Small four winds');
   if (tiles.every(honor)) limits.push('All honours');
   if (tiles.every(terminal)) limits.push('All terminals');
   if (!open && w.melds.length === 0 && nineGates(counts(w.concealed))) limits.push('Nine gates');
-  if (limits.length) return { faan: MJ_LIMIT, limit: true, items: limits.map((name) => ({ name, faan: MJ_LIMIT, why: LIMIT_WHY[name] })) };
+  if (limits.length) return limitScore(limits);
 
   const items: MjScoreItem[] = [];
   const add = (name: string, faan: number, why: string) => items.push({ name, faan, why });
   if (w.selfDrawn) add('Self-drawn', 1, 'You drew the winning tile yourself.');
   if (!open) add('Concealed hand', 1, 'No sets taken from anyone else’s discards.');
-  const flowers = w.flowers.map(mjIndex);
-  if (!flowers.length) add('No flowers', 1, 'No flowers or seasons all hand.');
-  if (flowers.includes(PLAY_KINDS + w.seatWind)) add('Your own flower', 1, `Flower ${w.seatWind + 1} goes with your seat (${WIND_NAMES[w.seatWind]}).`);
-  if (flowers.includes(PLAY_KINDS + 4 + w.seatWind)) add('Your own season', 1, `Season ${w.seatWind + 1} goes with your seat (${WIND_NAMES[w.seatWind]}).`);
-  if ([0, 1, 2, 3].every((k) => flowers.includes(PLAY_KINDS + k))) add('All four flowers', 1, 'Every flower.');
-  if ([4, 5, 6, 7].every((k) => flowers.includes(PLAY_KINDS + k))) add('All four seasons', 1, 'Every season.');
-  if (w.lastTile) add('Last tile', 1, 'Won on the very last tile of the wall.');
+  items.push(...flowerItems(w.flowers, w.seatWind));
+  if (w.lastTile) add('Last tile', 1, 'Won when the wall ran out: on its very last tile, or on the discard after it.');
   if (w.kongReplacement) add('Win on a Kong', 1, 'Won with the extra tile a Kong gave you.');
   if (w.robbedKong) add('Robbing a Kong', 1, 'Won on the tile someone added to make a Kong.');
   if (sets.every((s) => s.kind === 'chow')) add('All Chows', 1, 'Every set is a run.');
@@ -328,17 +348,14 @@ function scoreShape(w: MjWin, pair: number, sets: ShapeSet[], open: boolean, alw
     if (dragonPungs.length === 2 && isDragon(pair)) add('Small three dragons', 3, 'Pungs of two dragons and a pair of the third.');
     for (const s of dragonPungs) add('Dragon Pung', 1, `A Pung of ${['red', 'green', 'white'][s.tile - DRAGON0]} dragons.`);
   }
-  const windPungs = pungs.filter((s) => isWind(s.tile));
-  if (windPungs.length === 3 && isWind(pair)) add('Small four winds', MJ_LIMIT, 'Pungs of three winds and a pair of the fourth.');
-  else {
-    for (const s of windPungs) {
-      const wind = s.tile - WIND0;
-      if (wind === w.seatWind) add('Your seat’s wind', 1, `A Pung of ${WIND_NAMES[wind]}, your seat.`);
-      if (wind === w.prevailing) add('The table’s wind', 1, `A Pung of ${WIND_NAMES[wind]}, this round’s wind.`);
-    }
+  for (const s of windPungs) {
+    const wind = s.tile - WIND0;
+    if (wind === w.seatWind) add('Your seat’s wind', 1, `A Pung of ${WIND_NAMES[wind]}, your seat.`);
+    if (wind === w.prevailing) add('The table’s wind', 1, `A Pung of ${WIND_NAMES[wind]}, this round’s wind.`);
   }
-  const faan = Math.min(MJ_LIMIT, items.reduce((n, x) => n + x.faan, 0));
-  return { faan, items, limit: false };
+  const sum = items.reduce((n, x) => n + x.faan, 0);
+  if (sum > MJ_LIMIT) add('Over the limit', MJ_LIMIT - sum, `No hand counts for more than ${MJ_LIMIT} faan, so ${sum - MJ_LIMIT} of these don’t count.`);
+  return { faan: Math.min(MJ_LIMIT, sum), items, limit: false };
 }
 
 function nineGates(c: number[]): boolean {
@@ -358,6 +375,11 @@ export interface MjRules {
   points: boolean;
   /** With points: play all four winds' rounds, not just East. */
   full: boolean;
+  /**
+   * Learning Mode (user, 2026-11-24): every discard asks each person what they'd do with it, with
+   * no time limit, and explains anything that can't be done. Always without points.
+   */
+  learning?: boolean;
 }
 
 /** After a discard: what someone can do with it. */
@@ -860,24 +882,91 @@ function valuable(h: MahjongHand, seat: number, i: number) {
   return isDragon(i) || i === WIND0 + h.seatWind(seat) || i === WIND0 + h.prevailing;
 }
 
-/** With points, a computer leans towards one suit once most of its tiles are in it. */
+/**
+ * With points, a computer leans towards one suit once most of its tiles are in it, sooner once
+ * it has taken a set (an open hand has lost Concealed, and one suit is its likeliest way to score).
+ */
 function leanSuit(h: MahjongHand, seat: number): number | null {
   if (!h.rules.points) return null;
   const all = [...h.hands[seat], ...h.melds[seat].flatMap((m) => m.tiles)].map(mjIndex).filter(suited);
   const per = [0, 1, 2].map((s) => all.filter((i) => suitOf(i) === s).length);
   const top = per.indexOf(Math.max(...per));
   const chowElsewhere = h.melds[seat].some((m) => suitOf(mjIndex(m.tiles[0])) !== top && suited(mjIndex(m.tiles[0])));
-  return per[top] >= 8 && !chowElsewhere ? top : null;
+  const open = h.melds[seat].some((m) => !m.concealed);
+  return per[top] >= (open ? 6 : 8) && !chowElsewhere ? top : null;
 }
 
-/** Shanten and how many unseen tiles would improve it, for a 13-tile (or fewer) hand. */
-function quality(tiles: MjTile[], meldCount: number, left: number[]): { s: number; waits: number } {
+/** With points: what a Pung of this wind or dragon is worth to this seat. */
+function honourFaan(h: MahjongHand, seat: number, i: number) {
+  return (isDragon(i) ? 1 : 0) + (i === WIND0 + h.seatWind(seat) ? 1 : 0) + (i === WIND0 + h.prevailing ? 1 : 0);
+}
+
+/**
+ * With points: roughly how many faan a hand (its own tiles and its sets) can count on whatever it
+ * wins on, before Self-drawn: what's banked (flowers, Concealed, valuable Pungs) plus what it's well
+ * on the way to (a valuable pair, one suit, all Pungs). Under MJ_MIN_FAAN, opening the hand up
+ * leaves it nothing to win with.
+ */
+function route(h: MahjongHand, seat: number, tiles: readonly MjTile[], melds: readonly MjMeld[], left: number[]): number {
+  const c = counts(tiles);
+  const at = melds.map((m) => mjIndex(m.tiles[0]));
+  let f = flowerItems(h.flowers[seat], h.seatWind(seat)).length + (melds.every((m) => m.concealed) ? 1 : 0);
+  for (let i = WIND0; i < PLAY_KINDS; i++) {
+    const v = honourFaan(h, seat, i);
+    if (at.includes(i) || c[i] >= 3) f += v;
+    else if (c[i] === 2 && left[i]) f += v / 2;
+  }
+  // One suit: nothing in another suit, or little enough in the hand to throw away.
+  const per = [0, 1, 2].map((s) => c.slice(s * 9, s * 9 + 9).reduce((a, b) => a + b, 0));
+  for (const i of at) if (suited(i)) per[suitOf(i)] += 3;
+  const top = per.indexOf(Math.max(...per));
+  const off = per[0] + per[1] + per[2] - per[top];
+  if (!at.some((i) => suited(i) && suitOf(i) !== top)) f += off === 0 ? 3 : off <= 3 ? 1.5 : 0;
+  // All Pungs: no Chows, and enough Pungs and pairs that can still become them.
+  if (melds.every((m) => m.kind !== 'chow')) {
+    let sets = melds.length;
+    let pairs = 0;
+    for (let i = 0; i < PLAY_KINDS; i++) {
+      if (c[i] >= 3) sets++;
+      else if (c[i] === 2 && left[i]) pairs++;
+    }
+    if (sets + pairs >= 5) f += sets >= 3 ? 3 : 2;
+  }
+  return f;
+}
+
+/**
+ * With points: how much each tile that would finish a ready hand is worth waiting for: 4 if it
+ * can win on anyone's discard, 1 if only drawn yourself (Self-drawn adds the one faan it's
+ * short), 0 if it can't reach MJ_MIN_FAAN at all.
+ */
+function winValue(h: MahjongHand, seat: number, melds: MjMeld[]) {
+  const seatWind = h.seatWind(seat);
+  const base = { melds, flowers: h.flowers[seat], selfDrawn: false, seatWind, prevailing: h.prevailing, lastTile: false, kongReplacement: false, robbedKong: false, heavenly: false, earthly: false };
+  return (concealed: MjTile[], winTile: MjTile) => {
+    // Off a discard (Self-drawn would add one).
+    const faan = mjScore({ ...base, concealed, winTile })?.faan ?? 0;
+    return faan >= MJ_MIN_FAAN ? 4 : faan === MJ_MIN_FAAN - 1 ? 1 : 0;
+  };
+}
+
+/**
+ * Shanten and how many unseen tiles would improve it, for a 13-tile (or fewer) hand. With points
+ * (`value`), a ready hand's waits count by what they'd score, and a ready hand that can't win on
+ * any of them is no nearer than one a tile off ready.
+ */
+function quality(tiles: MjTile[], meldCount: number, left: number[], value?: (concealed: MjTile[], winTile: MjTile) => number): { s: number; waits: number } {
   const s = mjShanten(tiles, meldCount);
+  const c = counts(tiles);
+  // A tile with nothing of its own kind, or within two in its suit, can't help: skip it.
+  const near = (k: number) => (suited(k) ? [-2, -1, 0, 1, 2].some((d) => suitOf(k + d) === suitOf(k) && c[k + d] > 0) : c[k] > 0);
   let waits = 0;
   for (let k = 0; k < PLAY_KINDS; k++) {
-    if (!left[k]) continue;
-    if (mjShanten([...tiles, MJ_KINDS[k]], meldCount) < s) waits += left[k];
+    if (!left[k] || !near(k)) continue;
+    const more = [...tiles, MJ_KINDS[k]];
+    if (mjShanten(more, meldCount) < s) waits += left[k] * (s === 0 && value ? value(more, MJ_KINDS[k]) : 1);
   }
+  if (s === 0 && value && !waits) return { s: 1, waits: 0 };
   return { s, waits };
 }
 
@@ -887,12 +976,13 @@ export function mjBotDiscard(h: MahjongHand, seat: number): MjTile {
   const left = unseen(h, seat);
   const lean = leanSuit(h, seat);
   const melds = h.melds[seat].length;
+  const value = h.rules.points ? winValue(h, seat, h.melds[seat]) : undefined;
   let best: MjTile = hand[hand.length - 1];
   let bestScore = -Infinity;
   for (const t of new Set(hand)) {
     const rest = [...hand];
     rest.splice(rest.indexOf(t), 1);
-    const q = quality(rest, melds, left);
+    const q = quality(rest, melds, left, value);
     const i = mjIndex(t);
     let score = -q.s * 1000 + q.waits;
     // Loose winds and dragons that score nothing go first; ones that score are kept a while.
@@ -900,6 +990,8 @@ export function mjBotDiscard(h: MahjongHand, seat: number): MjTile {
     else if (terminal(i)) score += 1;
     if (lean !== null && suited(i) && suitOf(i) !== lean) score += 40;
     if (lean !== null && suitOf(i) === lean) score -= 40;
+    // With points, while it isn't ready: keep what scores (a valuable pair, one suit, all Pungs).
+    if (value && q.s > 0) score += 20 * Math.min(MJ_MIN_FAAN, route(h, seat, rest, h.melds[seat], left));
     if (score > bestScore) (bestScore = score), (best = t);
   }
   return best;
@@ -932,29 +1024,43 @@ export function mjBotClaim(h: MahjongHand, seat: number): MjClaim {
   const hand = h.hands[seat];
   const melds = h.melds[seat].length;
   const lean = leanSuit(h, seat);
-  // After taking it and throwing the best tile away, is the hand closer to complete?
-  const after = (remove: MjTile[]) => {
+  const points = h.rules.points;
+  const left = points ? unseen(h, seat) : [];
+  const taken = (kind: MjMeldKind, tiles: MjTile[]): MjMeld[] => [...h.melds[seat], { kind, tiles, from: h.lastDiscard!.seat, concealed: false }];
+  // After taking it and throwing the best tile away, is the hand closer to complete? With points,
+  // closer to a win: the set opens the hand (no more Concealed), so it must leave a way to
+  // MJ_MIN_FAAN, or a ready hand with a winning tile that scores enough.
+  const after = (remove: MjTile[], ms: MjMeld[]) => {
     const rest = [...hand];
     removeTiles(rest, remove);
+    const value = points ? winValue(h, seat, ms) : undefined;
     let s = Infinity;
     for (const d of new Set(rest)) {
       const r = [...rest];
       r.splice(r.indexOf(d), 1);
-      s = Math.min(s, mjShanten(r, melds + 1));
+      let k = mjShanten(r, melds + 1);
+      if (k === 0 && value) k = quality(r, melds + 1, left, value).s;
+      s = Math.min(s, k);
+      if (s <= 0) break;
     }
+    if (points && s > 0 && route(h, seat, rest, ms, left) < MJ_MIN_FAAN) return Infinity;
     return s;
   };
-  const current = mjShanten(hand, melds);
-  if (o.kong && mjShanten(hand.filter((x) => x !== t), melds + 1) <= current) return { t: 'kong' };
+  let current = mjShanten(hand, melds);
+  if (points && current === 0) current = quality(hand, melds, left, winValue(h, seat, h.melds[seat])).s;
+  const kongRest = hand.filter((x) => x !== t);
+  if (o.kong && mjShanten(kongRest, melds + 1) <= current) {
+    if (!points || valuable(h, seat, i) || route(h, seat, kongRest, taken('kong', [t, t, t, t]), left) >= MJ_MIN_FAAN) return { t: 'kong' };
+  }
   if (o.pung) {
-    if (h.rules.points && valuable(h, seat, i)) return { t: 'pung' };
-    if (lean === null || suitOf(i) === lean || honor(i)) if (after([t, t]) < current) return { t: 'pung' };
+    if (points && valuable(h, seat, i)) return { t: 'pung' };
+    if (lean === null || suitOf(i) === lean || honor(i)) if (after([t, t], taken('pung', [t, t, t])) < current) return { t: 'pung' };
   }
   for (const lo of o.chows) {
     if (lean !== null && suitOf(i) !== lean) break;
     const run = [0, 1, 2].map((k) => MJ_KINDS[mjIndex(lo) + k]);
-    run.splice(run.indexOf(t), 1);
-    if (after(run) < current) return { t: 'chow', chow: lo };
+    const mine = run.filter((x) => x !== t);
+    if (after(mine, taken('chow', run)) < current) return { t: 'chow', chow: lo };
   }
   return { t: 'pass' };
 }

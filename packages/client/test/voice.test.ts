@@ -712,3 +712,46 @@ describe('the mic itself', () => {
     expect(micUnsupportedText()).not.toMatch(/npm|dev:/);
   });
 });
+
+describe('who’s talking', () => {
+  it('stays talking through a short pause between words, and stops soon after', () => {
+    const said: string[][] = [];
+    const v = new Voice('me', { enabled: true, iceServers: [] }, { send: () => {}, toast: () => {}, micHelp: () => {}, changed: () => {}, speaking: (s) => said.push([...s].sort()) });
+    // Just enough of a running call for the meter: levels by analyser.
+    const levels: Record<string, number> = { mic: 0, bob: 0 };
+    const inner = v as unknown as { ctx: unknown; gate: unknown; micAnalyser: unknown; links: Map<string, unknown>; level(a: string): number; tick(): void };
+    inner.ctx = { currentTime: 0 };
+    inner.gate = { gain: { setTargetAtTime() {} } };
+    inner.micAnalyser = 'mic';
+    inner.links.set('bob', { analyser: 'bob' });
+    inner.level = (a) => levels[a];
+    let now = 1000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const tick = (ms: number) => {
+      now += ms;
+      inner.tick();
+    };
+    levels.bob = 0.1;
+    tick(60);
+    expect(said).toEqual([['bob']]);
+    // A pause between words: still talking, so the rings round the name carry on.
+    levels.bob = 0;
+    tick(60);
+    tick(250);
+    levels.bob = 0.1;
+    tick(60);
+    expect(said).toEqual([['bob']]);
+    // Done talking: the rings stop well under a second later.
+    levels.bob = 0;
+    for (let i = 0; i < 8; i++) tick(60);
+    expect(said).toEqual([['bob'], []]);
+    // Your own voice too, but never while you're muted.
+    levels.mic = 0.1;
+    tick(60);
+    expect(said.at(-1)).toEqual(['me']);
+    v.selfMuted = true;
+    tick(60);
+    expect(said.at(-1)).toEqual([]);
+    clock.mockRestore();
+  });
+});

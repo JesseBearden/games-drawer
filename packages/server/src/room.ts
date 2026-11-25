@@ -223,7 +223,7 @@ export class Room {
    */
   private setup: { pick: GameId | null; seats: (string | null)[]; ready: Set<string>; players: number } = { pick: null, seats: [], ready: new Set(), players: SEAT_COUNT };
   /** Mahjong's choices at the table (points, and with points how long). Kept between games. */
-  private mahjongRules: MjRules = { points: false, full: false };
+  private mahjongRules: MjRules = { points: false, full: false, learning: false };
 
   constructor(
     readonly code: string,
@@ -720,13 +720,18 @@ export class Room {
     this.broadcastTable();
   }
 
-  /** Mahjong: play with points or not, and with points, one round or all four. */
+  /** Mahjong: Learning Mode or not; play with points or not, and with points, one round or all four. */
   private setMahjongRules(p: Player, rules: MjRules) {
     if (this.game || this.setup.pick !== 'mahjong') return;
-    const full = rules.points && rules.full;
-    if (rules.points === this.mahjongRules.points && full === this.mahjongRules.full) return;
-    this.mahjongRules = { points: rules.points, full };
-    this.systemChat(`${p.name} chose ${rules.points ? `Mahjong with points, ${full ? 'a full game' : 'one round'}` : 'Mahjong without points'}.`);
+    // Learning Mode always plays without points.
+    const learning = !!rules.learning;
+    const points = rules.points && !learning;
+    const full = points && rules.full;
+    const was = this.mahjongRules;
+    if (points === was.points && full === was.full && learning === !!was.learning) return;
+    this.mahjongRules = { points, full, learning };
+    const what = learning ? 'Mahjong in Learning Mode' : points ? `Mahjong with points, ${full ? 'a full game' : 'one round'}` : 'Mahjong without points';
+    this.systemChat(`${p.name} chose ${what}.`);
     this.broadcastTable();
   }
 

@@ -38,6 +38,8 @@ const BOT_TURN_MS: [number, number] = [900, 1600];
 export const MJ_CLAIM_MIN_MS = 1500;
 export const MJ_CLAIM_SPREAD_MS = 500;
 export const MJ_CLAIM_MAX_MS = 15_000;
+/** With nobody else to keep waiting (everyone else a computer), a whole minute (user, 2026-11-24). */
+export const MJ_CLAIM_ALONE_MS = 60_000;
 /**
  * After a Pung, Chow or Kong, play waits this long before the next computer moves, so everyone
  * sees it happen: the word by the player's name, the tile sliding over, the set lifting (user,
@@ -223,7 +225,7 @@ export class MahjongGame implements ServerGame {
     this.hand = new MahjongHand(this.dealer, this.prevailing, this.rules, (n) => this.host.randomInt(n));
     this.opening = 'deal';
     this.openingUntil = this.host.now() + MJ_DICE_MS + MJ_DEAL_MS;
-    this.host.log('mahjong_hand', { hand: this.handNumber, dealer: this.dealer, points: this.rules.points });
+    this.host.log('mahjong_hand', { hand: this.handNumber, dealer: this.dealer, points: this.rules.points, learning: !!this.rules.learning });
   }
 
   /** A discard (or an added Kong) is on offer: open the window for taking it. */
@@ -236,8 +238,18 @@ export class MahjongGame implements ServerGame {
       if (this.botControls(seat)) answers[seat] = mjBotClaim(h, seat);
       else waiting.add(seat);
     }
+    // Learning Mode: every person is asked about every discard (whether or not they can take it),
+    // and there's no time limit.
+    const learning = !!this.rules.learning;
+    if (learning) {
+      const from = h.step === 'rob' ? h.robbing?.seat : h.lastDiscard?.seat;
+      for (let seat = 0; seat < 4; seat++) if (seat !== from && !this.botControls(seat)) waiting.add(seat);
+    }
     const minAt = now + MJ_CLAIM_MIN_MS + this.host.randomInt(MJ_CLAIM_SPREAD_MS + 1);
-    this.claim = { minAt, maxAt: waiting.size ? Math.max(minAt, now + MJ_CLAIM_MAX_MS) : minAt, answers, waiting };
+    // Playing alone against the computers, there's nobody to keep waiting: take your time.
+    const alone = [0, 1, 2, 3].filter((s) => !this.botControls(s)).length === 1;
+    const most = learning ? Infinity : alone ? MJ_CLAIM_ALONE_MS : MJ_CLAIM_MAX_MS;
+    this.claim = { minAt, maxAt: waiting.size ? Math.max(minAt, now + most) : minAt, answers, waiting };
   }
 
   private resolveClaims() {
@@ -442,7 +454,9 @@ export class MahjongGame implements ServerGame {
     const offer = playing && h.step === 'rob' && h.robbing ? { ...h.robbing, kong: true } : playing && h.step === 'claim' && h.lastDiscard ? { ...h.lastDiscard, kong: false } : null;
     const c = this.claim;
     const options = offer && seat !== null && c ? h!.options(seat) : null;
-    const canClaim = !!options && (options.win || options.kong || options.pung || options.chows.length > 0);
+    // (Learning Mode asks everyone, so everyone asked gets the choices, even with nothing to take.)
+    const asked = !!this.rules.learning && seat !== null && !!c && (c.waiting.has(seat) || !!c.answers[seat]) && !!offer && offer.seat !== seat;
+    const canClaim = !!options && (asked || options.win || options.kong || options.pung || options.chows.length > 0);
     const answer = seat !== null && c?.answers[seat] && !c.waiting.has(seat) && canClaim ? c.answers[seat]!.t : null;
     return {
       seat,
@@ -478,7 +492,7 @@ export class MahjongGame implements ServerGame {
       offer,
       options: canClaim && !answer ? options : null,
       answered: answer,
-      claimMs: canClaim && !answer && c ? Math.max(0, c.maxAt - now) : null,
+      claimMs: canClaim && !answer && c && c.maxAt !== Infinity ? Math.max(0, c.maxAt - now) : null,
       self: playing && seat !== null && !c ? h.selfOptions(seat) : null,
       wall: { size: h?.wallSize ?? 144, left: h ? h.wall.length : 144, front: h?.front ?? 0, back: h?.back ?? 0, breakAt: this.breakAt },
       log: h ? h.log.map((d) => ({ ...d })) : [],

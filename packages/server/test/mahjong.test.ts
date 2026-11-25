@@ -4,7 +4,7 @@ import { ChatModerator } from '../src/chat';
 import { MemoryLog } from '../src/eventlog';
 import { RoomManager } from '../src/manager';
 import type { Conn } from '../src/room';
-import { MahjongGame, MJ_CLAIM_MAX_MS, MJ_CLAIM_MIN_MS, MJ_CLAIM_SPREAD_MS } from '../src/games/mahjong';
+import { MahjongGame, MJ_CLAIM_ALONE_MS, MJ_CLAIM_MAX_MS, MJ_CLAIM_MIN_MS, MJ_CLAIM_SPREAD_MS } from '../src/games/mahjong';
 
 class FakeConn implements Conn {
   sent: ServerMessage[] = [];
@@ -43,7 +43,7 @@ function joinPrivate(mgr: RoomManager, session: string, code?: string) {
 }
 
 /** Two people at a table who pick Mahjong (with the given choices) and both say they're ready. */
-function table(rules?: { points: boolean; full: boolean }) {
+function table(rules?: { points: boolean; full: boolean; learning?: boolean }) {
   const env = setup();
   const a = joinPrivate(env.mgr, 'session-aaaa');
   const b = joinPrivate(env.mgr, 'session-bbbb', a.room.code);
@@ -126,15 +126,35 @@ describe('Mahjong at a table', () => {
   it('nobody ever sees anyone else’s tiles or the wall', () => {
     const env = table();
     playPeople(env, () => env.game.phase === 'playing' && (env.game.hand?.discardsMade ?? 0) >= 12);
-    const { a, game } = env;
-    const v = a.conn.views().at(-1)!;
+    const { a, b, game } = env;
     const h = game.hand!;
-    expect(v.tiles.sort()).toEqual([...h.hands[0]].sort());
-    // Other views only carry counts.
-    const json = JSON.stringify(v);
-    expect(json).not.toContain('"wall":[');
-    expect(v.seats.map((s) => s.tiles)).toEqual(h.hands.map((x) => x.length));
-    expect(JSON.stringify(v.result)).toBe('null');
+    // Every view either person was sent, through the deal, turns and tiles on offer.
+    for (const [who, seat] of [[a, 0], [b, 1]] as const) {
+      const views = who.conn.views();
+      expect(views.some((v) => v.offer)).toBe(true);
+      for (const v of views) {
+        // Everyone else's tiles, and the wall, are only ever counted.
+        for (const s of v.seats) expect(typeof s.tiles).toBe('number');
+        for (const x of Object.values(v.wall)) expect(typeof x).toBe('number');
+        // (Before b has a seat, b watches: and sees no tiles at all.)
+        if (v.seat === null) {
+          expect([v.tiles, v.drawn, v.options, v.self]).toEqual([[], null, null, null]);
+          continue;
+        }
+        expect(v.seat).toBe(seat);
+        expect(v.tiles).toHaveLength(v.seats[seat].tiles);
+        // No hand is shown before it's over; the tile just drawn only to whoever drew it.
+        if (v.phase === 'playing') expect(v.result).toBeNull();
+        if (v.drawn) expect(v.turn).toBe(seat);
+        if (v.self) expect(v.turn).toBe(seat);
+        // The buttons (and the time to use them) only go to someone who can take the tile.
+        if (v.options) expect(v.options.win || v.options.kong || v.options.pung || v.options.chows.length > 0).toBe(true);
+        if (v.claimMs !== null) expect(v.options).not.toBeNull();
+      }
+      // And the tiles listed are exactly the ones held.
+      expect([...views.at(-1)!.tiles].sort()).toEqual([...h.hands[seat]].sort());
+    }
+    expect(a.conn.views().at(-1)!.seats.map((s) => s.tiles)).toEqual(h.hands.map((x) => x.length));
   });
 
   it('after a discard, waits 1.5-2 s even when nobody can take it', () => {
@@ -173,6 +193,19 @@ describe('Mahjong at a table', () => {
     expect(env.game.claim).toBe(c);
     run(env, 800);
     expect(env.game.claim).not.toBe(c);
+  });
+
+  it('one person alone with the computers gets a whole minute to decide', () => {
+    const env = setup();
+    const a = joinPrivate(env.mgr, 'session-aaaa');
+    a.room.handle('session-aaaa', { t: 'pick', game: 'mahjong' });
+    a.room.handle('session-aaaa', { t: 'sit', seat: 0 });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    const alone = { ...env, a, b: a, game: a.room.game as MahjongGame };
+    playPeople(alone, () => !!alone.game.claim?.waiting.has(0));
+    const c = alone.game.claim!;
+    expect(c.maxAt - env.clock.now).toBe(MJ_CLAIM_ALONE_MS);
+    expect(a.conn.views().at(-1)!.claimMs).toBe(MJ_CLAIM_ALONE_MS);
   });
 
   it('without points: hands go on with the deal passing, and wins are counted', () => {
@@ -231,12 +264,61 @@ describe('Mahjong at a table', () => {
     const env = setup();
     const a = joinPrivate(env.mgr, 'session-aaaa');
     a.room.handle('session-aaaa', { t: 'mj-rules', points: true, full: true });
-    expect(a.room.tableSetup().mahjong).toEqual({ points: false, full: false });
+    expect(a.room.tableSetup().mahjong).toEqual({ points: false, full: false, learning: false });
     a.room.handle('session-aaaa', { t: 'pick', game: 'mahjong' });
     a.room.handle('session-aaaa', { t: 'mj-rules', points: true, full: true });
-    expect(a.room.tableSetup().mahjong).toEqual({ points: true, full: true });
+    expect(a.room.tableSetup().mahjong).toEqual({ points: true, full: true, learning: false });
     // A full game only means anything with points.
     a.room.handle('session-aaaa', { t: 'mj-rules', points: false, full: true });
-    expect(a.room.tableSetup().mahjong).toEqual({ points: false, full: false });
+    expect(a.room.tableSetup().mahjong).toEqual({ points: false, full: false, learning: false });
+    // Learning Mode always plays without points.
+    a.room.handle('session-aaaa', { t: 'mj-rules', points: true, full: true, learning: true });
+    expect(a.room.tableSetup().mahjong).toEqual({ points: false, full: false, learning: true });
+  });
+
+  it('Learning Mode: every discard asks each person, whether or not they can take it, with no time limit', () => {
+    const env = setup();
+    const a = joinPrivate(env.mgr, 'session-aaaa');
+    a.room.handle('session-aaaa', { t: 'pick', game: 'mahjong' });
+    a.room.handle('session-aaaa', { t: 'mj-rules', points: false, full: false, learning: true });
+    a.room.handle('session-aaaa', { t: 'sit', seat: 0 });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    const alone = { ...env, a, b: a, game: a.room.game as MahjongGame };
+    let asked = 0;
+    let nothingToTake = 0;
+    playPeople(alone, () => {
+      const c = alone.game.claim;
+      const h = alone.game.hand;
+      if (!c || !h || h.step !== 'claim' || h.lastDiscard?.seat === 0 || !c.waiting.has(0)) return false;
+      // Asked: the choices (even with nothing to take), and no timer.
+      const v = a.conn.views().at(-1)!;
+      expect(v.options).not.toBeNull();
+      expect(v.claimMs).toBeNull();
+      expect(c.maxAt).toBe(Infinity);
+      asked++;
+      if (!h.claimants().includes(0)) nothingToTake++;
+      // The game waits, however long it takes.
+      run(alone, 120_000);
+      expect(alone.game.claim).toBe(c);
+      send(a.room, 'session-aaaa', { t: 'mj-claim', claim: 'pass' });
+      run(alone, MJ_CLAIM_MIN_MS + MJ_CLAIM_SPREAD_MS + 100);
+      expect(alone.game.claim).not.toBe(c);
+      return asked >= 3 && nothingToTake > 0;
+    });
+    expect(asked).toBeGreaterThanOrEqual(3);
+    expect(nothingToTake).toBeGreaterThan(0);
+  });
+
+  it('Learning Mode: your own discards don’t ask you', () => {
+    const env = setup();
+    const a = joinPrivate(env.mgr, 'session-aaaa');
+    a.room.handle('session-aaaa', { t: 'pick', game: 'mahjong' });
+    a.room.handle('session-aaaa', { t: 'mj-rules', points: false, full: false, learning: true });
+    a.room.handle('session-aaaa', { t: 'sit', seat: 0 });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    const alone = { ...env, a, b: a, game: a.room.game as MahjongGame };
+    playPeople(alone, () => !!alone.game.claim && alone.game.hand?.lastDiscard?.seat === 0 && alone.game.hand.step === 'claim');
+    expect(alone.game.claim!.waiting.has(0)).toBe(false);
+    expect(a.conn.views().at(-1)!.options).toBeNull();
   });
 });

@@ -134,14 +134,24 @@ export class LobbyView implements View {
     if (key && !this.el.contains(document.activeElement)) this.el.querySelector<HTMLElement>(key)?.focus({ preventScroll: true });
   }
 
-  /** Mahjong's choices: points or not, and with points, how long. Anyone can change them. */
+  /**
+   * Mahjong's choices (user, 2026-11-24: one Game type, not separate Learning Mode and Points):
+   * Learning (always without points), No points or Points, and with points, how long. Anyone can
+   * change them.
+   */
   private mahjongHtml() {
     const r = this.table.mahjong;
     const choice = (attr: string, value: string, on: boolean, label: string) =>
       `<button class="pc-btn ${on ? 'pc-btn-main' : 'pc-btn-plain'}" ${attr}="${value}" role="radio" aria-checked="${on}" type="button">${label}</button>`;
-    let html = '<section class="tb-mj" data-key="mahjong"><h2 class="pc-h3">Points</h2><div class="tb-count tb-mj-choice" role="radiogroup" aria-label="Points">';
-    html += choice('data-mj-points', '0', !r.points, 'No points') + choice('data-mj-points', '1', r.points, 'With points');
-    html += `</div><p class="tb-sub">${r.points ? 'Hong Kong scoring: each hand needs at least 3 points to win, and the end of each hand shows what it was worth.' : 'Any four sets and a pair wins. The table counts who won each hand.'}</p>`;
+    const type = r.learning ? 'learning' : r.points ? 'points' : 'plain';
+    let html = '<section class="tb-mj" data-key="mahjong"><h2 class="pc-h3">Game type</h2><div class="tb-count tb-mj-choice" role="radiogroup" aria-label="Game type">';
+    html += choice('data-mj-type', 'learning', type === 'learning', 'Learning') + choice('data-mj-type', 'plain', type === 'plain', 'No points') + choice('data-mj-type', 'points', type === 'points', 'Points');
+    const about = {
+      learning: 'Every tile thrown away asks what you’d do with it, with no timer, and explains anything that can’t be done. Any four sets and a pair wins.',
+      plain: 'Any four sets and a pair wins. The table counts who won each hand.',
+      points: 'Hong Kong scoring: each hand needs at least 3 points to win, and the end of each hand shows what it was worth.',
+    }[type];
+    html += `</div><p class="tb-sub">${about}</p>`;
     if (r.points) {
       html += '<h2 class="pc-h3">How long?</h2><div class="tb-count tb-mj-choice" role="radiogroup" aria-label="How long">';
       html += choice('data-mj-full', '0', !r.full, 'One round') + choice('data-mj-full', '1', r.full, 'Full game');
@@ -234,9 +244,9 @@ export class LobbyView implements View {
       this.shell.pickGame(game);
       return;
     }
-    const mjPoints = t.closest<HTMLElement>('[data-mj-points]')?.dataset.mjPoints;
-    if (mjPoints !== undefined) {
-      this.shell.setMahjongRules({ points: mjPoints === '1', full: this.table.mahjong.full });
+    const mjType = t.closest<HTMLElement>('[data-mj-type]')?.dataset.mjType;
+    if (mjType !== undefined) {
+      this.shell.setMahjongRules({ points: mjType === 'points', full: mjType === 'points' && this.table.mahjong.full, learning: mjType === 'learning' });
       return;
     }
     const mjFull = t.closest<HTMLElement>('[data-mj-full]')?.dataset.mjFull;

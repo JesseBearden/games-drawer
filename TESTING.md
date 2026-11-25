@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-23 (Mahjong)_
+_Last updated: 2026-11-24 (Mahjong Learning Mode)_
 
 ## Getting set up
 
@@ -19,9 +19,62 @@ _Last updated: 2026-11-23 (Mahjong)_
       shell hitting is a short cartoon boom and puff (the old one felt too big). In a real game,
       do they sit well with the rest? Is the explosion still too loud, now that it's smaller?
 
+## Mahjong Learning Mode (2026-11-24)
+
+- [ ] **Game type:** at your table pick Mahjong: one choice, Learning / No points / Points
+      (How long? shows only with Points). Do the three lines under it read well?
+- [ ] **The card:** every tile a computer throws away brings up the card over the table, with
+      your tiles still in view. Try each choice when it can't be done: does each explanation make
+      sense, and do the right tiles in your hand light up? Is anything confusing for a beginner?
+- [ ] **Pass:** pass on a tile you could have taken for a set: a yellow note over your tiles
+      says what you could have made (tap it to close it). On your winning tile, Pass asks first.
+- [ ] **Your own turn:** Mahjong and Kong are always there; tapping one you can't use explains
+      it in the yellow note. Try throwing away a finished hand: it asks first.
+- [ ] **Phones:** upright and sideways, everything on the card fits without scrolling.
+- [ ] **With two people** (two tabs): both get the card for each discard; the game waits for both.
+
+## Mahjong table changes (2026-11-24)
+
+- [ ] **Side players' sets lie sideways** like their tiles when there's room (upright rows when
+      not). Do they read well, turned the way the name reads?
+- [ ] **The opening holds still:** through the shuffle, wall and deal nothing on the table moves
+      (only flowers appearing at the end can nudge a side player).
+- [ ] **Someone else makes a Pung:** the table no longer jumps up. Does the side player's column
+      shifting a little as their set appears bother you? (It can be held still.)
+- [ ] **Alone with the computers:** the claim bar runs a whole minute.
+- [ ] **Your strip stays one size** on your turn and off it, on the iPad, a phone upright and a
+      phone sideways (Mahjong and Kong now sit beside Discard). Sideways they're small: easy
+      enough to tap?
+
+## Fixes from the code review (2026-11-24)
+
+- [ ] **Mahjong, double tap:** on your turn, double-tap a tile quickly, the way your wife did.
+      It should only lift; a single tap on it after that throws it away. Does half a second feel
+      right, or too long?
+- [ ] **Mahjong, your order stays:** drag your tiles into an order, lock the phone (or switch
+      apps) for a bit, come back. Same order? Also while dragging: hold a tile still while the
+      computers play on; it shouldn't jump out from under your finger.
+- [ ] **Mahjong, the claim bar** (two people): when you both could take a tile and the other
+      passes, your bar keeps running down smoothly instead of jumping ahead.
+- [ ] **Mahjong, after a hand:** See the table, then See all discards: the sheet opens; Close goes
+      back to the table, and nothing pops up over the next hand's shuffle or dice.
+- [ ] **Mahjong, long names:** a long name in the line saying what's happening ("… threw away")
+      ends in "…" rather than breaking over two lines.
+- [ ] **Mahjong with points, the computers:** play a round with points. The computers should win
+      more often now (before, about one hand in four ended with nobody winning; now about one
+      in eight), and they should take fewer Chows that leave them nothing to score.
+- [ ] **Mahjong with points, the list at the end:** the points listed always add up to the total.
+      A hand worth more than 10 shows a last line, "Over the limit", taking off the extra; two
+      limit hands at once share one line worth 10.
+- [ ] **Talking rings** (two devices with mics): while someone talks steadily, do the rings flow
+      on through the pauses between words instead of restarting? They should stop soon after
+      they finish.
+- [ ] **Tanks on an Android phone held sideways** (or Windows at 125%): the battlefield eases
+      to follow you again, without jumping each time the ground changes height.
+
 ## Newest: Mahjong (2026-11-23)
 
-- [ ] **Your table:** pick Mahjong. Points (No points / With points) and, with points, How long
+- [ ] **Your table:** pick Mahjong. Game type (Learning / No points / Points) and, with points, How long
       (One round / Full game) show above the seats, and the seats go round the other way (the
       next player on your right). Do the words make sense?
 - [ ] **The opening** (a phone upright): on an empty table the tiles swirl round in rings without

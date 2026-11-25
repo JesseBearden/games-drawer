@@ -552,6 +552,10 @@ body.pad-mode .pc-choice:has(input:focus) {
   outline: 3px solid var(--fc);
   outline-offset: var(--ring-w, 0px);
   animation: pc-ripple 1.4s ease-out infinite;
+  /* Each ring gets a layer of its own: growing it then redraws just the thin ring each frame,
+     not the felt tile and its shadows underneath (a ring has to grow by the same 14px on every
+     side, which a scale can't do on a long, thin tag). */
+  will-change: transform;
 }
 :is(.pc-tag, .tb-seat).is-talking .pc-talk::after,
 #game .ht-seat.speaking .pc-talk::after {

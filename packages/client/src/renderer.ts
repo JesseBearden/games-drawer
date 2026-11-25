@@ -48,11 +48,23 @@ export class Renderer {
 
   private skyPattern: CanvasPattern | null;
 
-  resize() {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  /**
+   * The canvas's pixel size for its size on screen. resize() and syncSize() both measure here, the
+   * same way: measured two ways (one rounded to whole CSS pixels first), a screen whose size isn't
+   * whole CSS pixels (many Android phones, Windows at 125%) never matched, and the canvas was
+   * resized and the camera snapped every frame.
+   */
+  private wantedSize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const r = this.canvas.getBoundingClientRect();
-    this.canvas.width = Math.round(r.width * this.dpr);
-    this.canvas.height = Math.round(r.height * this.dpr);
+    return { dpr, w: Math.round(r.width * dpr), h: Math.round(r.height * dpr) };
+  }
+
+  resize() {
+    const s = this.wantedSize();
+    this.dpr = s.dpr;
+    this.canvas.width = s.w;
+    this.canvas.height = s.h;
   }
 
   /**
@@ -60,11 +72,11 @@ export class Renderer {
    * bars away grows it a little each frame, before any resize event), match it. True if it did.
    */
   syncSize(): boolean {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    const w = Math.round(this.canvas.clientWidth * dpr);
-    const h = Math.round(this.canvas.clientHeight * dpr);
-    if (w === this.canvas.width && h === this.canvas.height && dpr === this.dpr) return false;
-    this.resize();
+    const s = this.wantedSize();
+    if (s.w === this.canvas.width && s.h === this.canvas.height && s.dpr === this.dpr) return false;
+    this.dpr = s.dpr;
+    this.canvas.width = s.w;
+    this.canvas.height = s.h;
     return true;
   }
 

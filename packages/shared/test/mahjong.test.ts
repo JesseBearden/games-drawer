@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MahjongHand,
   mjBotClaim,
+  mjBotDiscard,
   mjBotTurn,
   mjIsComplete,
   mjScore,
@@ -14,6 +15,7 @@ import {
   Rng,
   type MjMeld,
   type MjRules,
+  type MjScore,
   type MjTile,
   type MjWin,
 } from '../src';
@@ -42,6 +44,9 @@ function setHand(hands: string[], opts: { rules?: MjRules; wall?: string; turn?:
   h.discardsMade = 5;
   return h;
 }
+
+/** What the rows of a score add up to. */
+const rows = (s: MjScore) => s.items.reduce((n, i) => n + i.faan, 0);
 
 const win = (w: Partial<MjWin> & { concealed: MjTile[] }): MjWin => ({
   melds: [],
@@ -150,6 +155,91 @@ describe('points (faan)', () => {
   it('every item explains itself', () => {
     const s = mjScore(win({ concealed: T('ws ws ws we we we dr dr dr b1 b2 b3 c5 c5'), selfDrawn: true, winTile: 'c5' }))!;
     for (const i of s.items) expect(i.why.length).toBeGreaterThan(5);
+  });
+
+  it('Small four winds is a limit hand: one row, the limit', () => {
+    const s = mjScore(win({ concealed: T('we we we ws ws ws ww ww ww wn wn d1 d2 d3') }))!;
+    expect(s).toMatchObject({ limit: true, faan: MJ_LIMIT });
+    expect(s.items.map((i) => [i.name, i.faan])).toEqual([['Small four winds', MJ_LIMIT]]);
+    expect(rows(s)).toBe(s.faan);
+  });
+
+  it('several limits at once still show as one row worth the limit', () => {
+    const kong = (t: MjTile): MjMeld => ({ kind: 'kong', tiles: [t, t, t, t], from: null, concealed: true });
+    const s = mjScore(win({ concealed: T('c9 c9'), melds: [kong('d1'), kong('d2'), kong('b5'), kong('dr')], selfDrawn: true, winTile: 'c9' }))!;
+    expect(s.limit).toBe(true);
+    expect(s.items).toHaveLength(1);
+    expect(s.items[0]).toMatchObject({ name: 'All Kongs and Four concealed Pungs', faan: MJ_LIMIT });
+    expect(s.items[0].why).toContain('Four Kongs');
+    expect(s.items[0].why).toContain('none taken from a discard');
+    const orphans = mjScore(win({ concealed: T('d1 d9 b1 b9 c1 c9 we ws ww wn dr dg dw dw'), selfDrawn: true, heavenly: true }))!;
+    expect(orphans.items.map((i) => [i.name, i.faan])).toEqual([['Heavenly hand and Thirteen orphans', MJ_LIMIT]]);
+  });
+
+  it('an ordinary hand over the limit says so in a row, so the rows still add up', () => {
+    // Self-drawn 1, No flowers 1, All Pungs 3, Pure one suit 7: 12, worth the limit of 10.
+    const melds: MjMeld[] = [{ kind: 'pung', tiles: T('d7 d7 d7'), from: 2, concealed: false }];
+    const s = mjScore(win({ concealed: T('d1 d1 d1 d3 d3 d3 d5 d5 d5 d9 d9'), melds, selfDrawn: true, winTile: 'd9', flowers: [] }))!;
+    expect(s).toMatchObject({ faan: MJ_LIMIT, limit: false });
+    expect(s.items.at(-1)).toMatchObject({ name: 'Over the limit', faan: -2 });
+    expect(rows(s)).toBe(MJ_LIMIT);
+  });
+
+  it('the rows always add up to the total, on any winning hand', () => {
+    const r = new Rng(2026);
+    const pick = (n: number) => Math.floor(r.next() * n);
+    let checked = 0;
+    let capped = 0;
+    let limits = 0;
+    for (let k = 0; k < 4000; k++) {
+      // Half the time one suit and the honours, so big hands come up too.
+      const suit = pick(3) * 9;
+      const pool = pick(2) ? MJ_KINDS.slice(0, 34) : [...MJ_KINDS.slice(suit, suit + 9), ...MJ_KINDS.slice(27, 34)];
+      const used = new Map<MjTile, number>();
+      const take = (t: MjTile, n: number) => (used.get(t) ?? 0) + n <= 4 && !!used.set(t, (used.get(t) ?? 0) + n);
+      const concealed: MjTile[] = [];
+      const melds: MjMeld[] = [];
+      let ok = true;
+      for (let s = 0; s < 4 && ok; s++) {
+        const i = MJ_KINDS.indexOf(pool[pick(pool.length)]);
+        const chow = i < 27 && i % 9 <= 6 && pick(2) === 0;
+        const tiles = chow ? [0, 1, 2].map((d) => MJ_KINDS[i + d]) : new Array<MjTile>(pick(6) === 0 ? 4 : 3).fill(MJ_KINDS[i]);
+        ok = chow ? tiles.every((t) => take(t, 1)) : take(tiles[0], tiles.length);
+        if (tiles.length === 4) {
+          const own = pick(2) === 0;
+          melds.push({ kind: 'kong', tiles, from: own ? null : 1, concealed: own });
+        } else if (pick(3) === 0) melds.push({ kind: chow ? 'chow' : 'pung', tiles, from: 1, concealed: false });
+        else concealed.push(...tiles);
+      }
+      const pair = pool[pick(pool.length)];
+      if (!ok || !take(pair, 2)) continue;
+      concealed.push(pair, pair);
+      const s = mjScore({
+        concealed,
+        melds,
+        flowers: MJ_KINDS.slice(34).filter(() => pick(4) === 0),
+        winTile: concealed[pick(concealed.length)],
+        selfDrawn: pick(2) === 0,
+        seatWind: pick(4),
+        prevailing: pick(4),
+        lastTile: pick(8) === 0,
+        kongReplacement: false,
+        robbedKong: false,
+        heavenly: pick(200) === 0,
+        earthly: false,
+      })!;
+      expect(s).not.toBeNull();
+      expect(rows(s)).toBe(s.faan);
+      expect(s.faan).toBeLessThanOrEqual(MJ_LIMIT);
+      if (s.limit) expect(s.items).toEqual([expect.objectContaining({ faan: MJ_LIMIT })]);
+      checked++;
+      if (s.items.some((i) => i.name === 'Over the limit')) capped++;
+      if (s.limit) limits++;
+    }
+    // Plenty of hands, including ones over the limit and limit hands.
+    expect(checked).toBeGreaterThan(2000);
+    expect(capped).toBeGreaterThan(10);
+    expect(limits).toBeGreaterThan(10);
   });
 });
 
@@ -326,9 +416,38 @@ describe('the computer', () => {
         }
         expect(h.step).toBe('done');
         if (h.result!.winner !== null) wins++;
+        if (h.result!.score) expect(rows(h.result!.score)).toBe(h.result!.score.faan);
       }
-      // They do win, most hands.
-      expect(wins).toBeGreaterThan(rules.points ? 4 : 12);
+      // They do win, most hands; with points too (they used to win 16 of these 25, now 24).
+      expect(wins).toBeGreaterThan(rules.points ? 19 : 12);
+    }
+  });
+
+  it('with points, a computer won’t open its hand for a set that leaves nothing to score', () => {
+    // Seat 1 (South, a flower that isn't theirs) could Chow d1-d2-d3 and be ready, but on a
+    // plain open hand of runs that wins only 1 or 2 faan: it stays concealed instead.
+    const hands = ['d3 we', 'd1 d2 b4 b5 b6 c2 c3 c4 c7 c8 d8 d8 b9', 'd7', 'd8'];
+    for (const rules of [NO_POINTS, POINTS]) {
+      const h = setHand(hands, { rules });
+      h.flowers[1] = ['f3'];
+      h.discard(0, 'd3');
+      expect(h.options(1).chows).toEqual(['d1']);
+      expect(mjBotClaim(h, 1)).toEqual(rules.points ? { t: 'pass' } : { t: 'chow', chow: 'd1' });
+    }
+    // A dragon is still worth a Pung.
+    const h = setHand(['dr we', 'd1 d2 b4 b5 b6 c2 c3 c4 c7 c8 dr dr b9', 'd7', 'd8'], { rules: POINTS });
+    h.discard(0, 'dr');
+    expect(mjBotClaim(h, 1)).toEqual({ t: 'pung' });
+  });
+
+  it('with points, a ready computer waits on a tile that scores enough to win', () => {
+    // Throwing b7 waits on b6 or b9 (2 faan: not enough off a discard); throwing b8 waits on b7
+    // or the red dragon, and the dragon makes 3. Without points the bigger wait wins.
+    const hand = 'd8 d8 d8 b3 b4 b5 b7 b7 b8 c7 c8 c9 dr dr';
+    for (const rules of [NO_POINTS, POINTS]) {
+      const h = setHand(['c5 we', hand, 'd7', 'd8'], { rules, turn: 1 });
+      h.flowers[1] = ['f2'];
+      expect(mjBotDiscard(h, 1)).toBe(rules.points ? 'b8' : 'b7');
     }
   });
 });
@@ -342,7 +461,7 @@ describe('messages', () => {
     expect(parseGameInput({ t: 'mj-claim', claim: 'pung', extra: 1 })).toEqual({ t: 'mj-claim', claim: 'pung' });
     expect(parseGameInput({ t: 'mj-kong', tile: 'dr' })).toEqual({ t: 'mj-kong', tile: 'dr' });
     expect(parseGameInput({ t: 'mj-roll' })).toEqual({ t: 'mj-roll' });
-    expect(parseClientMessage(JSON.stringify({ t: 'mj-rules', points: true, full: false }))).toEqual({ t: 'mj-rules', points: true, full: false });
+    expect(parseClientMessage(JSON.stringify({ t: 'mj-rules', points: true, full: false }))).toEqual({ t: 'mj-rules', points: true, full: false, learning: false });
     expect(parseClientMessage(JSON.stringify({ t: 'mj-rules', points: 'yes', full: false }))).toBeNull();
   });
 });

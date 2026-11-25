@@ -314,6 +314,64 @@
   margin-bottom: calc(var(--bw) * 0.06);
   --deep: calc(var(--bw) * 0.1);
 }
+/* Room for tiles not dealt yet (user, 2026-11-24: the table shouldn't move as the deal goes on). */
+#game .mahjong-view .mj-ghost {
+  visibility: hidden;
+}
+/* A side column is always as wide as a strip of sets, and the top row as tall as one, so the first
+   flower or set (at the end of the deal, or later) doesn't push the table in. */
+#game .mahjong-view :is(.mj-pos-1, .mj-pos-3) .mj-theirs {
+  min-width: calc(var(--bw) * 1.4545 + 14px);
+}
+#game .mahjong-view .mj-pos-2 .mj-backs {
+  padding-block: 4px 3px;
+}
+/* Their face-up sets lie sideways too, like their tiles, when the column has room (user,
+   2026-11-24; layout adds mj-turned): each set a column of tiles touching, faces turned the way
+   their name reads (so one tilt of the head reads both), in order the way the name reads. */
+#game .mahjong-view .mj-pos-1 {
+  --turn: 90deg;
+}
+#game .mahjong-view .mj-pos-3 {
+  --turn: -90deg;
+}
+#game .mahjong-view .mj-sets.mj-turned:has(.mj-kong) {
+  padding-top: 4px;
+  row-gap: calc(var(--w, 16px) * 0.3 + 2px);
+}
+#game .mahjong-view .mj-turned .mj-set {
+  flex-direction: column;
+  align-items: center;
+}
+#game .mahjong-view .mj-pos-3 .mj-turned .mj-set {
+  flex-direction: column-reverse;
+}
+/* A sideways tile is drawn that way (its shadow still falls down); only its face turns. */
+#game .mahjong-view :is(.mj-turned .mj-t, .mj-t.mj-sideways) {
+  position: relative;
+  width: calc(var(--w) * 1.4545);
+  height: var(--w);
+  margin: 0 0 calc(var(--w) * 0.06);
+  --deep: calc(var(--w) * 0.1);
+  background: none;
+}
+#game .mahjong-view :is(.mj-turned .mj-t, .mj-t.mj-sideways)::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--w);
+  height: calc(var(--w) * 1.4545);
+  border-radius: inherit;
+  background: url('/art/mahjong/felt.webp') var(--tx) var(--ty) / 900% 500% no-repeat;
+  transform: translate(-50%, -50%) rotate(var(--turn, 90deg));
+}
+/* A Kong's fourth tile on top of the middle one: raised a little, over the tile before it. */
+#game .mahjong-view .mj-turned .mj-stack .mj-top {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--w) * -0.3);
+}
 
 
 /* ------------------------------------------------------------------ the middle */
@@ -659,6 +717,15 @@
   font-size: 1rem;
   line-height: 1.2;
 }
+/* A name in a line saying what's happening is never split over two lines: too long for the
+   line, it ends in "…" (the line itself may still wrap after it). */
+#game .mahjong-view :is(.mj-status, .mj-note) .pc-nw {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
 #game .mahjong-view .mj-scores-btn {
   flex: none;
   min-height: 40px;
@@ -781,6 +848,16 @@
 }
 #game .mahjong-view .mj-actions:empty {
   min-height: 0;
+}
+/* Through the opening your strip keeps the room it will need (user, 2026-11-24: the table moved as
+   the deal went on): upright, two rows of tiles (each 1.5445 of a tile's width: face and edge)
+   and the row of buttons. */
+#game .mahjong-view .mj[data-phase='opening'][data-layout='tall'] .mj-hand {
+  min-height: calc(var(--hw) * 3.089 + 4px);
+}
+/* Sideways the buttons' column is narrow: "Roll the dice" keeps to one line, as Discard does. */
+#game .mahjong-view .mj[data-layout='wide'] .mj-actions .pc-btn-big {
+  padding-inline: 10px;
 }
 #game .mahjong-view .mj-actions .pc-btn {
   min-height: 48px;
@@ -1150,7 +1227,8 @@
     scale: 0;
   }
 }
-#game .mahjong-view .mj-flying {
+/* (Over the table, never in its layout: a sideways one too, whose own rule makes it relative.) */
+#game .mahjong-view .mj-t.mj-flying {
   position: absolute;
   z-index: 11;
   margin: 0;
@@ -1179,4 +1257,268 @@
   #game .mahjong-view .mj-set {
     transition: none;
   }
+}
+
+/* ------------------------------------------------------------------ Learning Mode */
+
+/* (user, 2026-11-24) Someone else's tile on offer: a card over the table asks what you'd do with
+   it. It covers the table (just the middle on tablets and computers), never your own tiles. */
+#game .mahjong-view .mj-learn {
+  position: absolute;
+  inset: 0;
+  grid-area: 1 / 1 / 3 / 4;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  pointer-events: none;
+}
+#game .mahjong-view .mj[data-layout='roomy'] .mj-learn {
+  grid-area: mid;
+}
+#game .mahjong-view .mj-learn[hidden] {
+  display: none;
+}
+#game .mahjong-view .mj-learn-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 540px);
+  max-height: 100%;
+  overflow: auto;
+  padding: 14px 16px 16px;
+  --fc: var(--paper);
+  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-2);
+  text-align: center;
+  pointer-events: auto;
+}
+#game .mahjong-view .mj-learn-card p {
+  margin: 0;
+}
+#game .mahjong-view .mj-learn-who {
+  font-weight: 800;
+}
+#game .mahjong-view .mj-learn-tile {
+  --w: 60px;
+  margin-bottom: calc(var(--deep) + 2px);
+}
+#game .mahjong-view .mj-learn-name {
+  font-size: 0.9375rem;
+}
+/* Pung, Chow, Kong, Mahjong and Pass: all one size, what each means under its name. */
+#game .mahjong-view .mj-learn-btns {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+#game .mahjong-view .mj-learn-btns.mj-learn-two {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+#game .mahjong-view .mj-learn-btns .pc-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 6px 4px;
+}
+#game .mahjong-view .mj-learn-btns small {
+  min-height: 1.2em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+#game .mahjong-view .mj-learn-why {
+  max-width: 46ch;
+  font-weight: 700;
+  line-height: 1.35;
+}
+/* Under the five choices: room for three lines of explanation, there or not. */
+#game .mahjong-view .mj-learn-btns + .mj-learn-why {
+  min-height: calc(1.35em * 3);
+}
+#game .mahjong-view .mj-learn-all {
+  min-height: 40px;
+  padding: 0 14px;
+}
+/* A phone held upright: three to a row. */
+@media (max-width: 480px) {
+  #game .mahjong-view .mj-learn-btns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* A phone held sideways: little height, so the tile sits beside who threw it, See all discards
+   up in that row, and everything a little smaller. */
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'tile who all'
+    'tile name all'
+    'btns btns btns'
+    'why why why';
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 12px 10px;
+  text-align: left;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-who {
+  grid-area: who;
+  align-self: end;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-tile {
+  grid-area: tile;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-name {
+  grid-area: name;
+  align-self: start;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-btns {
+  grid-area: btns;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-why {
+  grid-area: why;
+  justify-self: center;
+  text-align: center;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-btns + .mj-learn-why {
+  min-height: calc(1.35em * 2);
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-all {
+  grid-area: all;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-tile {
+  --w: 36px;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-btns .pc-btn {
+  min-height: 46px;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-learn-all {
+  min-height: 34px;
+}
+
+/* The tiles an explanation is about, lit up in your hand. */
+#game .mahjong-view .mj-h.mj-help {
+  outline: 3px solid var(--sunflower);
+  outline-offset: 2px;
+}
+
+/* A note just above your tiles for a few seconds (tap it to close it): a chance missed, why a
+   choice can't be made. Over the table, never moving it. */
+#game .mahjong-view .mj-tip {
+  position: absolute;
+  grid-area: mine;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 16;
+  width: max-content;
+  max-width: min(92%, 520px);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  translate: -50% 0;
+  --fc: var(--sunflower);
+  background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-2);
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  cursor: pointer;
+}
+#game .mahjong-view .mj-tip[hidden] {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ your buttons never resize your strip */
+
+/* (user, 2026-11-24: the strip grew on your turn for Mahjong and Kong.) Whatever buttons are
+   showing (none, Discard, Mahjong and Kong beside it, the claims), your strip stays one size: the
+   buttons fit the room it has. Upright on a phone that's always one row; on tablets, computers
+   and a phone held sideways, the column beside your tiles, whose height your tiles set. */
+#game .mahjong-view .mj[data-layout='tall'] .mj-actions,
+#game .mahjong-view .mj[data-layout='tall'] .mj-actions:empty {
+  flex-wrap: nowrap;
+  height: 52px;
+  min-height: 52px;
+}
+#game .mahjong-view .mj[data-layout='tall'] .mj-extra {
+  display: contents;
+}
+#game .mahjong-view .mj[data-layout='tall'] .mj-extra .pc-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding-inline: 12px;
+}
+#game .mahjong-view .mj[data-layout='tall'] .mj-claims {
+  flex-wrap: nowrap;
+  width: 100%;
+  gap: 6px;
+}
+#game .mahjong-view .mj[data-layout='tall'] .mj-claims .pc-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 6px;
+}
+#game .mahjong-view .mj[data-layout='tall'] .mj-claims:has(> :nth-child(4)) .pc-btn {
+  font-size: 0.875rem;
+}
+/* Beside your tiles: the column takes the height your tiles give it and never asks for more. The
+   buttons fill its width; each row is a normal button's height (60 px) when there's room and
+   shares out the height when there isn't, so a lone Discard or Roll the dice isn't stretched
+   tall (user, 2026-11-24). */
+#game .mahjong-view .mj:is([data-layout='wide'], [data-layout='roomy']) .mj-actions {
+  contain: size;
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: minmax(0, 60px);
+  justify-content: stretch;
+  align-content: center;
+  gap: 6px;
+  min-height: 0;
+}
+/* The claims (two to a row) have the whole column, each row up to 48 px. */
+#game .mahjong-view .mj:is([data-layout='wide'], [data-layout='roomy']) .mj-actions:has(.mj-claims) {
+  grid-auto-rows: minmax(0, 1fr);
+}
+#game .mahjong-view .mj:is([data-layout='wide'], [data-layout='roomy']) .mj-actions .pc-btn {
+  min-height: 0;
+  height: 100%;
+}
+#game .mahjong-view .mj:is([data-layout='wide'], [data-layout='roomy']) .mj-extra {
+  display: flex;
+  gap: 6px;
+  min-height: 0;
+}
+#game .mahjong-view .mj:is([data-layout='wide'], [data-layout='roomy']) .mj-extra .pc-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 10px;
+}
+#game .mahjong-view .mj:is([data-layout='wide'], [data-layout='roomy']) .mj-claims {
+  height: 100%;
+  grid-auto-rows: minmax(0, 48px);
+  align-content: center;
+}
+/* Sideways on a phone there's little height: Mahjong and Kong stack, small, beside Discard. */
+#game .mahjong-view .mj[data-layout='wide'] .mj-actions:has(.mj-extra) {
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-extra {
+  flex-direction: column;
+  gap: 4px;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-extra .pc-btn {
+  padding-inline: 4px;
+  font-size: 0.8125rem;
+}
+#game .mahjong-view .mj[data-layout='wide'] .mj-actions:has(.mj-extra) .mj-discard {
+  font-size: 1rem;
 }

@@ -20,3 +20,4 @@ export * from './threeThirteen';
 export * from './puzzle';
 export * from './photoUrls';
 export * from './mahjong';
+export * from './mahjongLearn';

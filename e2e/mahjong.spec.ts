@@ -4,8 +4,9 @@ import { createTable, ready, watchErrors } from './helpers';
 test('Mahjong: choose points, roll the dice, then pick a tile and throw it away @smoke', async ({ page }) => {
   const errors = watchErrors(page);
   await createTable(page, 'Tess', 'mahjong');
-  await expect(page.locator('[data-mj-points="0"]')).toHaveAttribute('aria-checked', 'true');
-  await page.locator('[data-mj-points="1"]').click();
+  // Game type: Learning, No points (the first choice) or Points.
+  await expect(page.locator('[data-mj-type="plain"]')).toHaveAttribute('aria-checked', 'true');
+  await page.locator('[data-mj-type="points"]').click();
   await expect(page.locator('[data-mj-full="0"]')).toHaveAttribute('aria-checked', 'true');
   await ready(page);
   await expect(page.locator('#game')).toHaveAttribute('data-view', 'mahjong');

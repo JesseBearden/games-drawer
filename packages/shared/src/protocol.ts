@@ -179,7 +179,7 @@ export type ClientMessage =
   /** At the table: how many play the picked game (2 to 4), for games that let the table choose. */
   | { t: 'players'; n: number }
   /** At the table, for Mahjong: play with points or not, and (with points) one round or all four. */
-  | { t: 'mj-rules'; points: boolean; full: boolean }
+  | { t: 'mj-rules'; points: boolean; full: boolean; learning?: boolean }
   /** End the current game and take everyone back to the table. */
   | { t: 'lobby' }
   /** Private rooms: change how swearing in chat is handled (anyone in the room can). */
@@ -539,7 +539,8 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case 'players':
       return Number.isInteger(o.n) && (o.n as number) >= 2 && (o.n as number) <= 4 ? { t: 'players', n: o.n as number } : null;
     case 'mj-rules':
-      return typeof o.points === 'boolean' && typeof o.full === 'boolean' ? { t: 'mj-rules', points: o.points, full: o.full } : null;
+      if (typeof o.points !== 'boolean' || typeof o.full !== 'boolean' || (o.learning !== undefined && typeof o.learning !== 'boolean')) return null;
+      return { t: 'mj-rules', points: o.points, full: o.full, learning: o.learning === true };
     case 'sit':
       return Number.isInteger(o.seat) && (o.seat as number) >= 0 && (o.seat as number) < 4 ? { t: 'sit', seat: o.seat as number } : null;
     case 'ready':

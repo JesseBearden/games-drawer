@@ -94,6 +94,9 @@ function forceRelay(): boolean {
 const GATE_OPEN = 0.012;
 const GATE_HOLD_MS = 450;
 const SPEAKING_LEVEL = 0.02;
+/** Someone still counts as talking this long after their voice drops, so the rings round their
+ *  name don't stop and start again at every pause between words. */
+const SPEAKING_HOLD_MS = 400;
 /** Sound can refuse to start until a tap, and then says nothing: carry on after this long. */
 const RESUME_WAIT_MS = 1000;
 /** A mic that stops again this soon after being opened again isn't opened a third time. */
@@ -152,6 +155,8 @@ export class Voice {
   private gateOpenUntil = 0;
   private timer: number | undefined;
   private lastSpeaking = '';
+  /** When each person (you too) was last loud enough to count as talking. */
+  private loudAt = new Map<string, number>();
   private joining = false;
   /** Counts teardowns, so an answer that comes after one (Allow, tapped late) is thrown away. */
   private teardowns = 0;
@@ -417,6 +422,7 @@ export class Voice {
     this.ctx = null;
     this.hooks.speaking(new Set());
     this.lastSpeaking = '';
+    this.loudAt.clear();
   }
 
   setSelfMuted(muted: boolean) {
@@ -756,10 +762,16 @@ export class Voice {
     this.gate.gain.setTargetAtTime(open ? 1 : 0, this.ctx.currentTime, open ? 0.01 : 0.08);
 
     const talking = new Set<string>();
-    if (open && mine > SPEAKING_LEVEL) talking.add(this.alias);
+    const heard = (alias: string, loud: boolean) => {
+      if (loud) this.loudAt.set(alias, now);
+      else if (now - (this.loudAt.get(alias) ?? -Infinity) >= SPEAKING_HOLD_MS) return;
+      talking.add(alias);
+    };
+    // (Muting yourself, or muting someone for you, stops their rings at once.)
+    if (open) heard(this.alias, mine > SPEAKING_LEVEL);
     for (const [alias, link] of this.links) {
       if (this.muted.has(alias)) continue;
-      if (this.level(link.analyser) > SPEAKING_LEVEL) talking.add(alias);
+      heard(alias, this.level(link.analyser) > SPEAKING_LEVEL);
     }
     const key = [...talking].sort().join(',');
     if (key !== this.lastSpeaking) {
