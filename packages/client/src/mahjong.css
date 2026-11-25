@@ -916,7 +916,8 @@
 /* One row of tiles, with a column of buttons beside it the full height of your strip: Discard,
    or the claims two to a row. It keeps one width, so the tiles never jump. */
 #game .mahjong-view .mj:is([data-layout='wide'], [data-layout='roomy']) .mj-mine {
-  --act-w: 250px;
+  /* (It narrows with the window, as your tiles do: about four tiles wide. User, 2026-11-24.) */
+  --act-w: clamp(170px, 21vw, 250px);
   grid-template-columns: minmax(0, 1fr) var(--act-w);
   grid-template-areas:
     'head act'
@@ -928,7 +929,8 @@
    flowers under it) at the left end, your tiles, then the buttons. Scores and the line saying
    what's happening move onto the table, under See all discards. */
 #game .mahjong-view .mj[data-layout='wide'] .mj-mine {
-  --act-w: 160px;
+  /* (Narrower on a narrower window, so your tiles keep their room: user, 2026-11-24.) */
+  --act-w: clamp(120px, 20vw, 160px);
   grid-template-columns: auto minmax(0, 1fr) var(--act-w);
   grid-template-areas: 'head hand act';
   align-items: center;
@@ -1266,6 +1268,8 @@
 #game .mahjong-view .mj-learn {
   position: absolute;
   inset: 0;
+  /* (Its height decides how the card is laid out: see the learn container rules.) */
+  container: learn / size;
   grid-area: 1 / 1 / 3 / 4;
   z-index: 15;
   display: grid;
@@ -1352,54 +1356,53 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-/* A phone held sideways: little height, so the tile sits beside who threw it, See all discards
-   up in that row, and everything a little smaller. */
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    'tile who all'
-    'tile name all'
-    'btns btns btns'
-    'why why why';
-  align-items: center;
-  gap: 4px 12px;
-  padding: 8px 12px 10px;
-  text-align: left;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-who {
-  grid-area: who;
-  align-self: end;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-tile {
-  grid-area: tile;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-name {
-  grid-area: name;
-  align-self: start;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-btns {
-  grid-area: btns;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-why {
-  grid-area: why;
-  justify-self: center;
-  text-align: center;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-btns + .mj-learn-why {
-  min-height: calc(1.35em * 2);
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-all {
-  grid-area: all;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-tile {
-  --w: 36px;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-btns .pc-btn {
-  min-height: 46px;
-}
-#game .mahjong-view .mj[data-layout='wide'] .mj-learn-all {
-  min-height: 34px;
+/* Little height over the table (a phone held sideways, an iPad with Safari's bars showing): the
+   tile sits beside who threw it, See all discards up in that row, and everything a little smaller,
+   so the card never needs scrolling (user, 2026-11-24). */
+@container learn (max-height: 410px) {
+  #game .mahjong-view .mj-learn-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'tile who all'
+      'tile name all'
+      'btns btns btns'
+      'why why why';
+    align-items: center;
+    gap: 4px 12px;
+    padding: 8px 12px 10px;
+    text-align: left;
+  }
+  #game .mahjong-view .mj-learn-who {
+    grid-area: who;
+    align-self: end;
+  }
+  #game .mahjong-view .mj-learn-tile {
+    grid-area: tile;
+    --w: 40px;
+  }
+  #game .mahjong-view .mj-learn-name {
+    grid-area: name;
+    align-self: start;
+  }
+  #game .mahjong-view .mj-learn-btns {
+    grid-area: btns;
+  }
+  #game .mahjong-view .mj-learn-why {
+    grid-area: why;
+    justify-self: center;
+    text-align: center;
+  }
+  #game .mahjong-view .mj-learn-btns + .mj-learn-why {
+    min-height: calc(1.35em * 2);
+  }
+  #game .mahjong-view .mj-learn-all {
+    grid-area: all;
+    min-height: 34px;
+  }
+  #game .mahjong-view .mj-learn-btns .pc-btn {
+    min-height: 46px;
+  }
 }
 
 /* The tiles an explanation is about, lit up in your hand. */
@@ -1521,4 +1524,49 @@
 }
 #game .mahjong-view .mj[data-layout='wide'] .mj-actions:has(.mj-extra) .mj-discard {
   font-size: 1rem;
+}
+
+/* A narrower button column (a narrowed window): smaller type, so the words still fit. */
+#game .mahjong-view .mj:is([data-layout='roomy'], [data-layout='wide']) .mj-actions {
+  container: act / inline-size;
+}
+@container act (max-width: 219px) {
+  #game .mahjong-view .mj[data-layout='roomy'] .mj-extra .pc-btn {
+    padding-inline: 4px;
+    font-size: 0.875rem;
+  }
+}
+@container act (max-width: 145px) {
+  #game .mahjong-view .mj-extra .pc-btn {
+    padding-inline: 2px;
+    font-size: 0.75rem;
+  }
+  #game .mahjong-view .mj-actions .pc-btn-big {
+    padding-inline: 4px;
+    font-size: 0.9375rem;
+  }
+}
+/* The smallest phones held sideways: tighter still. */
+@container learn (max-height: 240px) {
+  #game .mahjong-view .mj-learn-card {
+    gap: 3px 10px;
+    padding: 6px 10px 6px;
+  }
+  #game .mahjong-view .mj-learn-btns .pc-btn {
+    min-height: 40px;
+    padding-block: 3px;
+  }
+}
+
+/* Upright but not much taller than wide (a window, a tablet's narrowed app): one row of tiles
+   across the strip, under your name, with the row of buttons below. Three rows in all. */
+#game .mahjong-view .mj[data-layout='tall'][data-one-row] .mj-hand {
+  width: auto;
+  justify-self: stretch;
+  flex-wrap: nowrap;
+  justify-content: center;
+  min-height: calc(var(--hw) * 1.75);
+}
+#game .mahjong-view .mj[data-phase='opening'][data-layout='tall'][data-one-row] .mj-hand {
+  min-height: calc(var(--hw) * 1.75);
 }

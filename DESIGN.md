@@ -183,7 +183,14 @@ Mahjong.
 - **The bar:** on an iPad or computer, your mic on the left and Messages, Invite, Help and Menu on
   the right. On a phone it folds away: a mic tab in the top-left corner and a caret tab in the
   top-right that drops the rest as a stack (a tomato dot on it means unread messages). Tanks also
-  folds the bar on short computer windows. The game sits below the bar, never under it.
+  folds the bar on short computer windows. A window narrower than 640 px (a laptop window
+  made narrow) folds it the phone's way too, by width, so its words are never squeezed (user,
+  2026-11-24; in full they need 600 px). A window under 500 px either way is as small as a phone,
+  so it's laid out exactly as a phone is, every phone style included (Tanks' slim top row and side
+  controls held sideways, Messages over the game and closing after you send). Real phones and
+  full-size screens are unchanged: what decides is touch only where touch matters (tapping a card
+  to lift it, Tanks' touch hints, hover effects, the keyboard, Safari's bars).
+  The game sits below the bar, never under it.
 - **The mic button says what it will do:** Mute mic, or Unmute mic / Turn on mic (tomato).
 - **Everything else opens as a felt sheet over the dimmed table** (a warm shadow), one at a time:
   the menu, the invite, help. Tapping the dimmed table closes it. Sheets always open scrolled to
@@ -331,7 +338,13 @@ Mahjong.
     Mahjong and Kong, the claims), they fit the room it has. Mahjong and Kong are seldom used, so
     they sit side by side above a big Discard on tablets and computers, in one row with it on an
     upright phone (whose button row is kept even when empty), and stacked small beside it on a
-    phone held sideways.
+    phone held sideways. The button column narrows with the window (about four tiles wide), so
+    narrowing an iPad window shrinks the buttons along with your tiles. Your strip is never more
+    than three rows (your name, one row of tiles, the buttons) unless the screen is much taller
+    than wide, as an upright phone is, which gets two rows of tiles (user, 2026-11-24). A phone held
+    sideways keeps its single row with the buttons beside the tiles.
+    The Learning Mode card goes compact whenever the space over the table is short, so it never
+    scrolls.
   - **Learning Mode** (user, 2026-11-24), the Learning game type (always without points: the
     reasons a hand can't win with points were left out until they can be tried). Every tile
     someone else throws away (or adds to a Pung) puts a card over the table, never over your own
@@ -369,8 +382,8 @@ Mahjong.
   - **After a hand:** the winner's tiles face up, and with points each item it scored with a
     plain explanation, then the score sheet and Ready for the next hand.
 - **Jigsaw** is played on calm light-grey felt. Every loose piece casts a small shadow; joined
-  seams have none; pieces locked into the frame lie flat. The frame is a sheet of cream felt with
-  a dashed edge. The tools are a strip along the bottom, one row on phones. Chosen options are
+  seams have none; pieces locked into the frame lie flat. The frame is a patch of cream felt sunk
+  a touch below the table (a soft shadow inside its top edge), with no edge line. The tools are a strip along the bottom, one row on phones. Chosen options are
   cobalt.
   - **Everyone else's pointer** is a dot in their colour with their name beside it. It fades a
     few seconds after they stop. **While they talk, rings ripple out from it** and it stays, so

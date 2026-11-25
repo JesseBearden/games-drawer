@@ -468,8 +468,8 @@ body {
 
 /* The puzzle table: a light, calm grey felt (the grey mat was too dark and busy), with a small
    shadow under every loose piece so light pieces still stand out. Also tried: kraft, sage, sky. Like the card table, it zooms and pans with the puzzle (jigsawView.moveFelt). The frame
-   where the finished picture goes is a sheet of cream felt laid on it (drawn by jigsawView from
-   --pz-frame and --pz-frame-img). */
+   where the finished picture goes is a patch of cream felt sunk a touch below it, with no edge
+   line (drawn by jigsawView from --pz-frame and --pz-frame-img). */
 #game[data-view='jigsaw'] {
   --jig-table: var(--dove);
   --jig-table-img: var(--dove-img);
@@ -480,7 +480,6 @@ body {
   --pz-area: rgb(58 44 34 / 0.025);
   --pz-frame: #e9dac4;
   --pz-frame-img: url('/art/felt/paper.webp');
-  --pz-frame-edge: rgb(58 44 34 / 0.35);
 }
 
 /* ------------------------------------------------------------------ hover */

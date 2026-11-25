@@ -90,7 +90,7 @@
 }
 
 /* Phones: the wind tag sits under the lives tag (which is taller as a paper tag). */
-#game.phone .wind {
+#game:is(.phone, .compact) .wind {
   top: calc(86px + var(--safe-t));
   padding: 2px 10px 2px 6px;
   font-size: 1.15rem;
@@ -263,7 +263,7 @@
    the sides), so the control strip runs down the right edge instead: move, Angle and Power one
    row each, then Fire. The battlefield is framed to its left (tankView.stripInset). */
 @media (max-height: 500px) {
-  #game.phone .touch {
+  #game:is(.phone, .compact) .touch {
     /* --strip-safe-r: an iPhone with its notch on the left side (tankView.fitSides). */
     inset: auto calc(8px + var(--strip-safe-r, var(--safe-r))) calc(8px + var(--safe-b)) auto;
     transform: none;
@@ -274,14 +274,14 @@
     max-width: none;
     padding: 10px 8px;
   }
-  #game.phone .touch .cs-group {
+  #game:is(.phone, .compact) .touch .cs-group {
     justify-content: space-between;
   }
-  #game.phone .touch .tbtn {
+  #game:is(.phone, .compact) .touch .tbtn {
     width: 46px;
     height: 46px;
   }
-  #game.phone .touch .tbtn.fire {
+  #game:is(.phone, .compact) .touch .tbtn.fire {
     width: 100%;
     min-width: 0;
     height: 56px;

@@ -19,6 +19,12 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
       shell hitting is a short cartoon boom and puff (the old one felt too big). In a real game,
       do they sit well with the rest? Is the explosion still too loud, now that it's smaller?
 
+## Jigsaw frame sunk into the table (2026-11-24)
+
+- [ ] The cream frame has no dashed line now; it sits a touch below the grey felt, with a soft
+      shadow inside its top edge. On a phone and zoomed all the way in and out: does it still read
+      as "the picture goes here"? Is the shadow too faint, or too strong?
+
 ## Mahjong Learning Mode (2026-11-24)
 
 - [ ] **Game type:** at your table pick Mahjong: one choice, Learning / No points / Points
@@ -42,6 +48,15 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
 - [ ] **Someone else makes a Pung:** the table no longer jumps up. Does the side player's column
       shifting a little as their set appears bother you? (It can be held still.)
 - [ ] **Alone with the computers:** the claim bar runs a whole minute.
+- [ ] **iPad windows:** go full screen and back with the Learning card up: it fits without
+      scrolling. Narrow the Safari window slowly: the buttons shrink with your tiles, and when it
+      switches layout you get your name, one row of tiles and the buttons (three rows), never
+      tiles under the buttons.
+- [ ] **A narrow laptop window:** make the window narrow slowly. Below 640 px wide the bar
+      folds to the phone's mic tab and caret menu; widen it and the bar comes back.
+- [ ] **A very small window** (under 500 px wide or tall, on the laptop): it looks just like a
+      phone. Try Tanks short and wide: the top row and the controls down the right side, as on a
+      phone held sideways. Send a message: Messages closes so you see the game.
 - [ ] **Your strip stays one size** on your turn and off it, on the iPad, a phone upright and a
       phone sideways (Mahjong and Kong now sit beside Discard). Sideways they're small: easy
       enough to tap?

@@ -85,23 +85,23 @@
   display: none;
 }
 @media (max-height: 520px) {
-  #game:not(.phone)[data-view='tanks'] .arena > .view {
+  #game:not(.phone, .slim, .compact)[data-view='tanks'] .arena > .view {
     top: 0;
   }
-  #game:not(.phone)[data-view='tanks'] .toolbar.pc-toolbar {
+  #game:not(.phone, .slim, .compact)[data-view='tanks'] .toolbar.pc-toolbar {
     transform: translateY(-100%);
     visibility: hidden;
     transition:
       transform 0.22s var(--settle),
       visibility 0s 0.22s;
   }
-  #game:not(.phone)[data-view='tanks'].bar-open .toolbar.pc-toolbar {
+  #game:not(.phone, .slim, .compact)[data-view='tanks'].bar-open .toolbar.pc-toolbar {
     transform: none;
     visibility: visible;
     box-shadow: var(--laid);
     transition: transform 0.22s var(--settle);
   }
-  #game:not(.phone)[data-view='tanks'] .bar-tab {
+  #game:not(.phone, .slim, .compact)[data-view='tanks'] .bar-tab {
     position: absolute;
     z-index: 31;
     top: 0;
@@ -123,10 +123,10 @@
   #game[data-view='tanks'] .bar-tab svg {
     transition: transform 0.22s var(--settle);
   }
-  #game:not(.phone)[data-view='tanks'].bar-open .bar-tab {
+  #game:not(.phone, .slim, .compact)[data-view='tanks'].bar-open .bar-tab {
     top: var(--bar-h);
   }
-  #game:not(.phone)[data-view='tanks'].bar-open .bar-tab svg {
+  #game:not(.phone, .slim, .compact)[data-view='tanks'].bar-open .bar-tab svg {
     transform: rotate(180deg);
   }
   /* A new message while the bar is folded: a dot on the tab. */
@@ -140,7 +140,7 @@
     background: var(--tomato);
   }
   /* The aim tag steps left of the tab. */
-  #game:not(.phone)[data-view='tanks'] .aim-box {
+  #game:not(.phone, .slim, .compact)[data-view='tanks'] .aim-box {
     right: calc(14px + 58px + 10px + var(--safe-r));
   }
 }
@@ -482,7 +482,7 @@
   font: 800 0.9rem var(--font);
 }
 /* Phones: Messages slides over the right side, under the bar's edge. */
-#game.phone .chat {
+#game:is(.phone, .compact) .chat {
   width: min(380px, 88%);
 }
 /* An iPad: with a keyboard attached, picking the message box brings up a little bar hovering
@@ -917,30 +917,30 @@
 /* Phones. Held upright, a slim row along the top holds the two tabs (the games' top rows of name
    tags need it clear); held sideways, height is precious, so the game runs to the top and each
    game keeps its top corners clear for the tabs (below). */
-#game.phone .arena {
+#game:is(.phone, .slim, .compact) .arena {
   --tabs-h: calc(48px + var(--safe-t));
 }
 @media (max-height: 500px) {
-  #game.phone .arena {
+  #game:is(.phone, .compact) .arena {
     --tabs-h: 0px;
   }
 }
-#game.phone .arena > .view {
+#game:is(.phone, .slim, .compact) .arena > .view {
   top: var(--tabs-h);
 }
 /* Folded: only the mic tab shows. Open: the mic tab stays, and Messages, Invite, Help and Menu
    hang in a stack of felt buttons under the caret tab. */
-#game.phone .toolbar.pc-toolbar {
+#game:is(.phone, .slim, .compact) .toolbar.pc-toolbar {
   height: auto;
   padding: 0 calc(10px + var(--safe-r)) 0 calc(10px + var(--safe-l));
   background: none;
   box-shadow: none;
   pointer-events: none;
 }
-#game.phone:not(.bar-open) .toolbar.pc-toolbar > :not(#btn-mic) {
+#game:is(.phone, .slim, .compact):not(.bar-open) .toolbar.pc-toolbar > :not(#btn-mic) {
   display: none;
 }
-#game.phone .toolbar.pc-toolbar #btn-mic {
+#game:is(.phone, .slim, .compact) .toolbar.pc-toolbar #btn-mic {
   flex: none;
   max-width: none;
   min-height: calc(46px + var(--safe-t));
@@ -949,7 +949,7 @@
   font-size: 1rem;
   pointer-events: auto;
 }
-#game.phone.bar-open .toolbar.pc-toolbar {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar {
   display: grid;
   grid-template-columns: auto 1fr min(230px, 60vw);
   grid-auto-rows: auto;
@@ -957,12 +957,12 @@
   align-items: start;
   gap: 8px 0;
 }
-#game.phone.bar-open .toolbar.pc-toolbar #btn-mic {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-mic {
   grid-column: 1;
   grid-row: 1;
   justify-self: start;
 }
-#game.phone.bar-open .toolbar.pc-toolbar > :not(#btn-mic) {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar > :not(#btn-mic) {
   grid-column: 3;
   width: 100%;
   max-width: none;
@@ -973,25 +973,25 @@
   pointer-events: auto;
   box-shadow: var(--lift-2);
 }
-#game.phone.bar-open .toolbar.pc-toolbar #btn-chat {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-chat {
   grid-row: 2;
   margin-top: 4px;
 }
-#game.phone.bar-open .toolbar.pc-toolbar #btn-share {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-share {
   grid-row: 3;
 }
-#game.phone.bar-open .toolbar.pc-toolbar #btn-help {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-help {
   grid-row: 4;
 }
-#game.phone.bar-open .toolbar.pc-toolbar #btn-menu {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-menu {
   grid-row: 5;
 }
-#game.phone.bar-open .toolbar.pc-toolbar #btn-chat[hidden],
-#game.phone.bar-open .toolbar.pc-toolbar #btn-share[hidden] {
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-chat[hidden],
+#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-share[hidden] {
   display: none;
 }
 /* The caret tab, top right; under the open bar it points up to fold it again. */
-#game.phone .bar-tab {
+#game:is(.phone, .slim, .compact) .bar-tab {
   position: absolute;
   z-index: 31;
   top: 0;
@@ -1009,14 +1009,14 @@
   color: var(--cobalt);
   cursor: pointer;
 }
-#game.phone .bar-tab svg {
+#game:is(.phone, .slim, .compact) .bar-tab svg {
   transition: transform 0.22s var(--settle);
 }
 
-#game.phone.bar-open .bar-tab svg {
+#game:is(.phone, .slim, .compact).bar-open .bar-tab svg {
   transform: rotate(180deg);
 }
-#game.phone .bar-tab-dot {
+#game:is(.phone, .slim, .compact) .bar-tab-dot {
   position: absolute;
   top: calc(8px + var(--safe-t));
   right: 10px;
@@ -1026,20 +1026,20 @@
   background: var(--tomato);
 }
 /* The tabs stay usable over Tanks' "turn sideways" card. */
-#game.phone .toolbar.pc-toolbar,
-#game.phone .bar-tab {
+#game:is(.phone, .slim, .compact) .toolbar.pc-toolbar,
+#game:is(.phone, .slim, .compact) .bar-tab {
   z-index: 34;
 }
 
 /* Sideways phones: each game keeps its top corners clear for the tabs. */
 @media (max-height: 500px) {
-  #game.phone .lobby-view {
+  #game:is(.phone, .compact) .lobby-view {
     padding-top: 56px;
   }
-  #game.phone .sp-score {
+  #game:is(.phone, .compact) .sp-score {
     top: 56px;
   }
-  #game.phone .pz-status {
+  #game:is(.phone, .compact) .pz-status {
     top: 54px;
   }
 }
@@ -1049,49 +1049,49 @@
    sits beside the mic tab, and the wind beside the caret tab, over the controls it matters to.
    The battlefield is framed below the row (tankView.stripInset). */
 @media (max-height: 500px) {
-  #game.phone[data-view='tanks'] .toolbar.pc-toolbar #btn-mic {
+  #game:is(.phone, .compact)[data-view='tanks'] .toolbar.pc-toolbar #btn-mic {
     min-height: calc(37px + var(--safe-t));
   }
-  #game.phone[data-view='tanks'] .bar-tab {
+  #game:is(.phone, .compact)[data-view='tanks'] .bar-tab {
     height: calc(37px + var(--safe-t));
   }
-  #game.phone .tank-view .hud-top-left,
-  #game.phone .tank-view .wind {
+  #game:is(.phone, .compact) .tank-view .hud-top-left,
+  #game:is(.phone, .compact) .tank-view .wind {
     top: 4px;
     height: 29px;
     display: flex;
     align-items: center;
   }
-  #game.phone .tank-view .hud-top-left {
+  #game:is(.phone, .compact) .tank-view .hud-top-left {
     left: calc(10px + var(--safe-l) + var(--mic-w, 150px) + 8px);
     gap: 8px;
     padding: 0 10px 0 8px;
   }
-  #game.phone .tank-view .hearts {
+  #game:is(.phone, .compact) .tank-view .hearts {
     gap: 3px;
   }
-  #game.phone .tank-view .hearts img,
-  #game.phone .tank-view .hearts svg {
+  #game:is(.phone, .compact) .tank-view .hearts img,
+  #game:is(.phone, .compact) .tank-view .hearts svg {
     width: 20px;
     height: 18px;
   }
-  #game.phone .tank-view .level-line {
+  #game:is(.phone, .compact) .tank-view .level-line {
     margin: 0;
     font-size: 0.9rem;
     white-space: nowrap;
   }
-  #game.phone .tank-view .wind {
+  #game:is(.phone, .compact) .tank-view .wind {
     left: auto;
     right: calc(10px + var(--safe-r) + 64px + 8px);
     transform: none;
     padding: 0 10px 0 6px;
     font-size: 1rem;
   }
-  #game.phone .tank-view .wind img {
+  #game:is(.phone, .compact) .tank-view .wind img {
     height: 20px;
   }
   /* "Triple ready" under the wind, over the Fire button it's about. */
-  #game.phone .tank-view .aim-box {
+  #game:is(.phone, .compact) .tank-view .aim-box {
     top: 40px;
     right: calc(10px + var(--strip-safe-r, var(--safe-r)));
   }
@@ -1099,7 +1099,7 @@
      tankView measures the gap and queues them): who knocked out whom, "Your mic is on", a chat
      message, one at a time for a couple of seconds each, and otherwise the status ("Respawning…").
      A long one may take a second line. "Jesse wins!" stays big in the middle. */
-  #game.phone .tank-view .status {
+  #game:is(.phone, .compact) .tank-view .status {
     left: var(--pop-x, 50%);
     width: max-content;
     max-width: var(--pop-w, 60%);
@@ -1111,10 +1111,10 @@
     white-space: normal;
     text-align: center;
   }
-  #game.phone .tank-view .status.note {
+  #game:is(.phone, .compact) .tank-view .status.note {
     font-weight: 800;
   }
-  #game.phone .tank-view .feed {
+  #game:is(.phone, .compact) .tank-view .feed {
     display: none;
   }
 }

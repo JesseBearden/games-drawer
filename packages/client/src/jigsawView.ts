@@ -1255,22 +1255,20 @@ export class JigsawTable implements View {
     const s = this.state!;
     const b = tableBounds(s.width, s.height, s.cols, s.rows);
     // On the table (the page shows through): the area pieces can go a shade darker, and the
-    // frame where the finished picture goes a sheet of cream paper (or felt) with a dashed ink edge.
+    // frame where the finished picture goes: sunken cream felt (felt look), or cream paper with a
+    // dashed ink edge.
     const look = this.tableLook();
     ctx.fillStyle = look.area;
     ctx.fillRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
     if (look.frame) {
-      // A sheet of felt laid on the table: its texture tied to the board (the same size as the
-      // cloth at the whole-table view), and the felt look's shadow hugging it.
+      // A patch of cream felt set a touch below the table: its texture tied to the board (the
+      // same size as the cloth at the whole-table view).
       const t = 0.5 / this.fitScale();
       look.pattern?.setTransform(new DOMMatrix([t, 0, 0, t, 0, 0]));
       // Not quite opaque (invisible to the eye): only pieces are drawn fully opaque, which is how
       // the browser tests find them on the canvas.
       ctx.save();
       ctx.globalAlpha = 0.97;
-      ctx.shadowColor = 'rgba(34, 26, 18, 0.45)';
-      ctx.shadowBlur = 7 * dpr;
-      ctx.shadowOffsetY = 3 * dpr;
       ctx.fillStyle = look.frame;
       ctx.fillRect(0, 0, s.width, s.height);
       ctx.restore();
@@ -1282,15 +1280,31 @@ export class JigsawTable implements View {
         ctx.fillRect(0, 0, s.width, s.height);
         ctx.restore();
       }
+      // Sunken: the grey felt's edge casts a soft shadow just inside the frame, deepest along the
+      // top (light from above). A ring round the frame, clipped away, drops its shadow inward.
+      const m = 60 / zoom;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, s.width, s.height);
+      ctx.clip();
+      ctx.beginPath();
+      ctx.rect(-m, -m, s.width + 2 * m, s.height + 2 * m);
+      ctx.rect(0, 0, s.width, s.height);
+      ctx.shadowColor = 'rgba(34, 26, 18, 0.4)';
+      ctx.shadowBlur = 6 * dpr;
+      ctx.shadowOffsetY = 2 * dpr;
+      ctx.fillStyle = 'rgb(34, 26, 18)';
+      ctx.fill('evenodd');
+      ctx.restore();
     } else {
       ctx.fillStyle = 'rgba(255, 252, 245, 0.8)';
       ctx.fillRect(0, 0, s.width, s.height);
+      ctx.setLineDash([8 / zoom, 6 / zoom]);
+      ctx.strokeStyle = look.edge;
+      ctx.lineWidth = 2 / zoom;
+      ctx.strokeRect(0, 0, s.width, s.height);
+      ctx.setLineDash([]);
     }
-    ctx.setLineDash([8 / zoom, 6 / zoom]);
-    ctx.strokeStyle = look.edge;
-    ctx.lineWidth = 2 / zoom;
-    ctx.strokeRect(0, 0, s.width, s.height);
-    ctx.setLineDash([]);
     if (this.art.length !== s.pieces.length) return false;
     // A little extra room for the held piece's shadow.
     const margin = 30 / zoom;

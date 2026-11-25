@@ -38,6 +38,17 @@ type Sheet = (typeof SHEETS)[number];
  * Everything about being in a room that isn't the game: chat, voice, invites, the menu, and
  * the view on screen (the lobby or a game). Chat and voice keep going when the game changes.
  */
+/**
+ * The bar folds (as on a phone) in a window narrower than this. Its words in full (Unmute mic,
+ * Messages, Invite, Help, Menu) need 600 px; the rest is room for Messages' unread count.
+ */
+const SLIM_BAR_PX = 640;
+/**
+ * A window narrower or shorter than this is laid out as a phone is. Phones are under 500 px one
+ * way or the other (held either way up); no laptop or tablet screen is.
+ */
+const COMPACT_PX = 500;
+
 export class RoomApp {
   view: View | null = null;
   gameId: GameId | null = null;
@@ -566,6 +577,15 @@ export class RoomApp {
     return this.membersList.some((m) => m.id !== this.alias && m.connected && !onMic.has(m.id));
   }
 
+  /** Fold the bar (as on a phone) in a window narrower than SLIM_BAR_PX; unfold it in a wider one. */
+  private fitBar(slim: boolean) {
+    const game = $('game');
+    if (this.device.small || game.classList.contains('slim') === slim) return;
+    game.classList.toggle('slim', slim);
+    if (!slim) this.setBarOpen(false);
+    requestAnimationFrame(() => this.view?.resize?.());
+  }
+
   private setBarOpen(open: boolean) {
     $('game').classList.toggle('bar-open', open);
     const tab = $('bar-tab');
@@ -741,6 +761,34 @@ export class RoomApp {
       document.removeEventListener('pointerdown', touched, true);
       document.removeEventListener('keydown', touched, true);
     });
+    // A window narrower than the bar needs (a laptop window made narrow, a tablet's app beside
+    // another) folds the bar the way a phone does, rather than squeezing its words: decided by
+    // the window's width (user, 2026-11-24).
+    if (!this.device.small) {
+      const narrow = matchMedia(`(max-width: ${SLIM_BAR_PX - 1}px)`);
+      const fit = () => this.fitBar(narrow.matches);
+      fit();
+      narrow.addEventListener('change', fit);
+      this.cleanups.push(() => {
+        narrow.removeEventListener('change', fit);
+        $('game').classList.remove('slim');
+      });
+      // A window as small as a phone (under COMPACT_PX either way) is laid out as a phone is: the
+      // same styles switch on (`.compact` beside `.phone` in the stylesheets), so it looks just
+      // like one (user, 2026-11-24). Real phones keep `.phone`, decided once, as before.
+      const small = matchMedia(`(max-width: ${COMPACT_PX - 1}px), (max-height: ${COMPACT_PX - 1}px)`);
+      const fitSmall = () => {
+        if ($('game').classList.contains('compact') === small.matches) return;
+        $('game').classList.toggle('compact', small.matches);
+        requestAnimationFrame(() => this.view?.resize?.());
+      };
+      fitSmall();
+      small.addEventListener('change', fitSmall);
+      this.cleanups.push(() => {
+        small.removeEventListener('change', fitSmall);
+        $('game').classList.remove('compact');
+      });
+    }
     // Tanks on a phone held sideways: the tab pulls the folded bar down and pushes it back up.
     // Using the bar folds it again (Mute mic a moment later, so you see it change), and so does
     // touching the battlefield.
@@ -858,7 +906,8 @@ export class RoomApp {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
         if (e.key === 'Escape') {
           target.blur();
-          if (this.device.small) this.setChatOpen(false);
+          // (Messages covers the game on a phone or in a small window: close it to see the game.)
+          if (this.device.small || $('game').matches('.slim, .compact')) this.setChatOpen(false);
         }
         return;
       }

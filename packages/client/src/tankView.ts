@@ -499,8 +499,10 @@ export class TankView implements View {
     if (left > 20 && Math.abs(left - right) < 1 && angle === 90) view.style.setProperty('--strip-safe-r', '12px');
   }
 
+  /** Laid out as a phone held sideways: a phone, or a window as small as one (shell.ts, .compact). */
   private sideways() {
-    return this.shell.device.small && matchMedia('(max-height: 500px)').matches;
+    const phoneLike = this.shell.device.small || !!document.getElementById('game')?.classList?.contains?.('compact');
+    return phoneLike && matchMedia('(max-height: 500px)').matches;
   }
 
   showNote(html: string): boolean {

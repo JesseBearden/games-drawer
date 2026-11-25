@@ -872,8 +872,14 @@ export class MahjongTable implements View {
     const h = this.el.clientHeight;
     if (!w || !h) return;
     const roomy = w >= 720 && h >= 560;
-    const wide = !roomy && w > h;
+    // A phone held sideways (wider than tall, and short): one row of tiles with the buttons beside
+    // them. Upright, your strip is your name, your tiles and a row of buttons: two rows of tiles
+    // only when the screen is much taller than wide (an upright phone); otherwise one, so the strip
+    // never runs to four rows (user, 2026-11-24: a window just wider than tall wasted space).
+    const wide = !roomy && w > h && h < 480;
+    const oneRow = !roomy && !wide && h < w * 1.3;
     root.dataset.layout = roomy ? 'roomy' : wide ? 'wide' : 'tall';
+    root.toggleAttribute('data-one-row', oneRow);
     const me = v?.seat != null ? v.seats[v.seat] : null;
     // Your tiles: two rows of 7 upright on a phone, otherwise one row (sets at the front).
     const setSlots = me ? me.melds.length * 3 * 0.72 + (me.melds.length ? 0.6 : 0) : 0;
@@ -886,6 +892,7 @@ export class MahjongTable implements View {
     let hw: number;
     if (roomy) hw = Math.min(62, handW / Math.max(slots, 14.6));
     else if (wide) hw = Math.min(52, handW / Math.max(slots, 14.6), h * 0.135);
+    else if (oneRow) hw = Math.min(56, handW / Math.max(slots, 14.6), h * 0.09);
     else {
       // Two rows of 7 across your strip's own width (less its padding and the 3 px gaps), with
       // room in the second row for the gap before a new tile (a third of a tile).
@@ -894,14 +901,16 @@ export class MahjongTable implements View {
       const inner = mine.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       hw = Math.min(60, (inner - 18 - 4) / 7.4, h * 0.08);
     }
-    let hwPx = Math.max(24, Math.floor(hw));
+    // (Never so small they can't be read; on a small phone held sideways, smaller still rather
+    // than running under the buttons.)
+    let hwPx = Math.max(wide ? 16 : 24, Math.floor(hw));
     root.style.setProperty('--hw', `${hwPx}px`);
     // Upright, your face-up sets stay on one row whatever you have, four Kongs too: the sets get
     // smaller (your own tiles don't) once they'd be wider than the row. A set's tiles are --set-w
     // wide with about a third of one between sets, and the strip has 10 px of padding.
     const hand = this.handEl();
     const sets = me?.melds.length ?? 0;
-    if (!roomy && !wide && sets) {
+    if (!roomy && !wide && !oneRow && sets) {
       const room = hand.clientWidth - 10 - (sets - 1) * 2;
       const setW = Math.min(hwPx * 0.72, room / (sets * 3 + (sets - 1) * 0.3));
       hand.style.setProperty('--set-w', `${Math.floor(setW)}px`);
@@ -916,7 +925,7 @@ export class MahjongTable implements View {
         const tops = [...this.handEl().querySelectorAll<HTMLElement>('.mj-strip:not([hidden]), .mj-h')].map((e) => e.offsetTop + e.offsetHeight).sort((x, y) => x - y);
         return tops.filter((b, i) => i === 0 || b - tops[i - 1] > hwPx / 2).length;
       };
-      while (hwPx > 24 && rows() > 2) root.style.setProperty('--hw', `${--hwPx}px`);
+      while (hwPx > 24 && rows() > (oneRow ? 1 : 2)) root.style.setProperty('--hw', `${--hwPx}px`);
     }
     // Everyone else's tiles, the discards and the wall scale with the table.
     const short = Math.min(w, h);

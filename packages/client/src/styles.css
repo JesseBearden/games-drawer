@@ -996,7 +996,7 @@ input:focus {
   }
 }
 
-.game.phone .chat {
+.game:is(.phone, .compact) .chat {
   position: absolute;
   inset: 0 0 0 auto;
   width: min(360px, 70%);
@@ -1004,42 +1004,42 @@ input:focus {
   box-shadow: -10px 0 40px rgba(0, 0, 0, 0.4);
 }
 
-.game.phone .aim-box {
+.game:is(.phone, .compact) .aim-box {
   font-size: 17px;
   padding: 5px 10px;
   min-width: 0;
 }
 
-.game.phone .aim-label {
+.game:is(.phone, .compact) .aim-label {
   min-width: 0;
   font-size: 13px;
   opacity: 0.8;
 }
 
-.game.phone .spread-badge {
+.game:is(.phone, .compact) .spread-badge {
   font-size: 12px;
 }
 
-.game.phone .hearts img,
-.game.phone .hearts svg {
+.game:is(.phone, .compact) .hearts img,
+.game:is(.phone, .compact) .hearts svg {
   width: 26px;
   height: 24px;
 }
 
-.game.phone .level-line {
+.game:is(.phone, .compact) .level-line {
   font-size: 14px;
 }
 
-.game.phone .wind {
+.game:is(.phone, .compact) .wind {
   font-size: 18px;
   padding: 2px 10px 2px 6px;
 }
 
-.game.phone .wind img {
+.game:is(.phone, .compact) .wind img {
   height: 24px;
 }
 
-.game.phone .toolbar {
+.game:is(.phone, .compact) .toolbar {
   top: calc(6px + var(--safe-t));
   bottom: auto;
   left: auto;
@@ -1047,29 +1047,29 @@ input:focus {
   transform: none;
 }
 
-.game.phone .tool-btn {
+.game:is(.phone, .compact) .tool-btn {
   height: 34px;
   min-width: 36px;
   font-size: 15px;
   padding: 0 7px;
 }
 
-.game.phone .status {
+.game:is(.phone, .compact) .status {
   top: calc(44px + var(--safe-t));
   font-size: 14px;
 }
 
-.game.phone .feed {
+.game:is(.phone, .compact) .feed {
   top: calc(80px + var(--safe-t));
   font-size: 12px;
 }
 
-.game.phone .toasts {
+.game:is(.phone, .compact) .toasts {
   bottom: calc(100px + var(--safe-b));
 }
 
 /* Phones: the wind sits under the hearts, clear of the toolbar (which grows an Invite button). */
-.game.phone .wind {
+.game:is(.phone, .compact) .wind {
   left: calc(12px + var(--safe-l));
   top: calc(58px + var(--safe-t));
   transform: none;
