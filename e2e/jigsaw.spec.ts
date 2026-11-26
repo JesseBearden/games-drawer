@@ -468,14 +468,22 @@ test('your own photo: checked, shared with the table, puzzled together, never sa
 
   // While it's being added (held up here), the panel shows the photo, what's happening and how
   // far along it is. Cancel stops it, and it's back to choosing one.
+  let caught!: () => void;
+  const isHeld = new Promise<void>((done) => (caught = done));
   let letGo!: () => void;
   const held = new Promise<void>((done) => (letGo = done));
+  let gone!: () => void;
+  const dropped = new Promise<void>((done) => (gone = done));
   const isUpload = (url: URL) => url.pathname === '/api/photo';
   await page.route(isUpload, async (route) => {
+    caught();
     await held;
     await route.abort().catch(() => {});
+    gone();
   });
   await view.locator('.pz-photo-file').setInputFiles({ name: 'beach.jpg', mimeType: 'image/jpeg', buffer: await jpeg(1200, 800) });
+  // The bar reads 15% before the photo is even on its way: wait until it's out and held here.
+  await isHeld;
   await expect(view.locator('.pz-photo-step')).toHaveText(/Sending your photo|Checking it’s family friendly/);
   await expect(view.locator('.pz-photo-thumb img')).toBeVisible();
   await expect(view.locator('.pz-photo-bar')).toHaveAttribute('aria-valuenow', /^(1[5-9]|[2-9]\d)$/);
@@ -487,6 +495,9 @@ test('your own photo: checked, shared with the table, puzzled together, never sa
   await expect(view.locator('.pz-photo-choose')).toHaveText('Choose a photo');
   await expect(view.locator('.pz-upload')).toBeEnabled();
   letGo();
+  // Taking the route away lets anything it still holds go on to the server, so the photo has to
+  // be dropped first (or it's added after all, next to the one below).
+  await dropped;
   await page.unroute(isUpload);
 
   await view.locator('.pz-photo-file').setInputFiles({ name: 'beach.jpg', mimeType: 'image/jpeg', buffer: await jpeg(1200, 800) });
