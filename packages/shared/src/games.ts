@@ -210,8 +210,17 @@ export const CARD_BACK_COUNT = 30;
  */
 export const CHOOSE_PLAYERS: readonly GameId[] = ['threethirteen', 'dominoes'];
 export const choosesPlayers = (g: GameId | null): boolean => !!g && CHOOSE_PLAYERS.includes(g);
-/** With fewer than four playing, empty seats come into play in this order: across first, so two face each other. */
-export const SEAT_FILL_ORDER: readonly number[] = [0, 2, 1, 3];
+/**
+ * The seats in play when `count` play: the ones people picked, then free ones, across from the
+ * first picked seat first (so two face each other whichever seat was picked), then its sides.
+ * The servers and the table's seat picker both count this way.
+ */
+export function seatsInPlay(picked: readonly number[], count: number): number[] {
+  const first = picked[0] ?? 0;
+  const inPlay = new Set(picked);
+  for (const step of [0, 2, 1, 3]) if (inPlay.size < count) inPlay.add((first + step) % SEAT_COUNT);
+  return [...inPlay].sort((a, b) => a - b);
+}
 export const GAME_NAMES = Object.fromEntries(GAMES.map((g) => [g.id, g.name])) as Record<GameId, string>;
 
 export function isGameId(v: unknown): v is GameId {

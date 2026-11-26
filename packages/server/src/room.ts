@@ -2,7 +2,6 @@ import { createHash, createHmac, randomBytes, randomInt, randomUUID } from 'node
 import {
   cleanName,
   cleanText,
-  DEFAULT_CONFIG,
   freshName,
   GAME_NAMES,
   isReservedName,
@@ -38,7 +37,7 @@ import {
 } from '@tank/shared';
 import { MAX_CHAT_LENGTH, RateLimiter, RULE_VERSION, type ChatModerator } from './chat';
 import type { LogSink } from './eventlog';
-import type { WindowCounter } from './guard';
+import { TokenBucket, type WindowCounter } from './guard';
 import { HeartsGame } from './games/hearts';
 import { SpadesGame } from './games/spades';
 import { DominoesGame } from './games/dominoes';
@@ -101,6 +100,12 @@ const TABLE_ACT_TYPES: ReadonlySet<string> = new Set(['pick', 'sit', 'players', 
 export const REPORTS_PER_MINUTE = 5;
 /** One rename per this many ms. */
 export const RENAME_COOLDOWN_MS = 10_000;
+/**
+ * Voice set-up one person can send through the server, in characters: 64 KB a second, after a
+ * first 256 KB (joining voice at a full table of six is about 30 KB of offers and candidates).
+ */
+const RTC_CHARS_PER_SECOND = 64_000;
+const RTC_CHARS_BURST = 256_000;
 /** Join/leave/back notices for the same player at most this often. */
 export const ANNOUNCE_COOLDOWN_MS = 20_000;
 /**
@@ -148,6 +153,8 @@ interface Player extends Member {
   tableActs: number[];
   inVoice: boolean;
   reportTimes: number[];
+  /** Voice set-up passed on for them, in characters (see 'rtc'). */
+  rtcBudget: TokenBucket;
   /** The current connection has been sent its welcome (game messages wait for it). */
   welcomed: boolean;
   /** When the chat filter caught this player's recent messages (for the timeout). */
@@ -208,7 +215,6 @@ export class Room {
   private rng: Rng;
   /** How swearing in chat is handled. Every table starts on hide. */
   chatFilter: ChatFilterMode;
-  private readonly cfg: GameConfig;
   private host: GameHost;
   /** Invite links made here: token -> who made it (session) and the name it's for. */
   private readonly invites = new Map<string, { session: string; for: string | null }>();
@@ -235,7 +241,6 @@ export class Room {
   ) {
     this.rng = new Rng((deps.seed ?? randomInt(2 ** 31)) ^ 0x2c1b3c6d);
     this.chatFilter = 'hide';
-    this.cfg = { ...DEFAULT_CONFIG, ...deps.cfg };
     this.createdAt = deps.now();
     // A brand-new room is "empty" until its creator's connection lands.
     this.emptySince = this.createdAt;
@@ -391,7 +396,7 @@ export class Room {
     this.goneNotices.set(p.session, { arrive: p.lastArrive, leave: p.lastLeave });
     if (this.goneNotices.size > 64) this.goneNotices.delete(this.goneNotices.keys().next().value!);
     if (this.forgetAtTable(p.session)) this.broadcastTable();
-    this.game?.removePlayer(p);
+    this.game?.removePlayer(p, { comingBack: logAs === 'came_back' });
     if (logAs) this.log(logAs, { pid: p.pid });
   }
 
@@ -501,6 +506,7 @@ export class Room {
       alias: this.newAlias(),
       inVoice: false,
       reportTimes: [],
+      rtcBudget: new TokenBucket(RTC_CHARS_PER_SECOND, RTC_CHARS_BURST, now),
       welcomed: false,
       caughtTimes: [],
       chatPausedUntil: 0,
@@ -634,7 +640,9 @@ export class Room {
   /** Once a second: post who left, and say why the room should close (empty, or idle), or false. */
   housekeeping(): false | 'empty' | 'idle' {
     const now = this.deps.now();
-    this.flushRateLimitCounts();
+    // Counts of chat held back for flooding: at most a line a minute while it goes on.
+    if (now - this.lastRateFlush >= 60_000) this.flushRateLimitCounts();
+    this.game?.seatWatchers?.();
     this.postPendingLeaves(now);
     if (this.emptySince !== null) return now - this.emptySince >= this.deps.emptyRoomMs ? 'empty' : false;
     // People are connected: close it if none of them has played or talked for a long while,
@@ -655,6 +663,7 @@ export class Room {
   close(reason: string) {
     if (this.closed) return;
     this.closed = true;
+    this.flushRateLimitCounts();
     this.endSession('room_closed');
     this.game?.dispose();
     // The table's messages and photos go with it.
@@ -741,7 +750,7 @@ export class Room {
   }
 
   /** How many play the picked game (2 to 4), for games that let the table choose. */
-  private setPlayers(p: Player, n: number) {
+  private setPlayers(n: number) {
     if (this.game || !choosesPlayers(this.setup.pick) || n < 2 || n > SEAT_COUNT || n === this.setup.players) return;
     this.setup.players = n;
     this.broadcastTable();
@@ -806,7 +815,9 @@ export class Room {
     this.broadcastTable();
     this.broadcast({ t: 'game', game: id });
     // People who picked a seat sit there; everyone else takes a free one; the computer plays the rest.
-    const members = [...this.players.values()];
+    // Free seats go to people here before people whose phone has just dropped: with more people
+    // than seats (Tanks seats 4, a table holds 6) someone here mustn't be left without one.
+    const members = [...this.players.values()].sort((a, b) => Number(!!b.conn) - Number(!!a.conn));
     const chosen = (m: Player) => {
       const i = seats.indexOf(m.session);
       return i >= 0 ? i : undefined;
@@ -912,7 +923,11 @@ export class Room {
         if (!p.inVoice) return;
         const to = [...this.players.values()].find((o) => o.alias === msg.to);
         if (!to || to === p || !to.inVoice || !to.conn) return;
-        to.conn.send(JSON.stringify({ t: 'rtc', from: p.alias, data: msg.data } satisfies ServerMessage));
+        const out = JSON.stringify({ t: 'rtc', from: p.alias, data: msg.data } satisfies ServerMessage);
+        // Setting up a call is a few offers and a few dozen candidates. Much more is a flood, which
+        // could back a slow phone up until the server has to cut it off.
+        if (!p.rtcBudget.take(this.deps.now(), out.length)) return;
+        to.conn.send(out);
         return;
       }
       case 'pick':
@@ -922,7 +937,7 @@ export class Room {
         this.sit(p, msg.seat);
         return;
       case 'players':
-        this.setPlayers(p, msg.n);
+        this.setPlayers(msg.n);
         return;
       case 'mj-rules':
         this.setMahjongRules(p, msg);
@@ -1050,7 +1065,7 @@ export class Room {
    * Recent delivered messages, so a report can save the message and its sender for review.
    * Like the chat history, they live only in memory and go when the table closes.
    */
-  private recentMessages = new Map<string, { pid: string; name: string; text: string; at: number }>();
+  private recentMessages = new Map<string, { pid: string; name: string; text: string; at: number; reportedBy: Set<string> }>();
 
   private report(p: Player, msgId: string) {
     const now = this.deps.now();
@@ -1061,6 +1076,12 @@ export class Room {
     }
     const target = this.recentMessages.get(msgId);
     if (!target) return;
+    // Once is enough: a second report of the same message would only log its text again.
+    if (target.reportedBy.has(p.session)) {
+      this.notice(p, 'You already reported that message.');
+      return;
+    }
+    target.reportedBy.add(p.session);
     p.reportTimes.push(now);
     // A reported message is the only chat text written to the log, so it can be reviewed after
     // the table closes. Everything else said at the table is gone when the table is.
@@ -1080,6 +1101,7 @@ export class Room {
 
   /** Rate-limited chat attempts since the last housekeeping, logged as counts (not text). */
   private rateLimited = { rapid: 0, repeat: 0 };
+  private lastRateFlush = -Infinity;
 
   /** Anyone at the table can change how swearing is handled; everyone is told. */
   private setChatFilter(p: Player, mode: ChatFilterMode) {
@@ -1125,7 +1147,7 @@ export class Room {
     }
     this.deps.log.chat({ ...base, outcome: 'delivered' });
     if (this.session) this.session.chats++;
-    this.recentMessages.set(msgId, { pid: p.pid, name: p.name, text: msg.text, at: now });
+    this.recentMessages.set(msgId, { pid: p.pid, name: p.name, text: msg.text, at: now, reportedBy: new Set() });
     if (this.recentMessages.size > RECENT_MESSAGES) this.recentMessages.delete(this.recentMessages.keys().next().value!);
     this.pushHistory(msg);
     this.broadcast({ t: 'chat', msg });
@@ -1157,6 +1179,9 @@ export class Room {
       this.notice(p, 'Wait a few seconds before renaming again.');
       return;
     }
+    // A refused name means a short wait (2 s) before the next try: each try runs the name through
+    // the chat filter.
+    p.lastRename = now - RENAME_COOLDOWN_MS + 2000;
     const name = this.acceptableName(raw);
     if (!name) {
       p.conn?.send(JSON.stringify({ t: 'name', name: p.name } satisfies ServerMessage));
@@ -1212,6 +1237,7 @@ export class Room {
     if (rapid + repeat === 0) return;
     this.deps.log.chat({ room: this.code, outcome: 'rate-limited-summary', rapid, repeat, ruleVersion: RULE_VERSION });
     this.rateLimited = { rapid: 0, repeat: 0 };
+    this.lastRateFlush = this.deps.now();
   }
 
   // ------------------------------------------------------------------ sync

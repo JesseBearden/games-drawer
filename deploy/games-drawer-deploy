@@ -63,4 +63,10 @@ if [ ! -f "$dir/server.mjs" ]; then
   chmod -R a+rX,go-w "$dir.tmp"
   mv "$dir.tmp" "$dir"
 fi
+# Releases from before the voice relay had its firewall (and the deploy its rollback fix) are
+# still in storage for a while; never run one.
+if [ ! -f "$dir/deploy/relay-firewall.sh" ]; then
+  echo "Release ${rel:0:7} is too old to deploy (it has no deploy/relay-firewall.sh)." >&2
+  exit 1
+fi
 exec /usr/local/bin/node "$dir/deploy/rollout.mjs" "$rel" "$@"

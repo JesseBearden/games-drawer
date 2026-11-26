@@ -1,52 +1,21 @@
 /*
- * Cut Paper: the shared look for every page and game. The rules behind it are in DESIGN.md.
- * Every coloured shape is a piece of paper: its colour, its own paper texture, and a shadow that
+ * Cut Paper: the shared pieces and layout for every page and game. The rules behind it are in
+ * DESIGN.md. Every coloured shape is a piece: its colour, its own texture, and a shadow that
  * shows what it's sitting on. Light always comes from above.
  *
- * The papers are the project's own seamless sheets in public/art/paper/ (one per colour,
- * 768 px tiles shown at 384 CSS px, so the grain is crisp on high-density screens). Each one has
- * a flat colour underneath that shows until its texture arrives.
+ * The colours and their textures (--paper, --cobalt … and --paper-img, --cobalt-img …), with
+ * --ink-soft and --cut-in, come from felt.css, which loads after this file: the site is made of
+ * felt (2026-11-20). Signal colours keep one meaning each (DESIGN.md, "Colours"): --cobalt is the
+ * main thing to tap, --sunflower whose turn it is, --tomato something off (mic off, unread,
+ * leaving).
  */
 
 :root {
-  /* Signal colours: these keep one meaning each (DESIGN.md, "Colours"). */
-  --cobalt: #103db6; /* the main thing to tap */
-  --sunflower: #ffcb2d; /* whose turn it is */
-  --tomato: #ef5943; /* something is off: mic off, unread, leaving */
-
-  /* Base. */
-  --paper: #fffcf5; /* the page and most pieces */
-  --white: #fefefd; /* outlined buttons: white, so they never read as the page on itself */
-  --mat: #e5eff6; /* the table a game is played on */
   --ink: #112875; /* text */
-  --ink-soft: #46558a; /* secondary text on paper, white or mat (5.5:1 or better) */
   --rule: #c9cfdf; /* thin divider lines */
 
-  /* More paper: use these freely (game colours, panels, scenery, player colours). */
-  --grass: #478653;
-  --sky: #85bee3;
-  --mint: #b7ddc8;
-  --butter: #f7e3a2;
-  --lilac: #c6b5dc;
-  --peach: #f2bd96;
-  --blush: #ebb7bf;
-  --kraft: #bb926a;
-
+  /* Each texture is a 768 px tile shown at 384 CSS px, so the grain is crisp on high-density screens. */
   --paper-size: 384px;
-  --paper-img: url('/art/paper/paper.webp');
-  --white-img: url('/art/paper/white.webp');
-  --mat-img: url('/art/paper/mat.webp');
-  --cobalt-img: url('/art/paper/cobalt.webp');
-  --sunflower-img: url('/art/paper/sunflower.webp');
-  --tomato-img: url('/art/paper/tomato.webp');
-  --grass-img: url('/art/paper/grass.webp');
-  --sky-img: url('/art/paper/sky.webp');
-  --mint-img: url('/art/paper/mint.webp');
-  --butter-img: url('/art/paper/butter.webp');
-  --lilac-img: url('/art/paper/lilac.webp');
-  --peach-img: url('/art/paper/peach.webp');
-  --blush-img: url('/art/paper/blush.webp');
-  --kraft-img: url('/art/paper/kraft.webp');
 
   /* Playing cards and dominoes: cream card stock (from the card mock), classic red and navy-black. */
   --card: #fbf4e7;
@@ -61,7 +30,6 @@
   --lift-1: 0 1px 1px rgb(17 40 117 / 0.2), 0 2px 6px rgb(17 40 117 / 0.1);
   --lift-2: 0 2px 2px rgb(17 40 117 / 0.18), 0 7px 16px rgb(17 40 117 / 0.16);
   --lift-3: 0 4px 4px rgb(17 40 117 / 0.16), 0 16px 32px rgb(17 40 117 / 0.2);
-  --cut-in: inset 0 2px 3px rgb(17 40 117 / 0.16), inset 0 0 0 1.5px var(--ink-soft);
 
   --font: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --radius: 12px;
@@ -247,26 +215,6 @@ body.pad-mode .pc-choice:has(input:focus) {
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
-}
-
-/* A count on a button (unread messages): a small tomato dot of paper stuck on its corner. */
-.pc-btn .pc-badge {
-  position: absolute;
-  top: -9px;
-  right: -7px;
-}
-.pc-badge {
-  min-width: 24px;
-  height: 24px;
-  padding: 0 7px;
-  border-radius: 12px;
-  --fc: var(--tomato);
-  background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
-  color: #fff;
-  font-size: 0.85rem;
-  line-height: 24px;
-  text-align: center;
-  box-shadow: var(--lift-0);
 }
 
 /* ------------------------------------------------------------------ typing */
@@ -598,15 +546,6 @@ body.pad-mode .pc-choice:has(input:focus) {
   font: 800 60px var(--font);
   letter-spacing: -0.04em;
 }
-/* The back: a border of card stock around a cobalt panel (paperArt.cardBackHtml). */
-.pc-back-panel {
-  position: absolute;
-  inset: 7%;
-  overflow: hidden;
-  border-radius: calc(var(--w) * 0.05);
-  --fc: var(--cobalt);
-  background: var(--cobalt) var(--cobalt-img) 0 0 / 200px;
-}
 /* Lifted (picked on a phone, or a card you can play when hovered). */
 .pc-card.is-up {
   transform: translateY(-14px);
@@ -615,77 +554,6 @@ body.pad-mode .pc-choice:has(input:focus) {
 /* Can't be played right now: greyed, as if under a sheet of tracing paper. */
 .pc-card.is-dim {
   filter: saturate(0.35) brightness(0.9);
-}
-
-/* A domino: card stock with the pips printed on (paperArt.dominoSvg). */
-.pc-domino {
-  --u: 40px; /* one square half */
-  display: inline-block;
-  width: calc(var(--u) * 2);
-  height: var(--u);
-  border-radius: calc(var(--u) * 0.14);
-  --fc: var(--card);
-  background: var(--card) var(--card-img) 0 0 / calc(var(--u) * 3) auto;
-  box-shadow: var(--lift-1);
-}
-.pc-domino.v {
-  width: var(--u);
-  height: calc(var(--u) * 2);
-}
-.pc-domino svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.pc-domino .pd-pips {
-  fill: var(--card-black);
-}
-.pc-domino .pd-line {
-  stroke: #9b7f60;
-  stroke-width: 3;
-}
-.pc-domino.is-picked {
-  box-shadow:
-    0 0 0 3px var(--cobalt),
-    var(--lift-2);
-  transform: translateY(-3px);
-}
-
-/* Messages: little notes on a sheet of sky paper (never paper-coloured notes on the page itself).
-   Yours are cobalt, everyone else's are paper. */
-.pc-messages {
-  display: grid;
-  gap: 14px;
-  padding: 14px;
-  border-radius: 16px;
-  --fc: var(--sky);
-  background: var(--sky) var(--sky-img) 0 0 / var(--paper-size);
-  box-shadow: var(--laid);
-}
-.pc-note-list {
-  display: grid;
-  gap: 10px;
-}
-.pc-msg {
-  max-width: 85%;
-  justify-self: start;
-  padding: 8px 14px 10px;
-  border-radius: 4px var(--radius) var(--radius) var(--radius);
-  --fc: var(--paper);
-  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--laid);
-  overflow-wrap: anywhere;
-}
-.pc-msg b {
-  display: block;
-  font-size: 0.85rem;
-}
-.pc-msg.mine {
-  justify-self: end;
-  border-radius: var(--radius) 4px var(--radius) var(--radius);
-  --fc: var(--cobalt);
-  background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
-  color: #fff;
 }
 
 /* A strip that needs your attention (mic blocked, someone left): tomato paper. */

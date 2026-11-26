@@ -8,9 +8,9 @@ describe('what goes in "Have a table code?"', () => {
     expect(roomCodeFromEntry('bcd-fgh')).toBe('BCDFGH');
   });
 
-  it('still takes a 5-letter code, for tables opened before codes grew to 6', () => {
-    expect(roomCodeFromEntry('bcdfg')).toBe('BCDFG');
-    expect(isRoomCode('BCDFG')).toBe(true);
+  it('takes only six letters (the 5-letter codes from before 2026-11-22 are gone)', () => {
+    expect(roomCodeFromEntry('bcdfg')).toBe('');
+    expect(isRoomCode('BCDFG')).toBe(false);
     expect(isRoomCode('BCDFGH')).toBe(true);
     expect(isRoomCode('BCDF')).toBe(false);
     expect(isRoomCode('BCDFGHJ')).toBe(false);

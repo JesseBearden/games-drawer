@@ -461,7 +461,7 @@ export class GameState {
     const t = this.tanks.get(id);
     const css = t ? colorCss(t.info.color) : '#c9cfdf';
     // The name in ink, underlined in the tank's colour (coloured text is hard to read on paper).
-    return `<span class="tank-name" style="--c:${css}">${escapeHtml(this.nameOf(id))}</span>`;
+    return `<span class="tank-name pc-nw" style="--c:${css}">${escapeHtml(this.nameOf(id))}</span>`;
   }
 
   private startNuke(now: number) {

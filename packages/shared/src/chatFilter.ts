@@ -164,8 +164,3 @@ export function checkChat(raw: string, mode: ChatFilterMode, extraBlocked: strin
   if (all.hasMatch(joinSpacedLetters(out)) || disguised(all, undisguise(out))) return { ok: false, reason: 'swearing' };
   return { ok: true, text: out, censored: out !== text };
 }
-
-/** Player names: always held to the strictest setting (they show on invites and the join page too). */
-export function nameAllowed(name: string, extraBlocked: string[] = []): boolean {
-  return checkChat(name, 'block', extraBlocked).ok;
-}

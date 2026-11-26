@@ -200,6 +200,35 @@ describe('cleaning a JPEG', () => {
     expect(meta.exif).toBeUndefined();
   });
 
+  it('drops anything after the end of the picture (a motion photo’s video, a second picture)', async () => {
+    const raw = await photo(320, 240);
+    const tacked = Buffer.concat([raw, Buffer.from('ftypmp42 a whole video, with sound')]);
+    const clean = cleanJpeg(tacked)!;
+    expect(clean.jpeg.includes(Buffer.from('ftypmp42'))).toBe(false);
+    expect(clean.jpeg.subarray(-2)).toEqual(Buffer.from([0xff, 0xd9]));
+    expect(await sharp(clean.jpeg).metadata()).toMatchObject({ format: 'jpeg', width: 320, height: 240 });
+  });
+
+  it('drops comments and camera details tucked between a progressive JPEG’s scans', async () => {
+    const raw = await sharp({ create: { width: 320, height: 240, channels: 3, background: '#468' } }).jpeg({ progressive: true }).toBuffer();
+    // A comment and an EXIF block just before the second scan.
+    const sos = (from: number) => raw.indexOf(Buffer.from([0xff, 0xda]), from);
+    const second = sos(sos(0) + 2);
+    expect(second).toBeGreaterThan(0);
+    const seg = (marker: number, text: string) => {
+      const body = Buffer.from(text);
+      const head = Buffer.from([0xff, marker, 0, 0]);
+      head.writeUInt16BE(body.length + 2, 2);
+      return Buffer.concat([head, body]);
+    };
+    const tucked = Buffer.concat([raw.subarray(0, second), seg(0xfe, 'secret comment'), seg(0xe1, 'Exif  PhoneCo'), raw.subarray(second)]);
+    const clean = cleanJpeg(tucked)!;
+    expect(clean.jpeg.includes(Buffer.from('secret comment'))).toBe(false);
+    expect(clean.jpeg.includes(Buffer.from('PhoneCo'))).toBe(false);
+    expect(clean.jpeg.length).toBe(raw.length);
+    expect(await sharp(clean.jpeg).metadata()).toMatchObject({ format: 'jpeg', width: 320, height: 240 });
+  });
+
   it('refuses what isn’t a JPEG it can follow', async () => {
     expect(cleanJpeg(Buffer.from('hello'))).toBeNull();
     expect(cleanJpeg(await sharp({ create: { width: 400, height: 400, channels: 3, background: '#fff' } }).png().toBuffer())).toBeNull();

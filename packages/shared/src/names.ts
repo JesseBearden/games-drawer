@@ -33,9 +33,6 @@ export const TANK_BOT_NAMES = [
   'Boom Buddy',
 ];
 
-/** @deprecated Tank bots only; people and card-game bots use randomName(). */
-export const DEFAULT_NAMES = TANK_BOT_NAMES;
-
 /** Player names are a title and a snack: "Captain Pancake", "Duchess Nugget". */
 export const NAME_TITLES = [
   'Captain', 'Duchess', 'Professor', 'Sir', 'Lady', 'Baron', 'Admiral', 'Doctor', 'Count', 'Agent',

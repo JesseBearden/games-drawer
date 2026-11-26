@@ -2,7 +2,6 @@
 // table needs the word lists.
 
 export type ChatFilterMode = 'none' | 'hide' | 'block';
-export const CHAT_FILTER_MODES: ChatFilterMode[] = ['none', 'hide', 'block'];
 export const MAX_CHAT_LENGTH = 200;
 
 export function isChatFilterMode(v: unknown): v is ChatFilterMode {

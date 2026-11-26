@@ -48,6 +48,15 @@ export class Renderer {
 
   private skyPattern: CanvasPattern | null;
 
+  /** Give the mountains' canvases back (the view is closing). */
+  release() {
+    for (const c of [this.far, this.near]) {
+      c.width = 0;
+      c.height = 0;
+    }
+    this.skyPattern = null;
+  }
+
   /**
    * The canvas's pixel size for its size on screen. resize() and syncSize() both measure here, the
    * same way: measured two ways (one rounded to whole CSS pixels first), a screen whose size isn't

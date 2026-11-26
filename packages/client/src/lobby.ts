@@ -1,4 +1,4 @@
-import { isOffered, choosesPlayers, GAMES, SEAT_FILL_ORDER, gameInfo, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
+import { isOffered, choosesPlayers, GAMES, gameInfo, seatsInPlay, isGameId, isSeated, SEAT_COUNT, type GameId, type MemberInfo, type TableSetup } from '@tank/shared';
 import { patchHtml } from './dom';
 import { personFelt } from './felts';
 import { escapeHtml } from './html';
@@ -211,8 +211,7 @@ export class LobbyView implements View {
     // (Counted as the server deals: someone who has gone only plays if they'd picked a seat.)
     const people = Math.min(SEAT_COUNT, this.members.filter((m) => m.connected || t.seats.includes(m.id)).length);
     const count = chooses ? Math.max(2, Math.min(SEAT_COUNT, Math.max(t.players, people))) : SEAT_COUNT;
-    const inPlay = new Set(t.seats.flatMap((s, i) => (s ? [i] : [])));
-    for (const i of SEAT_FILL_ORDER) if (inPlay.size < count) inPlay.add(i);
+    const inPlay = new Set(seatsInPlay(t.seats.flatMap((s, i) => (s ? [i] : [])), count));
     if (chooses) {
       html += '<h2 class="pc-h3">How many players?</h2><div class="tb-count" role="radiogroup" aria-label="How many players">';
       for (let k = 2; k <= SEAT_COUNT; k++) {

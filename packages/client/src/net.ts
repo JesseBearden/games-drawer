@@ -60,6 +60,11 @@ function slotFor(roomCode: string | null): Slot | null {
 
 export type FatalError = Extract<ServerMessage, { t: 'error' }>;
 
+/** The server's messages say "room"; the site says "table" ("Room is full." and "rooms" too). */
+export function inTableWords(message: string): string {
+  return message.replace(/\b([Rr])oom(s?)\b/g, (_, r: string, s: string) => `${r === 'R' ? 'T' : 't'}able${s}`);
+}
+
 /** The shell pings this often. (It was every 2 seconds, which was most of a card table's traffic.) */
 export const PING_MS = 5000;
 /**
@@ -155,9 +160,18 @@ export class Net {
       } catch {
         return;
       }
-      if (frame.t !== 'batch') return take(frame);
+      // Each message on its own: a screen that trips over one (a bug drawing an odd moment) mustn't
+      // lose the others that came in the same frame.
+      const safely = (msg: ServerMessage) => {
+        try {
+          take(msg);
+        } catch (err) {
+          console.error('Handling a message from the table failed:', msg?.t, err);
+        }
+      };
+      if (frame.t !== 'batch') return safely(frame);
       // Several at once: exactly as if they'd come one after another.
-      for (const msg of frame.msgs) if (this.ws === ws) take(msg);
+      for (const msg of frame.msgs) if (this.ws === ws) safely(msg);
     };
     ws.onclose = () => this.lost(ws);
   }

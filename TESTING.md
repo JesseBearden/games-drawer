@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-25 (the new bar; Mahjong scaled to fit)_
+_Last updated: 2026-11-26 (fixes from the third code review)_
 
 ## Getting set up
 
@@ -12,6 +12,41 @@ _Last updated: 2026-11-25 (the new bar; Mahjong scaled to fit)_
 - For phones (and anything with voice): `npm run dev:https`, open the **https** Network URL it
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player table.
+
+## Fixes from the third code review (2026-11-26)
+
+- [ ] **Coming back in a new tab while someone watches:** two-player Dominoes (or Three Thirteen)
+      on two devices, and a third person joins and watches. Close the first phone's tab and open
+      the link again: it gets its seat and its tiles back, and the watcher keeps watching.
+- [ ] **Two players sit across:** Dominoes for 2, the one person picks the seat on the right (or
+      left). The computer sits across from them, not beside them.
+- [ ] **Mahjong Learning Mode, a phone drops:** two people learning, one locks their phone while
+      the other is being asked about a discard. Within about 20 s the game moves on (it used to
+      wait for good).
+- [ ] **Tanks:** hold an aim key (or the power button) while your tank is knocked out. The
+      helicopter no longer drops you the moment it appears; tap to drop as usual. Hold D through
+      a knock-out on a level 4+ tank: it moves again as soon as it lands. Unlock a phone mid-game:
+      one "You have your place back" note, not two.
+- [ ] **Jigsaw:** a photo from a phone on a weak signal (one bar) still goes through instead of
+      "couldn't be checked". Late in a big puzzle, placing pieces feels the same (each drop now
+      sends a few pieces, not the whole frame).
+- [ ] **Tanks with five or six at the table:** with four already playing, a fifth person (or one
+      coming back) sees the whole battlefield, "Watching: you'll get a tank when one frees up",
+      and a greyed Fire button. When someone leaves (or has been gone 20 s), the watcher gets a
+      tank within a second or two: "A tank is free: it's yours."
+- [ ] **A watcher takes a computer's seat:** two-player Dominoes or Three Thirteen with a third
+      person watching. Lock one player's phone: about 20 s later the watcher has that seat (and
+      its hand); the locked phone, back, watches instead.
+- [ ] **Three Thirteen name tags:** no card count any more, just the score ("Went out" when someone
+      does). Late in a game on an upright phone, your own name has room again.
+- [ ] **Three Thirteen, between rounds:** when someone's phone locks, the line says "Waiting for
+      Liz (dropped out)…" until the computer takes over, not "Everyone else is ready".
+- [ ] **On a computer:** Tab to "I'm ready" (or a menu button) and press Enter: it presses the
+      button instead of opening Messages.
+- [ ] **Next staging box (Claude can check):** `systemctl list-timers games-drawer-journal-vacuum.timer`
+      shows the daily journal clean-up. At the next go-live, the old box gets
+      `/run/systemd/system/games-drawer@<slot>.service.d/retiring.conf` and powers off when its
+      games end (within 3½ hours at most).
 
 ## The new bar (2026-11-25)
 

@@ -39,7 +39,7 @@ import { Sfx } from './audio';
 import { Gamepads, moveFocus, watchPadMode } from './gamepad';
 import { reloadForUpdate } from './reload';
 import { readActive, resumesTable, type Active, type AsItWas } from './resume';
-import { getDeviceId, Net } from './net';
+import { getDeviceId, inTableWords, Net } from './net';
 import { escapeHtml } from './html';
 import { MIC_CONSTRAINTS, voiceSupported } from './voice';
 
@@ -316,7 +316,8 @@ async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
     // This device's number, so a seat you left here is known as yours (your table knows you again
     // in a new tab, the same way).
     const device = getDeviceId();
-    const res = await fetch(`/api/table?${q}`, { cache: 'no-store', ...(device && { headers: { 'x-gd-device': device } }) });
+    // x-gd: it's our own page asking (server.ts counts wrong codes only then).
+    const res = await fetch(`/api/table?${q}`, { cache: 'no-store', headers: { 'x-gd': '1', ...(device && { 'x-gd-device': device }) } });
     if (res.ok) info = (await res.json()) as TableInfo;
   } catch {
     /* offline or an old server: the page still works, just without names */
@@ -561,7 +562,7 @@ async function start(room: RoomRequest, opts: Partial<AsItWas> & { mic: boolean;
       dropEntry(entry);
       setActive(null);
       setBusy(false);
-      const why = err.message.replace(/\broom\b/g, 'table');
+      const why = inTableWords(err.message);
       // Not getting in from a table's join page (it has closed, filled up, too many tries): look
       // again. If the page now says why itself ("This table has closed"), a red note saying it
       // twice is noise.

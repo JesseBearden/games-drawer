@@ -13,6 +13,9 @@ import { PROTOCOL_VERSION, ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH, slotOfCode, typ
 import { MemoryLog } from '../src/eventlog';
 import { startGameServer, type GameServer, type Limits, type ServerOptions } from '../src/server';
 
+/** What our own page sends with a table lookup (another website can't add a custom header). */
+const OURS = { headers: { 'x-gd': '1' } };
+
 type Welcome = Extract<ServerMessage, { t: 'welcome' }>;
 
 function baseOptions(over: Partial<ServerOptions> = {}): ServerOptions {
@@ -372,7 +375,7 @@ describe('live server: abuse limits', () => {
     try {
       const host = await joined(s.port, { kind: 'create-private' });
       const code = host.w.room.code;
-      for (const guess of ['BBBBB', 'CCCCC']) await fetch(`http://127.0.0.1:${s.port}/api/table?code=${guess}`);
+      for (const guess of ['BBBBB', 'CCCCC']) await fetch(`http://127.0.0.1:${s.port}/api/table?code=${guess}`, OURS);
       // A newcomer is refused for now…
       const stranger = connect(s.port);
       await stranger.opened;
@@ -403,8 +406,12 @@ describe('live server: abuse limits', () => {
       }
       // It tells that website nothing about a real table either.
       expect(await (await fetch(url(host.w.room.code), { headers: { 'sec-fetch-site': 'cross-site' } })).json()).toEqual({ ok: false, reason: 'busy' });
+      // Nor an iPhone before iOS 16.4, which doesn't say where a request comes from: our own page
+      // always sends x-gd, which another website can't add.
+      for (let i = 0; i < 10; i++) expect(await (await fetch(url('BBBBB'))).json()).toEqual({ ok: false, reason: 'busy' });
       // The family's own page still works.
-      expect(await (await fetch(url(host.w.room.code), { headers: { 'sec-fetch-site': 'same-origin' } })).json()).toMatchObject({ ok: true });
+      expect(await (await fetch(url(host.w.room.code), { headers: { 'sec-fetch-site': 'same-origin', 'x-gd': '1' } })).json()).toMatchObject({ ok: true });
+      expect(await (await fetch(url(host.w.room.code), OURS)).json()).toMatchObject({ ok: true });
       host.c.ws.close();
     } finally {
       await s.close();
@@ -416,9 +423,9 @@ describe('live server: abuse limits', () => {
     try {
       const host = await joined(s.port, { kind: 'create-private', game: 'jigsaw' });
       const code = host.w.room.code;
-      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}`)).json();
+      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}`, OURS)).json();
       expect(info).toEqual({ ok: true, from: 'Tester', for: null, game: 'jigsaw', people: ['Tester'], away: [], full: false, back: null, here: false });
-      const gone = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=BBBBB`)).json();
+      const gone = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=BBBBB`, OURS)).json();
       expect(gone).toEqual({ ok: false, reason: 'closed' });
       host.c.ws.close();
     } finally {
@@ -460,14 +467,14 @@ describe('live server: abuse limits', () => {
       const inv = await host.c.waitFor('invite');
       expect(inv.for).toBe('Liz');
       expect(inv.token).toMatch(/^[a-z2-9]{8}$/);
-      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}&i=${inv.token}`)).json();
+      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}&i=${inv.token}`, OURS)).json();
       expect(info).toMatchObject({ ok: true, from: 'Tester', for: 'Liz', game: null });
       // Asking again for the same person gives the same link.
       host.c.messages.length = 0;
       host.c.send({ t: 'invite', for: 'Liz' });
       expect((await host.c.waitFor('invite')).token).toBe(inv.token);
       // A made-up token is ignored: the page just names whoever started the table.
-      const fake = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}&i=zzzzzzzz`)).json();
+      const fake = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${code}&i=zzzzzzzz`, OURS)).json();
       expect(fake).toMatchObject({ ok: true, from: 'Tester', for: null });
       host.c.ws.close();
     } finally {
@@ -479,8 +486,8 @@ describe('live server: abuse limits', () => {
     const s = await startWith({ failedJoinsPer5Min: 2 });
     try {
       const host = await joined(s.port, { kind: 'create-private' });
-      for (const guess of ['BBBBB', 'CCCCC']) await fetch(`http://127.0.0.1:${s.port}/api/table?code=${guess}`);
-      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${host.w.room.code}`)).json();
+      for (const guess of ['BBBBB', 'CCCCC']) await fetch(`http://127.0.0.1:${s.port}/api/table?code=${guess}`, OURS);
+      const info = await (await fetch(`http://127.0.0.1:${s.port}/api/table?code=${host.w.room.code}`, OURS)).json();
       expect(info).toEqual({ ok: false, reason: 'busy' });
       host.c.ws.close();
     } finally {

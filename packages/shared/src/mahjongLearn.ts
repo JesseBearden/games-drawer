@@ -69,7 +69,6 @@ export function mjClaimWhyNot(choice: MjLearnChoice, c: MjOfferContext): MjWhyNo
   const o = c.options;
   if (choice === 'win' ? o.win : choice === 'pung' ? o.pung : choice === 'kong' ? o.kong : o.chows.length > 0) return null;
   const name = mjTilesName(c.tile);
-  const have = countIn(c.hand, c.tile);
   const same = c.hand.filter((x) => x === c.tile);
   if (choice === 'win') return { text: 'This tile doesn’t finish your hand: you need four sets and a pair.', help: [] };
   if (c.addedKong) return { text: 'A tile added to a Pung to make a Kong can only be taken for Mahjong.', help: [] };

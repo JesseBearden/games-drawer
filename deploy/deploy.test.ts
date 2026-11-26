@@ -27,7 +27,7 @@ beforeAll(() => {
   fake('npx', [
     'echo "$*" >> "$CALLS"',
     'if [[ "$*" == *"fleet.ts launch"* ]]; then echo "Started i-1; waiting for it to boot"; fi',
-    'if [ -n "$FAIL" ] && [[ "$*" == *"$FAIL"* ]]; then exit 1; fi',
+    'if [ -n "$FAIL" ] && [[ "$*" == *"$FAIL"* ]]; then exit "${FAIL_CODE:-1}"; fi',
     'if [ -n "$KILL_AT" ] && [[ "$*" == *"$KILL_AT"* ]]; then kill -"$SIGNAL" "$PPID"; exit 0; fi',
     'if [[ "$*" == *"fleet.ts launch"* ]]; then echo CANARY_SLOT=b; fi',
     'exit 0',
@@ -54,6 +54,7 @@ function deploy(env: Record<string, string>) {
       CANARY_MINUTES: '2',
       SKIP_BROWSER_INSTALL: '1',
       FAIL: '',
+      FAIL_CODE: '',
       KILL_AT: '',
       SIGNAL: 'TERM',
       ...env,
@@ -97,6 +98,14 @@ describe('deploy.sh', { timeout: 120_000 }, () => {
     const r = deploy({ ...env, FAIL: fail });
     expect(r.code, r.ran).not.toBe(0);
     expect(r.rollbacks, r.ran).toBe(1);
+  });
+
+  it('live on the new box, but the old one not told to retire: no rollback, and it says so', () => {
+    const r = deploy({ GO_LIVE: '1', FAIL: 'fleet.ts promote', FAIL_CODE: '3' });
+    expect(r.code, r.ran).toBe(1);
+    expect(r.rollbacks, r.ran).toBe(0);
+    expect(r.out).toContain('is live on box b, but an old box still needs to retire');
+    expect(r.out).not.toContain('removing the new box');
   });
 
   it('a failed launch leaves its log to read', () => {

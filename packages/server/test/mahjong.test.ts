@@ -321,4 +321,36 @@ describe('Mahjong at a table', () => {
     expect(alone.game.claim!.waiting.has(0)).toBe(false);
     expect(a.conn.views().at(-1)!.options).toBeNull();
   });
+
+  for (const how of ['drops out', 'leaves the table'] as const) {
+    it(`Learning Mode: someone asked about a discard who ${how} doesn't hold the game up for good`, () => {
+      const env = table({ points: false, full: false, learning: true });
+      const { a, game } = env;
+      const A = 'session-aaaa';
+      const B = 'session-bbbb';
+      playPeople(env, () => {
+        const c = game.claim;
+        return !!c && game.hand?.step === 'claim' && c.waiting.has(game.seatOf(A)!) && c.waiting.has(game.seatOf(B)!);
+      });
+      const window = game.claim!;
+      send(a.room, A, { t: 'mj-claim', claim: 'pass' });
+      if (how === 'drops out') a.room.disconnect(B, null, 'closed');
+      else a.room.handle(B, { t: 'leave' });
+      // The computer takes over a dropped phone after 20 s; a seat someone left, at once.
+      run(env, 25_000);
+      expect(game.claim).not.toBe(window);
+    });
+  }
+
+  it('a late answer, for a tile that is no longer on offer, is ignored', () => {
+    const env = table();
+    const { a, game } = env;
+    playPeople(env, () => !!game.claim && game.hand?.step === 'claim' && game.claim.waiting.size > 0);
+    const seat = [...game.claim!.waiting][0];
+    const session = game.seats[seat].session!;
+    send(a.room, session, { t: 'mj-claim', claim: 'pass', at: game.hand!.log.length - 1 });
+    expect(game.claim!.waiting.has(seat)).toBe(true);
+    send(a.room, session, { t: 'mj-claim', claim: 'pass', at: game.hand!.log.length });
+    expect(game.claim?.waiting.has(seat) ?? false).toBe(false);
+  });
 });

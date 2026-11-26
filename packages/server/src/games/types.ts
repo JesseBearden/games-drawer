@@ -54,6 +54,27 @@ export function leftLongAgo(m: Member, now: number): boolean {
   return !m.conn && botPlays(m, now);
 }
 
+/**
+ * For games with seats: anyone connected without a seat takes a seat in play that nobody holds,
+ * or whose person has been gone a while (a computer is playing it). Returns the seats that
+ * changed hands. Someone gone who comes back later watches, and gets the next seat that frees up.
+ */
+export function watchersTakeSeats(host: GameHost, seats: { session: string | null }[], inPlay: readonly number[]): number[] {
+  const now = host.now();
+  const seated = new Set(seats.flatMap((s) => (s.session ? [s.session] : [])));
+  const watchers = host.members().filter((m) => m.conn && !seated.has(m.session));
+  const moved: number[] = [];
+  for (const seat of inPlay) {
+    if (!watchers.length) break;
+    const holder = seats[seat].session;
+    const m = holder !== null ? host.member(holder) : undefined;
+    if (m && !leftLongAgo(m, now)) continue;
+    seats[seat].session = watchers.shift()!.session;
+    moved.push(seat);
+  }
+  return moved;
+}
+
 /** One of several messages going out together (GameHost.broadcastTogether). */
 export interface Outgoing {
   msg: GameServerMessage;
@@ -112,8 +133,17 @@ export interface ServerGame {
   reconnect(m: Member): boolean;
   /** A member's connection dropped; their seat is held. Returns a note for the chat line. */
   disconnect(m: Member, reason: string): string | null;
-  /** A member left for good (their hold expired): free the seat. */
-  removePlayer(m: Member): void;
+  /**
+   * A member left for good (their hold expired): free the seat. `comingBack`: it's the same
+   * person, about to be added again on a new session with this seat asked for (Room.join), so
+   * the seat isn't offered to anyone watching meanwhile.
+   */
+  removePlayer(m: Member, opts?: { comingBack?: boolean }): void;
+  /**
+   * Once a second: anyone watching (more people than seats) takes a seat the computer is playing,
+   * one nobody holds or whose person has been gone a while (user, 2026-11-26).
+   */
+  seatWatchers?(): void;
   renamed(m: Member): void;
   /** Send everything this member needs to draw the game (after welcome, start, or resync). */
   sendInit(m: Member, reclaimed: boolean): void;

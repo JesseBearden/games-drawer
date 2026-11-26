@@ -9,6 +9,7 @@
  *                                              one this box runs, so pages from either load
  *   rollout <release> check                    is the server healthy? (exit 1 if not)
  *   rollout <release> retire <minutes>         finish the games here, then shut the box down
+ *                                              (finish <not before> <deadline> is its background job)
  *   rollout <release> status                   print what's running
  *
  * Each box runs one copy of the game server; a deploy brings up a new box beside the old one
@@ -28,6 +29,12 @@ export const ROUTES_FILE = '/etc/caddy/games-drawer-routes.caddy';
 export const RELEASES = '/opt/games-drawer/releases';
 /** How often a retiring box checks whether its games are done. */
 export const RETIRE_POLL_MS = 30_000;
+/**
+ * The longest a retiring box stays up, whatever its server is doing: the server's own drain limit
+ * (DRAIN_MAX_MS, 3 hours by default, packages/server/src/settings.ts) and half an hour to spare.
+ * A server that never finishes (one restarted by hand, say) must not keep a box up for good.
+ */
+export const RETIRE_DEADLINE_MS = 3 * 60 * 60_000 + 30 * 60_000;
 
 export interface State {
   /** This box's slot (its room codes all name it) and the release it runs. */
@@ -184,6 +191,11 @@ export class Rollout {
     return `games-drawer@${slot}`;
   }
 
+  /** A drop-in for this slot's unit that lasts until the box powers off (/run is cleared at boot). */
+  private runtimeDropIn(slot: Slot) {
+    return `/run/systemd/system/${this.unit(slot)}.service.d`;
+  }
+
   private mySlot(): Slot {
     const { slot } = this.sys.readState();
     if (!slot) throw new Error('This box has no game server yet (run start first).');
@@ -288,7 +300,10 @@ export class Rollout {
    * Finish the games here, then shut down. The server gets SIGUSR2 (it exits once its games
    * end, or after DRAIN_MAX_MS); a background job powers the box off once it has, and not
    * before `graceMinutes` (until then, players still reaching this box for the front door's
-   * old address are passed to the new one).
+   * old address are passed to the new one), nor later than RETIRE_DEADLINE_MS from now.
+   *
+   * First, systemd stops restarting the server: a draining server that crashed would otherwise
+   * come back as a fresh one that knows nothing of the drain, never exits, and keeps the box up.
    */
   retire(graceMinutes: number) {
     const slot = this.mySlot();
@@ -298,16 +313,35 @@ export class Rollout {
       return;
     }
     this.sys.sh('systemctl', ['disable', this.unit(slot)]);
+    const dropIn = this.runtimeDropIn(slot);
+    this.sys.sh('install', ['-d', '-m', '755', dropIn]);
+    this.sys.writeFile(`${dropIn}/retiring.conf`, '# Written by the rollout tool when this box retired (deploy/rollout.ts).\n[Service]\nRestart=no\n');
+    this.sys.sh('systemctl', ['daemon-reload']);
     this.sys.sh('systemctl', ['kill', '--signal=SIGUSR2', '--kill-whom=main', this.unit(slot)]);
-    const notBefore = this.sys.now() + graceMinutes * 60_000;
+    const now = this.sys.now();
+    const notBefore = now + graceMinutes * 60_000;
+    const deadline = Math.max(notBefore, now + RETIRE_DEADLINE_MS);
     const self = path.join(this.releaseDir, 'deploy', 'rollout.mjs');
-    this.sys.sh('systemd-run', ['--unit=games-drawer-retire', '--description=Games Drawer: shut down once the games are done', '/usr/local/bin/node', self, this.release, 'finish', String(notBefore)]);
+    this.sys.sh('systemd-run', [
+      '--unit=games-drawer-retire',
+      '--description=Games Drawer: shut down once the games are done',
+      '/usr/local/bin/node',
+      self,
+      this.release,
+      'finish',
+      String(notBefore),
+      String(deadline),
+    ]);
     this.sys.writeState({ ...state, retiring: true });
-    this.sys.log(`Box ${slot} is finishing its games; it shuts down once they're done (not before ${graceMinutes} minutes).`);
+    this.sys.log(`Box ${slot} is finishing its games; it shuts down once they're done (not before ${graceMinutes} minutes, and within ${Math.round((deadline - now) / 60_000)}).`);
   }
 
-  /** The background half of retire: wait for the server to exit and the grace time to pass, then power off. */
-  async finish(notBefore: number) {
+  /**
+   * The background half of retire: wait for the server to exit and the grace time to pass, then
+   * power off. At the deadline it powers off whatever the server is doing (poweroff still stops
+   * the server properly first, so its tables close and their puzzles are saved).
+   */
+  async finish(notBefore: number, deadline = Number.POSITIVE_INFINITY) {
     const slot = this.mySlot();
     for (;;) {
       let active = true;
@@ -316,10 +350,17 @@ export class Rollout {
       } catch {
         active = false;
       }
-      if (!active && this.sys.now() >= notBefore) break;
+      const now = this.sys.now();
+      if (!active && now >= notBefore) {
+        this.sys.log(`Box ${slot}'s games are done. Shutting down.`);
+        break;
+      }
+      if (now >= deadline) {
+        this.sys.log(`Box ${slot} reached its deadline with the game server still running. Shutting down anyway.`);
+        break;
+      }
       await this.sys.sleep(RETIRE_POLL_MS);
     }
-    this.sys.log(`Box ${slot}'s games are done. Shutting down.`);
     this.sys.sh('systemctl', ['poweroff']);
   }
 
@@ -350,7 +391,7 @@ async function main() {
     case 'retire':
       return r.retire(Number(arg ?? 15));
     case 'finish':
-      return r.finish(Number(arg));
+      return r.finish(Number(arg), arg2 ? Number(arg2) : undefined);
     case 'status':
       return r.status();
     default:

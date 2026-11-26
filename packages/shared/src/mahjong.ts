@@ -1109,6 +1109,11 @@ export interface MahjongView {
   tiles: MjTile[];
   /** The tile you just drew. */
   drawn: MjTile | null;
+  /**
+   * It's your turn after taking a tile from the wall (not one claimed for a set). The dealer's
+   * first turn counts, though `drawn` is null then. (Optional: a server from before 2026-11-26.)
+   */
+  drew?: boolean;
   turn: number | null;
   step: MjStep | null;
   /** The discard (or added Kong) on offer right now. */

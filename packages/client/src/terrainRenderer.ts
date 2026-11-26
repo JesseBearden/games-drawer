@@ -32,6 +32,12 @@ export class TerrainRenderer {
     this.redraw(0, this.W - 1);
   }
 
+  /** Give the canvas's memory back (the view is closing). */
+  release() {
+    this.canvas.width = 0;
+    this.canvas.height = 0;
+  }
+
   /** Swap in a new terrain (after a nuke or resync). */
   reset(terrain: Terrain) {
     this.terrain = terrain;

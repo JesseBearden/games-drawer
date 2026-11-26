@@ -186,7 +186,13 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
 
   const server = http.createServer((req, res) => {
     try {
-      const url = new URL(req.url ?? '/', 'http://localhost');
+      // A path, nothing else: "//x/stats" would read as host x and path /stats, slipping past the
+      // web server's own rules for /stats.
+      if (!req.url?.startsWith('/') || req.url.startsWith('//')) {
+        res.writeHead(400).end();
+        return;
+      }
+      const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/healthz') {
         // Deploys check this to know the new copy is up and which build it is.
         res
@@ -218,7 +224,12 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       if (url.pathname === '/api/table') {
         // The asking device's number (as when joining), so the page can tell it its seat is waiting.
         const device = req.headers['x-gd-device'];
-        const info = tableLookup(url, clientIp(req, o.trustProxy), req.headers['sec-fetch-site'] === 'cross-site', isDeviceId(device) ? device : null);
+        // Our own page always sends x-gd (or, before 2026-11-26, x-gd-device), and another website
+        // can't add a header of its own. Browsers that send Sec-Fetch-Site (not iPhones before
+        // iOS 16.4) say so too.
+        const ours = !!req.headers['x-gd'] || !!device;
+        const crossSite = req.headers['sec-fetch-site'] === 'cross-site' || !ours;
+        const info = tableLookup(url, clientIp(req, o.trustProxy), crossSite, isDeviceId(device) ? device : null);
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(info));
         return;
       }
@@ -232,9 +243,10 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       else res.destroy();
     }
   });
-  // Slow-request protection.
+  // Slow-request protection. The whole request gets two minutes: a photo for a puzzle (about
+  // 1 MB) on a weak phone signal can take that long, as long as the page waits for it.
   server.headersTimeout = 10_000;
-  server.requestTimeout = 15_000;
+  server.requestTimeout = 120_000;
 
   /**
    * The join page's look at a table before joining: who's there, the game, who invited you. Wrong
@@ -365,7 +377,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
         if (!bucket.take(Date.now())) {
           if (++strikes > limits.maxStrikes) {
             counters.rateLimitedClosures++;
-            o.log.event('flood_disconnect', { ip: hashIp(ip) });
+            o.log.event('flood_disconnect', { ip: logIp(ip) });
             fail('rate-limited', 'Too many messages.');
           }
           return;
@@ -556,10 +568,19 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   };
 }
 
-/** IPs are personal data: logs get a salted one-way hash that changes every boot. */
+/** IPs are personal data: a salted one-way hash that changes every boot. */
 const IP_SALT = randomBytes(16);
 function hashIp(ip: string) {
   return createHash('sha256').update(IP_SALT).update(ip).digest('hex').slice(0, 12);
+}
+
+/**
+ * The scrambled address that goes in the logs, with a salt of its own: hashIp's start is also in
+ * relay passes, which the relay logs beside the real address, so the two could be matched up.
+ */
+const LOG_IP_SALT = randomBytes(16);
+function logIp(ip: string) {
+  return createHash('sha256').update(LOG_IP_SALT).update(ip).digest('hex').slice(0, 12);
 }
 
 /**

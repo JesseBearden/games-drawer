@@ -14,7 +14,7 @@ import {
   type SpadesView,
   type TeamHandResult,
 } from '@tank/shared';
-import { botPlays, leftLongAgo, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, leftLongAgo, TIMER_GAME_TICKS, watchersTakeSeats, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS, TRICK_PAUSE_MS } from './hearts';
 
 /** Bots (and bots covering for disconnected players) think this long. */
@@ -116,12 +116,20 @@ export class SpadesGame implements ServerGame {
     return 'If they’re not back soon, the computer plays their cards until they are.';
   }
 
-  removePlayer(m: Member) {
+  removePlayer(m: Member, opts?: { comingBack?: boolean }) {
     const seat = this.seatOf(m.session);
     if (seat === null) return;
     this.seats[seat].session = null;
-    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
+    // (Not when they're coming straight back in a new tab: the seat is still theirs.)
+    const watcher = opts?.comingBack ? undefined : this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
     if (watcher) this.seats[seat].session = watcher.session;
+    this.schedule();
+    this.sync();
+  }
+
+  seatWatchers() {
+    const moved = watchersTakeSeats(this.host, this.seats, [0, 1, 2, 3]);
+    if (!moved.length) return;
     this.schedule();
     this.sync();
   }

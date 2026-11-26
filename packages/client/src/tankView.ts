@@ -40,6 +40,7 @@ export class TankView implements View {
   private input: Input;
   private raf = 0;
   private lastFrame = performance.now();
+  private myPhase: string | undefined;
   private lastAimSent = 0;
   private aimDirty = false;
   private hud = { hearts: '', level: '', angle: '', power: '', wind: '', status: '', spread: '', move: false, fire: '' };
@@ -112,6 +113,9 @@ export class TankView implements View {
   }
 
   private start(init: TankInit) {
+    const wasWatching = !!this.state && this.state.myTankId < 0;
+    // A new start replaces the old battlefield: give its canvas back now (see dispose).
+    this.state?.terrainView.release();
     if (!this.camera) {
       this.camera = new Camera(init.config);
       this.camera.zoomIndex = 0;
@@ -135,7 +139,9 @@ export class TankView implements View {
     this.applySpeaking();
     const last = this.state.me?.samples.at(-1);
     if (last) this.input.angle = last.angle;
-    if (init.reclaimed) this.shell.toast('Welcome back! You reclaimed your tank.');
+    // (Coming back already says "You have your place back": shell.ts.)
+    if (init.tankId < 0) this.shell.toast('Four tanks are playing. You’re watching, and you’ll get a tank when one frees up.');
+    else if (wasWatching) this.shell.toast('A tank is free: it’s yours. Here comes the helicopter!');
   }
 
   /**
@@ -349,6 +355,12 @@ export class TankView implements View {
     if (g) {
       // The game runs, and the hearts, wind and Drop show, while the pictures are still downloading.
       g.update(now);
+      // The server forgets which way you were moving when your tank is knocked out. A move key
+      // still held when it lands again moves it, without letting go and pressing again.
+      const phase = g.me?.phase;
+      const onGround = (p: string | undefined) => p === 'ground' || p === 'slide';
+      if (onGround(phase) && !onGround(this.myPhase) && this.input.moving) this.shell.sendGame({ t: 'move', dir: this.input.moving });
+      this.myPhase = phase;
       if (this.camera && this.renderer) {
         const me = g.me;
         const target = me && me.phase !== 'dead' ? { x: me.x, y: me.y } : null;
@@ -431,12 +443,11 @@ export class TankView implements View {
       else if (info.away && phase !== 'chute') status = 'A bot is driving';
       this.set('status', status, () => this.paintSlot());
       const fireState = phase === 'carried' ? 'drop' : info.shellsInFlight > 0 || !(phase === 'ground' || phase === 'slide') ? 'busy' : 'ready';
-      this.set('fire', fireState, () => {
-        const btn = $<HTMLButtonElement>('fire-btn');
-        btn.textContent = fireState === 'drop' ? 'Drop' : 'Fire';
-        btn.classList.toggle('drop', fireState === 'drop');
-        btn.disabled = fireState === 'busy';
-      });
+      this.setFire(fireState);
+    } else {
+      // Watching: four tanks are playing (more people than tanks). Nothing to fire yet.
+      this.set('status', 'Watching: you’ll get a tank when one frees up', () => this.paintSlot());
+      this.setFire('busy');
     }
     this.set('angle', `${Math.round(this.input.angle)}`, () => ($('aim-angle').textContent = `${Math.round(this.input.angle)}°`));
     const pw = Math.round(this.input.power * 2) / 2;
@@ -450,6 +461,16 @@ export class TankView implements View {
       const dir = w === 0 ? 'calm' : w > 0 ? 'blowing right' : 'blowing left';
       $('wind').setAttribute('aria-label', `Wind ${Math.abs(w)}, ${dir}`);
       $('wind').title = `Wind ${Math.abs(w)}, ${dir}`;
+    });
+  }
+
+  /** The Fire button: Drop while carried, greyed out while busy (or watching). */
+  private setFire(state: 'drop' | 'busy' | 'ready') {
+    this.set('fire', state, () => {
+      const btn = $<HTMLButtonElement>('fire-btn');
+      btn.textContent = state === 'drop' ? 'Drop' : 'Fire';
+      btn.classList.toggle('drop', state === 'drop');
+      btn.disabled = state === 'busy';
     });
   }
 
@@ -595,5 +616,9 @@ export class TankView implements View {
     $('tank-view').hidden = true;
     const canvas = $<HTMLCanvasElement>('canvas');
     canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    // Let go of the big canvases now: phones rebuild this view at every unlock, and iOS counts
+    // canvases still waiting for the garbage collector against its canvas memory limit.
+    this.renderer?.release();
+    this.state?.terrainView.release();
   }
 }

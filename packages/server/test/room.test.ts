@@ -271,12 +271,16 @@ describe('chat', () => {
     expect(m.screen('Scunthorpe').ok).toBe(true);
   });
 
-  it('rejects offensive names and keeps the old one', () => {
-    const { mgr } = setup();
+  it('rejects offensive names and keeps the old one; the next try waits 2 s', () => {
+    const { mgr, clock } = setup();
     const a = join(mgr, 'session-aaaa');
     a.room.handle('session-aaaa', { t: 'name', name: 'shithead' });
     const tank = a.room.tanks!.world.tanks.get(a.tankId)!;
     expect(tank.name).toBe('session-aaaa');
+    // Straight away is too soon (each try runs the chat filter).
+    a.room.handle('session-aaaa', { t: 'name', name: 'Sharpshooter' });
+    expect(tank.name).toBe('session-aaaa');
+    clock.now += 2000;
     a.room.handle('session-aaaa', { t: 'name', name: 'Sharpshooter' });
     expect(tank.name).toBe('Sharpshooter');
   });

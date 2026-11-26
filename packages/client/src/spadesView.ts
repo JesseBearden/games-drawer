@@ -3,7 +3,7 @@ import { suitOf, type Card, type GameServerMessage, type SpadesView } from '@tan
 import { patchHtml } from './dom';
 import { fitSeatText, scoreSheetHtml, seatNameHtml, showHand, showTrick } from './heartsView';
 import { suitSvg, SUIT_NAME, type Suit } from './paperArt';
-import { escapeHtml, nameHtml } from './html';
+import { nameHtml } from './html';
 import { focusForPad, type PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
 import { seatFelts } from './felts';

@@ -81,6 +81,10 @@ export class World {
   private nextVolley = 1;
   private nextRunId = 1;
   private nextWindChange = 0;
+  /** The tick each tank last fired on (see canFire). */
+  private readonly lastVolleyTick = new Map<number, number>();
+  /** True while the bots think, inside step (see fire). */
+  private botsThinking = false;
 
   constructor(opts: WorldOptions = {}) {
     this.cfg = { ...DEFAULT_CONFIG, ...opts.cfg };
@@ -140,6 +144,7 @@ export class World {
 
   removeTank(id: number) {
     this.tanks.delete(id);
+    this.lastVolleyTick.delete(id);
     this.bots.delete(id);
     this.helis = this.helis.filter((h) => h.tankId !== id);
     // The slot id may be reused by a newcomer right away. Shells still in the air and falls
@@ -199,11 +204,17 @@ export class World {
     return true;
   }
 
+  /**
+   * Firing waits for your last shells to land, and at least a third of a second between volleys:
+   * a shell fired off the edge of the battlefield is gone at once, and without the gap a tank
+   * parked there could fire every tick (every device playing the cannon 60 times a second).
+   */
   canFire(t: Tank) {
     return (
       this.match.state === 'playing' &&
       (t.phase === 'ground' || t.phase === 'slide') &&
-      t.shellsInFlight === 0
+      t.shellsInFlight === 0 &&
+      this.tick - (this.lastVolleyTick.get(t.id) ?? -Infinity) >= Math.round(this.cfg.tickRate / 3)
     );
   }
 
@@ -247,6 +258,7 @@ export class World {
       launches.push({ id: s.id, x: s.x, y: s.y, vx: s.vx, vy: s.vy });
     }
     t.shellsInFlight = launches.length;
+    this.lastVolleyTick.set(t.id, this.tick);
     t.shotsFired++;
     // Firing ends spawn protection immediately.
     if (t.protectedUntil > this.tick || t.awaitingProtection) {
@@ -256,7 +268,10 @@ export class World {
     t.infoDirty = true;
     this.emit({
       type: 'fire',
-      tick: this.tick,
+      // A person's shot, between steps, first moves in the next step. A bot's, inside a step,
+      // moves in this one, so it's stamped a tick earlier: screens replay a shell from its fire
+      // tick, and would otherwise draw bot shells a tick behind where they are.
+      tick: this.botsThinking ? this.tick - 1 : this.tick,
       tank: t.id,
       shells: launches,
       spread,
@@ -285,12 +300,14 @@ export class World {
       this.scheduleWindChange();
     }
 
+    this.botsThinking = true;
     for (const t of this.tanks.values()) {
       if (t.controller === 'bot') {
         const brain = this.bots.get(t.id);
         if (brain) botThink(this, t, brain);
       }
     }
+    this.botsThinking = false;
 
     this.updateHelis();
 

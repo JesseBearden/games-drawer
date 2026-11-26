@@ -31,6 +31,10 @@ export class Input {
   power = 55;
   private held = new Map<Action, number>();
   private moveDir: -1 | 0 | 1 = 0;
+  /** The way a held move key points (0: none). */
+  get moving(): -1 | 0 | 1 {
+    return this.moveDir;
+  }
   enabled = true;
   /**
    * Every listener goes away together on dispose. The touch buttons outlive this object (a new

@@ -3,7 +3,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GAME_PORT, HOP_HEADER, isFleetMap, routesSnippet, soloMap, type FleetMap } from './fleetMap';
-import { decodeMap, EMPTY_STATE, ROUTES_FILE, Rollout, serverProblems, shareAssets, slotEnv, type Health, type State, type System } from './rollout';
+import {
+  decodeMap,
+  EMPTY_STATE,
+  RETIRE_DEADLINE_MS,
+  RETIRE_POLL_MS,
+  ROUTES_FILE,
+  Rollout,
+  serverProblems,
+  shareAssets,
+  slotEnv,
+  type Health,
+  type State,
+  type System,
+} from './rollout';
 
 /** A pretend game server box: remembers files and commands, and whether its server runs. */
 function fakeBox(opts: { failToStart?: boolean; failFetch?: boolean } = {}) {
@@ -120,10 +133,18 @@ describe('the rollout tool on a box', () => {
     r.retire(15);
     expect(m.commands).toContain('systemctl kill --signal=SIGUSR2 --kill-whom=main games-drawer@a');
     expect(m.commands).toContain('systemctl disable games-drawer@a');
+    // Before the drain starts, systemd stops restarting the server: a crash mid-drain would bring
+    // back a fresh server that never drains, and the box would never power off.
+    const dropIn = '/run/systemd/system/games-drawer@a.service.d/retiring.conf';
+    expect(m.files.get(dropIn)).toMatch(/^\[Service\]\nRestart=no$/m);
+    const at = (c: string) => m.commands.indexOf(c);
+    expect(at('systemctl daemon-reload')).toBeGreaterThan(-1);
+    expect(at('systemctl daemon-reload')).toBeLessThan(at('systemctl kill --signal=SIGUSR2 --kill-whom=main games-drawer@a'));
     const job = m.commands.find((c) => c.startsWith('systemd-run'))!;
     expect(job).toContain('--unit=games-drawer-retire');
-    const notBefore = Number(job.split(' ').at(-1));
+    const [notBefore, deadline] = job.split(' ').slice(-2).map(Number);
     expect(notBefore).toBe(m.clock() + 15 * 60_000);
+    expect(deadline).toBe(m.clock() + RETIRE_DEADLINE_MS);
     expect(m.state().retiring).toBe(true);
     // Retiring twice is harmless.
     r.retire(15);
@@ -131,8 +152,26 @@ describe('the rollout tool on a box', () => {
 
     // The background job: games still going, so it waits; then they end, and it waits out the grace time.
     m.stopServer();
-    await r.finish(notBefore);
+    await r.finish(notBefore, deadline);
     expect(m.clock()).toBeGreaterThanOrEqual(notBefore);
+    expect(m.clock()).toBeLessThan(deadline);
+    expect(m.commands.at(-1)).toBe('systemctl poweroff');
+  });
+
+  it('a retiring box powers off by its deadline even if its server never stops', async () => {
+    const m = fakeBox();
+    const r = new Rollout(m.sys, 'aaaaaaa1', releaseDir('aaaaaaa1'));
+    await r.start('a');
+    r.retire(15);
+    const [notBefore, deadline] = m.commands
+      .find((c) => c.startsWith('systemd-run'))!
+      .split(' ')
+      .slice(-2)
+      .map(Number);
+    // The server is still running (say it was restarted by hand, and doesn't know it should drain).
+    await r.finish(notBefore, deadline);
+    expect(m.clock()).toBeGreaterThanOrEqual(deadline);
+    expect(m.clock()).toBeLessThan(deadline + RETIRE_POLL_MS + 1);
     expect(m.commands.at(-1)).toBe('systemctl poweroff');
   });
 

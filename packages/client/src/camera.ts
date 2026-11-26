@@ -86,7 +86,6 @@ export class Camera {
       // edge to edge and trim empty sky rather than shrinking the whole map to fit.
       scale = (vw / W) * ZOOM_LEVELS[this.zoomIndex].zoom;
       const visW = vw / scale;
-      const visH = vh / scale;
       const usableVisH = usableH / scale;
       // Look a little past the map edges (drawn as rock) so your tank can stay clear of the
       // corner controls instead of being pinned under them.

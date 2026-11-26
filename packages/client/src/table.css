@@ -494,13 +494,6 @@
 .lobby-people .pc-tag {
   min-width: 0;
 }
-.lobby-bottom {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  align-items: center;
-  justify-content: space-between;
-}
 .lobby-paper .room-code {
   color: var(--ink);
   font-weight: 800;

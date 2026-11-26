@@ -36,10 +36,6 @@ export function milestoneLevels(cfg: Pick<GameConfig, 'winLevel'>): number[] {
   return perks(cfg).map((p) => p.level);
 }
 
-export function perksCrossed(cfg: Pick<GameConfig, 'winLevel'>, before: number, after: number): Perk[] {
-  return perks(cfg).filter((p) => p.level > before && p.level <= after);
-}
-
 /** Every Nth shot is a spread; 0 = no spreads yet. */
 export const SPREAD_CADENCE = 3;
 

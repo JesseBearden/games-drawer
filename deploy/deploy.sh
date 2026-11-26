@@ -18,7 +18,9 @@
 #   5. promote  it takes every new table and the front door; the old box finishes its games and
 #               shuts itself down.
 # If anything fails after the first step, or the deploy is stopped (Ctrl+C, Stop), the new box is
-# removed and the current one keeps everything.
+# removed and the current one keeps everything. Except at the very end: once the new box has taken
+# over it's live, so if only the old box couldn't be told to retire, nothing is removed and the
+# deploy fails saying so (npx tsx deploy/fleet.ts retire finishes it).
 #
 # Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE; CANARY_PERCENT (10) and CANARY_MINUTES (10)
 # are optional. SKIP_BROWSER_INSTALL=1 uses the browser already installed (on Windows, where
@@ -90,6 +92,15 @@ for i in $(seq 1 "$mins"); do
 done
 
 echo "== Promoting box $slot"
-fleet promote "$rel"
+promoted=0
+fleet promote "$rel" || promoted=$?
+# 3 (EXIT_LIVE_OLD_BOX_NOT_RETIRED in fleet.ts): live on the new box, but an old box couldn't be
+# told to retire. Not a rollback: the new box is the site now.
+if [ "$promoted" -eq 3 ]; then
+  finished=1
+  echo "${rel:0:7} is live on box $slot, but an old box still needs to retire (above). Run: npx tsx deploy/fleet.ts retire"
+  exit 1
+fi
+[ "$promoted" -eq 0 ] || exit "$promoted"
 finished=1
 echo "Deployed ${rel:0:7}."

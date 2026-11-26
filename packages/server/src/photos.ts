@@ -49,34 +49,60 @@ export type PhotoRefusal = 'off' | 'not-at-table' | 'busy' | 'not-image' | 'too-
 /**
  * A JPEG with only what's needed to show it: every APP segment that can carry camera details,
  * location or a thumbnail (APP1 EXIF and XMP, APP2 ICC, APP13 Photoshop, ...) and comments are
- * dropped. JFIF (APP0) and Adobe's colour marker (APP14) stay. Also its size. Null if it isn't a
- * JPEG this can follow. (The phone's own copy has already lost all this, but a server can't
- * trust that.)
+ * dropped, between a progressive JPEG's scans too, and so is anything after the end of the
+ * picture (a phone's motion-photo video, a second picture, any file tacked on). JFIF (APP0) and
+ * Adobe's colour marker (APP14) stay. Also its size. Null if it isn't a JPEG this can follow.
+ * (The phone's own copy has already lost all this, but a server can't trust that.)
  */
 export function cleanJpeg(buf: Buffer): { jpeg: Buffer; width: number; height: number } | null {
   if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
   const out: Buffer[] = [buf.subarray(0, 2)];
+  const EOI = Buffer.from([0xff, 0xd9]);
   let width = 0;
   let height = 0;
+  let scanned = false;
   let i = 2;
   for (;;) {
-    if (i + 4 > buf.length || buf[i] !== 0xff) return null;
+    if (i + 2 > buf.length || buf[i] !== 0xff) return null;
     const marker = buf[i + 1];
     if (marker === 0xff) {
       i++; // fill byte
       continue;
     }
+    if (marker === 0xd9 && scanned) {
+      out.push(EOI); // the end of the picture: whatever follows is dropped
+      break;
+    }
     if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) return null; // nothing to show yet
+    if (i + 4 > buf.length) return null;
     const len = buf.readUInt16BE(i + 2);
     if (len < 2 || i + 2 + len > buf.length) return null;
     if (marker === 0xda) {
-      // Start of scan: the picture data runs from here to the end.
-      out.push(buf.subarray(i));
-      break;
+      // A scan: its header, then the coded picture, up to the next marker. (In coded data 0xFF
+      // is only ever followed by 0x00, a restart marker or more 0xFF.)
+      if (!width || !height) return null;
+      out.push(buf.subarray(i, i + 2 + len));
+      const data = i + 2 + len;
+      let j = data;
+      for (;;) {
+        j = buf.indexOf(0xff, j);
+        if (j < 0 || j + 1 >= buf.length) break;
+        const b = buf[j + 1];
+        if (b !== 0x00 && b !== 0xff && !(b >= 0xd0 && b <= 0xd7)) break;
+        j++;
+      }
+      if (j < 0 || j + 1 >= buf.length) {
+        out.push(buf.subarray(data), EOI); // cut short: end it here
+        break;
+      }
+      out.push(buf.subarray(data, j));
+      scanned = true;
+      i = j;
+      continue;
     }
     const isFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
     if (isFrame) {
-      if (len < 7) return null;
+      if (len < 7 || width) return null; // one picture only
       height = buf.readUInt16BE(i + 5);
       width = buf.readUInt16BE(i + 7);
     }

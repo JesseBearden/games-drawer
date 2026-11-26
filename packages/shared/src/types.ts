@@ -178,5 +178,3 @@ export type GameEvent =
     }
   | { type: 'win'; tick: number; tank: number; name: string; controller: ControllerKind; nukeAt: number }
   | { type: 'nuke'; tick: number; seed: number; wind: number; rev: number };
-
-export type GameEventType = GameEvent['type'];

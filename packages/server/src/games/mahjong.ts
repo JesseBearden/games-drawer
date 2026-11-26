@@ -15,7 +15,7 @@ import {
   type MjPhase,
   type MjRules,
 } from '@tank/shared';
-import { botPlays, leftLongAgo, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, leftLongAgo, TIMER_GAME_TICKS, watchersTakeSeats, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS } from './hearts';
 
 /** The shuffle and the wall being built (the pages animate it meanwhile). */
@@ -169,12 +169,22 @@ export class MahjongGame implements ServerGame {
     return 'If they’re not back soon, the computer plays their tiles until they are.';
   }
 
-  removePlayer(m: Member) {
+  removePlayer(m: Member, opts?: { comingBack?: boolean }) {
     const seat = this.seatOf(m.session);
     if (seat === null) return;
     this.seats[seat].session = null;
-    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
+    // Ready was theirs, not the seat's (whoever sits here next says so themselves).
+    if (!opts?.comingBack) this.ready.delete(seat);
+    // (Not when they're coming straight back in a new tab: the seat is still theirs.)
+    const watcher = opts?.comingBack ? undefined : this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
     if (watcher) this.seats[seat].session = watcher.session;
+    this.sync();
+  }
+
+  seatWatchers() {
+    const moved = watchersTakeSeats(this.host, this.seats, [0, 1, 2, 3]);
+    if (!moved.length) return;
+    for (const seat of moved) this.ready.delete(seat);
     this.sync();
   }
 
@@ -396,6 +406,8 @@ export class MahjongGame implements ServerGame {
     } else if (input.t === 'mj-claim') {
       const c = this.claim;
       if (!c || !c.waiting.has(seat)) return;
+      // An answer held up on a slow line can arrive after the next tile is on offer: it isn't one.
+      if (input.at !== undefined && input.at !== h.log.length) return;
       c.waiting.delete(seat);
       c.answers[seat] = input.claim === 'chow' ? { t: 'chow', chow: input.chow } : { t: input.claim };
       if (!c.waiting.size && this.host.now() >= c.minAt) this.resolveClaims();
@@ -424,6 +436,16 @@ export class MahjongGame implements ServerGame {
     const h = this.hand;
     if (this.phase === 'playing' && h) {
       const c = this.claim;
+      // Anyone asked who has since dropped out for good (or left the table): the computer answers
+      // for them now. Learning Mode's window has no time limit, so otherwise it would wait forever.
+      if (c) {
+        for (const seat of [...c.waiting]) {
+          if (!this.botControls(seat)) continue;
+          c.answers[seat] = mjBotClaim(h, seat);
+          c.waiting.delete(seat);
+          changed = true;
+        }
+      }
       if (c && now >= c.minAt && (!c.waiting.size || now >= c.maxAt)) {
         this.resolveClaims();
         changed = true;
@@ -487,6 +509,7 @@ export class MahjongGame implements ServerGame {
       }),
       tiles: h && seat !== null ? mjSort(h.hands[seat]) : [],
       drawn: playing && seat !== null && h.turn === seat ? h.drawn : null,
+      drew: playing && seat !== null && h.turn === seat && h.justDrew,
       turn: playing ? h.turn : null,
       step: h ? h.step : null,
       offer,

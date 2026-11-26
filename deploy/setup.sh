@@ -136,9 +136,15 @@ install -d -m 700 -o caddy -g caddy "$mnt/caddy"
 param=/games-drawer/secrets
 get_secrets() { aws ssm get-parameter --region "$REGION" --name "$param" --with-decryption --query Parameter.Value --output text 2>/dev/null; }
 if ! secrets="$(get_secrets)"; then
-  # The first box makes them. If another box makes them at the same moment, theirs wins.
-  made="$(printf 'SESSION_SECRET=%s\nSTATS_TOKEN=%s\nTURN_SECRET=%s' "$(openssl rand -hex 32)" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)")"
-  aws ssm put-parameter --region "$REGION" --name "$param" --type SecureString --value "$made" --no-overwrite >/dev/null 2>&1 || true
+  # The first box makes them. If another box makes them at the same moment, theirs wins. The value
+  # goes to the AWS CLI in a file only root can read, never on its command line (which any account
+  # on the box can see while it runs).
+  made="$(mktemp)"
+  trap 'rm -f "$made"' EXIT
+  printf 'SESSION_SECRET=%s\nSTATS_TOKEN=%s\nTURN_SECRET=%s' "$(openssl rand -hex 32)" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > "$made"
+  aws ssm put-parameter --region "$REGION" --name "$param" --type SecureString --value "file://$made" --no-overwrite >/dev/null 2>&1 || true
+  rm -f "$made"
+  trap - EXIT
   secrets="$(get_secrets)"
 fi
 # They are values, never commands: each name must have one plain hex value, and nothing else in
@@ -181,8 +187,15 @@ install -m 755 "$tpl/games-drawer-deploy" /usr/local/bin/games-drawer-deploy
 systemctl daemon-reload
 
 # ---------------------------------------------------------------- voice relay (each box runs its own, on its own address)
-fill() { sed -e "s|@DOMAIN@|${DOMAIN}|g" -e "s|@PUBLIC_IP@|${public_ip}|g" -e "s|@PRIVATE_IP@|${private_ip}|g" -e "s|@TURN_SECRET@|${TURN_SECRET}|g" "$1"; }
-(umask 077 && fill "$tpl/turnserver.conf" > /etc/turnserver.conf.new)
+# Filled in by the shell itself, so the secret is never on a command line (sed's would show it to
+# every account on the box). Quoted replacements: bash 5.2 would otherwise read & in them.
+relay_conf="$(<"$tpl/turnserver.conf")"
+relay_conf="${relay_conf//@DOMAIN@/"$DOMAIN"}"
+relay_conf="${relay_conf//@PUBLIC_IP@/"$public_ip"}"
+relay_conf="${relay_conf//@PRIVATE_IP@/"$private_ip"}"
+relay_conf="${relay_conf//@TURN_SECRET@/"$TURN_SECRET"}"
+(umask 077 && printf '%s\n' "$relay_conf" > /etc/turnserver.conf.new)
+unset relay_conf
 chmod 640 /etc/turnserver.conf.new
 chgrp turnserver /etc/turnserver.conf.new
 # relay-ready says which setup the relay last started with. (Its firewall only loads as it starts:
@@ -208,6 +221,32 @@ systemctl is-active --quiet coturn || { echo "The voice relay didn't start." >&2
 mkdir -p /etc/systemd/journald.conf.d
 printf '[Journal]\nSystemMaxUse=500M\nMaxFileSec=1day\nMaxRetentionSec=29day\nForwardToSyslog=no\n' > /etc/systemd/journald.conf.d/games-drawer.conf
 systemctl restart systemd-journald || true
+# journald only applies those limits when it writes, so a journal nothing writes to (the relay's,
+# on a quiet month) would keep its old notes. Once a day, close each journal's current file and
+# delete files older than 29 days, whether anything was written or not.
+cat > /etc/systemd/system/games-drawer-journal-vacuum.service <<'VACUUM'
+[Unit]
+Description=Games Drawer: delete journal notes older than 29 days (the privacy page says 30)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/journalctl --rotate --vacuum-time=29d
+ExecStart=-/usr/bin/journalctl --namespace=gd-relay --rotate --vacuum-time=29d
+VACUUM
+cat > /etc/systemd/system/games-drawer-journal-vacuum.timer <<'VACUUM'
+[Unit]
+Description=Games Drawer: delete old journal notes daily
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+VACUUM
+systemctl daemon-reload
+systemctl enable --now games-drawer-journal-vacuum.timer
 
 # ---------------------------------------------------------------- web server
 if [ ! -f /etc/caddy/games-drawer-routes.caddy ]; then

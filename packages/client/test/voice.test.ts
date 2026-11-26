@@ -755,3 +755,42 @@ describe('who’s talking', () => {
     clock.mockRestore();
   });
 });
+
+describe('a reconnect that brings a new alias', () => {
+  it('voice takes it: no link to yourself, and the two still agree who makes the offers', async () => {
+    const t = table([{}, {}]);
+    await wait(15_000);
+    expect(t.routes()).toEqual(['direct', 'direct']);
+    // p0's place was given away while it was gone, and the table took it back as someone new, q0
+    // (shell.ts rewelcome). p1 < q0, so p1 makes the offers now, where p0 made them before.
+    const [me] = t.people;
+    me.id = 'q0';
+    me.voice.rejoin({ enabled: true, iceServers: ICE }, 'q0');
+    expect(me.voice.alias).toBe('q0');
+    const peers = [
+      { id: 'q0', name: 'Q0' },
+      { id: 'p1', name: 'P1' },
+    ];
+    for (const p of t.people) p.voice.onPeers(peers);
+    await wait(15_000);
+    expect(t.routes()).toEqual(['direct', 'direct']);
+    expect(me.sent.filter((m) => m.t === 'rtc' && m.to === 'q0')).toEqual([]);
+    expect(me.toasts.join()).not.toContain("Couldn't connect");
+  });
+
+  it('your own talking rings move to the new alias', () => {
+    const said: string[][] = [];
+    const v = new Voice('p0', { enabled: true, iceServers: [] }, { send: () => {}, toast: () => {}, micHelp: () => {}, changed: () => {}, speaking: (s) => said.push([...s]) });
+    const inner = v as unknown as { ctx: unknown; gate: unknown; micAnalyser: unknown; level(a: unknown): number; tick(): void };
+    inner.ctx = { currentTime: 0 };
+    inner.gate = { gain: { setTargetAtTime() {} } };
+    inner.micAnalyser = 'mic';
+    inner.level = () => 0.1;
+    inner.tick();
+    expect(said.at(-1)).toEqual(['p0']);
+    v.rejoin({ enabled: true, iceServers: [] }, 'q0');
+    expect(said.at(-1)).toEqual([]);
+    inner.tick();
+    expect(said.at(-1)).toEqual(['q0']);
+  });
+});

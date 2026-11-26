@@ -88,12 +88,33 @@ export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
     const viewer = req.headers['cloudfront-viewer-address'];
     const v = (Array.isArray(viewer) ? viewer[0] : viewer)?.trim();
     const cut = v ? v.lastIndexOf(':') : -1;
-    if (v && cut > 0) return v.slice(0, cut);
+    if (v && cut > 0) return addressKey(v.slice(0, cut));
     const fwd = req.headers['x-forwarded-for'];
     const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim();
-    if (first) return first;
+    if (first) return addressKey(first);
   }
-  return req.socket.remoteAddress ?? 'unknown';
+  return addressKey(req.socket.remoteAddress ?? 'unknown');
+}
+
+/**
+ * The part of an address one household controls, which every per-address limit counts: an IPv4
+ * address whole, an IPv6 address by its first 64 bits (a home, a phone or a cloud machine gets a
+ * whole /64, and could otherwise take a fresh address for every try).
+ */
+export function addressKey(ip: string): string {
+  if (!ip.includes(':')) return ip;
+  const bare = ip.split('%')[0];
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(bare);
+  if (mapped) return mapped[1];
+  const [head, tail] = bare.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const groups = tail === undefined ? h : [...h, ...Array<string>(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+  if (groups.length < 4 || groups.slice(0, 4).some((g) => !/^[0-9a-f]{1,4}$/i.test(g))) return bare;
+  return `${groups
+    .slice(0, 4)
+    .map((g) => parseInt(g, 16).toString(16))
+    .join(':')}::/64`;
 }
 
 /**

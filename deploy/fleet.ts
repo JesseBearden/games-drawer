@@ -10,6 +10,8 @@
  *                                                        shuts down
  *   npx tsx deploy/fleet.ts rollback <release>           remove the new box; the current one keeps everything
  *   npx tsx deploy/fleet.ts on-staging <release>         may it go live? (exit 1 unless it's what staging shows)
+ *   npx tsx deploy/fleet.ts retire                       tell old boxes again to finish their games and
+ *                                                        shut down (after a promote that couldn't)
  *   npx tsx deploy/fleet.ts status                       the live boxes, and where the front door points
  *
  * Needs AWS_REGION, SITE_DOMAIN and LAUNCH_TEMPLATE (the stack's LaunchTemplateName output) in
@@ -43,6 +45,42 @@ export interface Box {
 
 /** Minutes a retired box keeps passing players on before it may shut down (the front door's DNS settles well within this). */
 export const RETIRE_GRACE_MINUTES = 15;
+/** Tries at telling an old box to retire once the new one has taken over, and the wait between them. */
+export const RETIRE_TRIES = 3;
+export const RETIRE_RETRY_MS = 20_000;
+/**
+ * fleet.ts's exit code when the new release went live but an old box couldn't be told to retire.
+ * deploy.sh doesn't roll that back (there's nothing to roll back): `fleet.ts retire` finishes it.
+ */
+export const EXIT_LIVE_OLD_BOX_NOT_RETIRED = 3;
+
+/** A promote that put the new release live but couldn't retire an old box. */
+export class OldBoxNotRetired extends Error {}
+
+/**
+ * The oldest release a deploy may use. a85fbc8 fixed the deploy's rollback; anything older also
+ * predates the voice relay's firewall.
+ */
+export const OLDEST_RELEASE = 'a85fbc89189efe31be7a62d4dbd59e5c850bc04c';
+
+/**
+ * Is this release older than OLDEST_RELEASE (not built on it)? Asked of git in this checkout; when
+ * git can't tell (no .git, as in the pipeline, a shallow clone, or a commit this checkout lacks)
+ * the answer is no, quietly: the pipeline only ever deploys newer commits anyway.
+ */
+export function olderThanOldest(release: string, git: (args: string[]) => void = runGit): boolean {
+  try {
+    git(['merge-base', '--is-ancestor', OLDEST_RELEASE, release]);
+    return false;
+  } catch (err) {
+    // Exit status 1 is git's "no"; anything else means it couldn't tell.
+    return (err as { status?: number }).status === 1;
+  }
+}
+
+function runGit(args: string[]) {
+  execFileSync('git', args, { cwd: path.join(path.dirname(fileURLToPath(import.meta.url)), '..'), stdio: 'ignore' });
+}
 
 /**
  * What players come in through. cloudfront: CloudFront, which follows origin.<domain> to the
@@ -103,6 +141,7 @@ export interface Cloud {
   pointsTo(name: string): string | null;
   /** Wait until https://staging.<domain> answers with this release (the box is up, and so is its HTTPS). */
   waitForStaging(release: string): Promise<void>;
+  sleep(ms: number): Promise<void>;
   log(msg: string): void;
 }
 
@@ -123,21 +162,51 @@ export class Fleet {
     return this.opts.frontDoor === 'direct' ? [`staging.${this.opts.domain}`] : [];
   }
 
+  /** Does one of the site's own names (not staging) point at this box? */
+  private holdsFrontDoor(box: Box): boolean {
+    return !!box.publicIp && this.frontNames().some((n) => this.cloud.pointsTo(n) === box.publicIp);
+  }
+
   /**
-   * Before removing new boxes: if the site's own names point at one of them (a promote that moved
-   * DNS but stopped before marking the box current), point them back at the current box first, so
-   * removing it can't take the site down. (With no current box, as on the very first deploy,
-   * there's nothing to fall back on, and nothing more to lose.)
+   * Before removing boxes: any of our names that point at one of them move to the current box
+   * first. The site's own names (a promote that moved DNS but stopped before marking the box
+   * current), so removing it can't take the site down; and staging, which otherwise would point at
+   * an address AWS has taken back (and may hand to someone else) until the next box is up. With no
+   * current box there's nothing to point them at (launch keeps a new box that holds the front door
+   * in that case).
    */
-  private async keepFrontDoorOff(doomed: Box[], current: Box | null) {
+  private async moveNamesOff(doomed: Box[], current: Box | null) {
     const ips = new Set(doomed.map((b) => b.publicIp).filter(Boolean));
-    const stuck = this.frontNames().filter((n) => {
+    const atDoomed = (n: string) => {
       const ip = this.cloud.pointsTo(n);
       return ip !== null && ips.has(ip);
-    });
-    if (!stuck.length || !current) return;
-    this.cloud.log(`${stuck.join(', ')} point at a new box (an unfinished promote?): moving them back to box ${current.slot} first.`);
-    await this.cloud.pointAt(this.frontNames(), current.publicIp);
+    };
+    const front = this.frontNames().some(atDoomed) ? this.frontNames() : [];
+    const staging = this.stagingNames().filter(atDoomed);
+    if (!current || (!front.length && !staging.length)) return;
+    if (front.length) this.cloud.log(`${front.join(', ')} point at a new box (an unfinished promote?): moving them back to box ${current.slot} first.`);
+    await this.cloud.pointAt([...front, ...staging], current.publicIp);
+  }
+
+  /**
+   * Tell an old box to finish its games and shut down, a few times if it has to. False if it
+   * never took (the box is then tagged retiring, so the next try knows which).
+   */
+  private async retireBox(box: Box): Promise<boolean> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        if (box.role !== 'retiring') {
+          this.cloud.setRole(box, 'retiring');
+          box.role = 'retiring';
+        }
+        this.cloud.log((await this.cloud.run(box, `games-drawer-deploy ${box.release} retire ${RETIRE_GRACE_MINUTES}`)).trim());
+        return true;
+      } catch (err) {
+        this.cloud.log(`Couldn't tell box ${box.slot} to retire (try ${attempt} of ${RETIRE_TRIES}): ${err instanceof Error ? err.message : err}`);
+        if (attempt >= RETIRE_TRIES) return false;
+        await this.cloud.sleep(RETIRE_RETRY_MS);
+      }
+    }
   }
 
   /**
@@ -157,12 +226,24 @@ export class Fleet {
 
   async launch(release: string): Promise<Box> {
     let boxes = this.cloud.boxes();
+    // With no box taking players, a new box the site's names point at is the live site (the very
+    // first deploy, or the site brought back after the kill switch, before anyone went live): it
+    // stays, as the current box, rather than being cleared away with the site and its games.
+    if (!currentBox(boxes)) {
+      const live = boxes
+        .filter((b) => b.role === 'candidate')
+        .sort((a, b) => b.launchedAt.localeCompare(a.launchedAt))
+        .find((b) => this.holdsFrontDoor(b));
+      if (live) {
+        this.cloud.log(`Box ${live.slot} (${live.release.slice(0, 7)}) is what the site points at, with nothing else taking players: it stays, as the current box.`);
+        this.cloud.setRole(live, 'current');
+        live.role = 'current';
+      }
+    }
     // A new box left over from a deploy that didn't finish.
-    await this.keepFrontDoorOff(
-      boxes.filter((x) => x.role === 'candidate'),
-      currentBox(boxes),
-    );
-    for (const b of boxes.filter((x) => x.role === 'candidate')) {
+    const leftovers = boxes.filter((x) => x.role === 'candidate');
+    await this.moveNamesOff(leftovers, currentBox(boxes));
+    for (const b of leftovers) {
       this.cloud.log(`Removing box ${b.slot} (${b.release.slice(0, 7)}), left from an unfinished deploy.`);
       this.cloud.terminate(b);
     }
@@ -236,18 +317,44 @@ export class Fleet {
     }
   }
 
+  /**
+   * The new box takes every new table and the front door, and the old one retires. Once the new
+   * box is marked current the release is live, and there's nothing to roll back: if an old box
+   * can't be told to retire, this says so and throws OldBoxNotRetired (`retire` finishes the job).
+   */
   async promote(release: string) {
     const boxes = this.cloud.boxes();
     const candidate = candidateBox(boxes, release);
-    const current = currentBox(boxes);
+    // Normally one; more only if an earlier promote stopped before retiring the one before.
+    const old = boxes.filter((b) => b.role === 'current');
     await this.route(boxes, fleetMap(boxes, [[candidate.slot, 100]], candidate.slot));
     await this.cloud.pointAt(this.frontNames(), candidate.publicIp);
     this.cloud.setRole(candidate, 'current');
     this.cloud.log(`Box ${candidate.slot} (${release.slice(0, 7)}) now takes every new table, and the front door points at it.`);
-    if (current) {
-      this.cloud.setRole(current, 'retiring');
-      this.cloud.log((await this.cloud.run(current, `games-drawer-deploy ${current.release} retire ${RETIRE_GRACE_MINUTES}`)).trim());
+    const stuck: Box[] = [];
+    for (const b of old) if (!(await this.retireBox(b))) stuck.push(b);
+    if (stuck.length) {
+      throw new OldBoxNotRetired(
+        `${release.slice(0, 7)} is live; old box ${stuck.map((b) => `${b.slot} (${b.id})`).join(', ')} still needs to retire: npx tsx deploy/fleet.ts retire`,
+      );
     }
+  }
+
+  /**
+   * Tell old boxes, again, to finish their games and shut down: every retiring box, and any box
+   * marked current but the newest. Harmless for a box already doing so.
+   */
+  async retireOld() {
+    const boxes = this.cloud.boxes();
+    const current = currentBox(boxes);
+    const old = boxes.filter((b) => b.role === 'retiring' || (b.role === 'current' && b.id !== current?.id));
+    if (!old.length) {
+      this.cloud.log('No old boxes to retire.');
+      return;
+    }
+    const stuck: Box[] = [];
+    for (const b of old) if (!(await this.retireBox(b))) stuck.push(b);
+    if (stuck.length) throw new Error(`Box ${stuck.map((b) => `${b.slot} (${b.id})`).join(', ')} still couldn't be told to retire.`);
   }
 
   async rollback(release: string) {
@@ -264,7 +371,7 @@ export class Fleet {
       // Whatever else failed, the new box goes (never while the site's names still point at it:
       // if that can't be checked or moved, this throws before removing it).
       if (candidate) {
-        await this.keepFrontDoorOff([candidate], current);
+        await this.moveNamesOff([candidate], current);
         this.cloud.terminate(candidate);
         this.cloud.log(`Rolled back: box ${candidate.slot} (${release.slice(0, 7)}) removed${current ? `; box ${current.slot} keeps everything` : ''}.`);
       } else this.cloud.log('No new box to roll back.');
@@ -297,7 +404,7 @@ function aws(args: string[]): unknown {
   return out.trim() ? JSON.parse(out) : null;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 type Tagged = { Key: string; Value: string }[] | undefined;
 const tag = (tags: Tagged, key: string) => tags?.find((t) => t.Key === key)?.Value ?? '';
 
@@ -417,6 +524,7 @@ export function awsCloud(env: NodeJS.ProcessEnv = process.env): Cloud {
       }
       throw new Error(`${url} never answered with ${release.slice(0, 7)}.`);
     },
+    sleep,
     log: (msg) => console.log(msg),
   };
   return cloud;
@@ -465,9 +573,12 @@ async function main() {
   const { domain, frontDoor } = siteSettings(process.env, readSiteConfig());
   const fleet = new Fleet(awsCloud(), { domain, frontDoor });
   switch (cmd) {
-    case 'launch':
-      await fleet.launch(needRelease());
+    case 'launch': {
+      const rel = needRelease();
+      if (olderThanOldest(rel)) throw new Error(`${rel.slice(0, 7)} is older than ${OLDEST_RELEASE.slice(0, 7)}, the oldest release a deploy may use.`);
+      await fleet.launch(rel);
       return;
+    }
     case 'on-staging':
       return fleet.onStaging(needRelease());
     case 'canary':
@@ -476,13 +587,22 @@ async function main() {
       if (!(await fleet.check(needRelease()))) process.exitCode = 1;
       return;
     case 'promote':
-      return fleet.promote(needRelease());
+      try {
+        await fleet.promote(needRelease());
+      } catch (err) {
+        if (!(err instanceof OldBoxNotRetired)) throw err;
+        console.error(err.message);
+        process.exitCode = EXIT_LIVE_OLD_BOX_NOT_RETIRED;
+      }
+      return;
+    case 'retire':
+      return fleet.retireOld();
     case 'rollback':
       return fleet.rollback(needRelease());
     case 'status':
       return fleet.status();
     default:
-      console.error('usage: fleet.ts launch|on-staging|canary|check|promote|rollback <release> [percent] | status');
+      console.error('usage: fleet.ts launch|on-staging|canary|check|promote|rollback <release> [percent] | retire | status');
       process.exitCode = 2;
   }
 }

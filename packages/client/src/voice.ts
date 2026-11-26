@@ -168,7 +168,8 @@ export class Voice {
   readonly relayOnly = forceRelay();
 
   constructor(
-    readonly alias: string,
+    /** Your alias at the table. A reconnect can bring a new one (rejoin takes it). */
+    public alias: string,
     public settings: VoiceSettings,
     private hooks: VoiceHooks,
   ) {}
@@ -207,10 +208,21 @@ export class Voice {
 
   /**
    * After a reconnect the server has us outside voice and every peer link is dead. Keep the
-   * mic and rejoin, with the fresh settings (relay credentials) from the new welcome.
+   * mic and rejoin, with the fresh settings (relay credentials) and alias from the new welcome.
+   * The alias changes when the table had given our place away meanwhile and took us back as
+   * someone new: kept as it was, we'd make a link to ourselves, and decide who makes each offer
+   * from the old alias (both sides, or neither, and that link never connects).
    */
-  rejoin(settings: VoiceSettings) {
+  rejoin(settings: VoiceSettings, alias = this.alias) {
     this.settings = settings;
+    if (alias !== this.alias) {
+      this.alias = alias;
+      this.loudAt.clear();
+      if (this.lastSpeaking) {
+        this.lastSpeaking = '';
+        this.hooks.speaking(new Set());
+      }
+    }
     if (!this.inVoice) return;
     for (const alias of [...this.links.keys()]) this.dropLink(alias);
     this.peers = [];

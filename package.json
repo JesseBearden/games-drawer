@@ -18,7 +18,7 @@
     "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client && tsc -p deploy && tsc -p infra && tsc -p e2e",
     "stats": "tsx scripts/stats.ts",
     "admin-password": "tsx scripts/admin-password.ts",
-    "sprites": "node scripts/paper-sprites.cjs",
+    "sprites": "node scripts/felt-sprites.cjs",
     "dev:https": "cross-env HTTPS=1 npm run dev",
     "release": "tsx scripts/release.ts",
     "e2e": "npm run release && playwright test",

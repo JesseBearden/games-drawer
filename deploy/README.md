@@ -78,7 +78,9 @@ push, or until you take it down.
 - **A push replaces the staging box**, ending any game being tried there.
 - **If going live fails**, the new box is removed, so staging is the live version again. The
   approved build can't simply be retried: choose **Release change** in the pipeline to test
-  main's latest, put it on staging and ask again.
+  main's latest, put it on staging and ask again. The one exception is the very last step: if the
+  new box has taken over but the old box couldn't be told to retire, the release is live and
+  nothing is removed; the step fails saying so, and `npx tsx deploy/fleet.ts retire` finishes it.
 - The tests run with a role that can't deploy. The approval is a guard against mistakes, though,
   not a security boundary: whoever can push to main can change what the deploy steps do.
 - GitHub shows its own tests on each commit. How the pipeline went is in CodePipeline.
@@ -104,12 +106,19 @@ all of them:
    itself off once its games are done and at least 15 minutes have passed. It was launched to
    terminate on shutdown, so AWS removes it. (A table can hold a box for at most `DRAIN_MAX_MS`,
    3 hours. Tables still there 10 minutes before then are told to start a new table, and at the
-   cutoff they close with that reason, their puzzles saved.)
+   cutoff they close with that reason, their puzzles saved.) From then on systemd no longer
+   restarts its server (one that crashed mid-drain would come back knowing nothing of the drain),
+   and the box powers off within 3½ hours whatever its server is doing. If the old box can't be
+   told to retire (tried three times), the new release is still live: the step fails saying so,
+   and `fleet.ts retire` tells it again.
 5. If any of those fails or is stopped, **rollback** removes the new box and puts everything back
    on the current one. (A build AWS cuts off without warning can't clean up: check `fleet.ts status`.)
 
 The very first deploy (or one after every box is gone) has no current box: the new box takes
-the front door straight away.
+the front door straight away. If another launch comes before anyone goes live, the box the site
+points at stays, as the current box, rather than being removed with the site's games; staging
+moves to the new box as usual. A launch never removes a box while staging points at it: staging
+moves to the current box first.
 
 Pages loaded from one box ask for that release's files (build files, art, sounds, pictures),
 which may come back from another box. So a new box copies in the files it lacks from the release
@@ -147,6 +156,7 @@ npx tsx deploy/fleet.ts status                 # the live boxes, and where the f
 npx tsx deploy/fleet.ts rollback <commit>      # remove a new box by hand
 npx tsx deploy/fleet.ts launch <commit>        # e.g. bring the site back after the kill switch
 npx tsx deploy/fleet.ts promote <commit>
+npx tsx deploy/fleet.ts retire                 # tell old boxes again to finish their games and shut down
 bash deploy/deploy.sh <commit>                 # put a release on staging, as the pipeline does
 GO_LIVE=1 bash deploy/deploy.sh <commit>       # take what's on staging live: a fresh box, canary, checks, promote
 ```
@@ -154,6 +164,11 @@ GO_LIVE=1 bash deploy/deploy.sh <commit>       # take what's on staging live: a 
 `deploy.sh` takes releases already in the releases bucket: each commit the pipeline put on
 staging is kept there for 60 days. Like the pipeline, a hand staging deploy waits while a release
 is going live and closes a waiting approval. Don't go live by hand while the pipeline is deploying.
+
+Never deploy a release older than a85fbc8 (the deploy's rollback fix; older ones also lack the
+voice relay's firewall). From a git checkout, `launch` refuses one; a box refuses any release
+without `deploy/relay-firewall.sh` (for a box's first command, once the stack has been deployed
+since: the launch template carries that command).
 
 ## What's on a box
 
@@ -201,8 +216,10 @@ aws ssm put-parameter --profile games-drawer --name /games-drawer/admin-password
 Windows file path. PowerShell runs it as it is.)
 
 The next deploy picks it up (`games-drawer-deploy` writes it to `/etc/games-drawer/admin.env`).
-The boxes can read that parameter and their shared secrets, and no other. The admin page on any
-box adds up every box's logs from the shared disk.
+The boxes' own policy names only that parameter and their shared secrets, but the AWS-managed
+Systems Manager policy they also have (`AmazonSSMManagedInstanceCore`) lets them read any
+parameter in the account; so keep nothing else secret in this account's Parameter Store. The
+admin page on any box adds up every box's logs from the shared disk.
 
 ## Your own photos (jigsaw)
 
@@ -266,7 +283,9 @@ forgets who has a slot, so restart coturn instead); and don't take the private h
 
 **Boxed in:** setup.sh also gives coturn a memory limit (it restarts by itself if it gets there),
 less CPU than the game when both want it, no privileges, nowhere to write but its database, and a
-journal of its own capped at 50 MB and 30 days.
+journal of its own capped at 50 MB and 30 days. journald only enforces that when it writes, so a
+daily timer (`games-drawer-journal-vacuum`) also closes each journal's file and deletes notes
+older than 29 days, from the relay's journal and the main one, even on a quiet month.
 
 ```bash
 sudo nft list table inet gd_relay                          # the rules, with what each has dropped

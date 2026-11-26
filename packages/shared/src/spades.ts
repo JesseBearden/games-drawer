@@ -197,13 +197,6 @@ export class SpadesRound {
     }
     return winner;
   }
-
-  /** Every card played so far this hand (public knowledge). */
-  played(): Set<Card> {
-    const s = new Set<Card>();
-    for (const t of this.trick) s.add(t.card);
-    return s;
-  }
 }
 
 // ------------------------------------------------------------------ bots

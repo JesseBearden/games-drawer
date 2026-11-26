@@ -230,6 +230,16 @@ export class JigsawGame implements ServerGame {
   }
 
   /**
+   * Save now, but only if something changed here since the last save (or it's finished, which
+   * removes it). The same puzzle can be open at another table: a table that's done nothing for a
+   * while, closing, mustn't write its old copy over what was done there since.
+   */
+  private saveIfChanged() {
+    const s = this.state;
+    if (s && (this.saveAt !== null || s.doneAt !== null)) this.saveNow();
+  }
+
+  /**
    * Whatever `m` is holding comes to rest where it was last dragged to (they dropped out, came
    * back on a new connection, or picked up something else). It rests as a dropped piece does:
    * joined to what it lines up with, and saved. Left loose a hair from its place instead, a later
@@ -343,7 +353,13 @@ export class JigsawGame implements ServerGame {
   }
 
   private async sendSaves(m: Member, ids: string[]) {
-    const saves = (await Promise.all(ids.map((id) => this.store.summary(id)))).flatMap((s) => s ?? []);
+    // Two at a time: a stalled shared disk holds a worker thread per call, and Node has only a
+    // few for every file read (the site's own pictures and scripts included).
+    const saves: NonNullable<Awaited<ReturnType<PuzzleStore['summary']>>>[] = [];
+    for (let i = 0; i < ids.length; i += 2) {
+      for (const s of await Promise.all(ids.slice(i, i + 2).map((id) => this.store.summary(id)))) if (s) saves.push(s);
+      if (this.disposed) return;
+    }
     if (this.disposed) return;
     const found = new Set(saves.map((s) => s.id));
     this.host.send(m, { t: 'pz-saves', saves, gone: ids.filter((id) => !found.has(id)) });
@@ -380,7 +396,7 @@ export class JigsawGame implements ServerGame {
     const photo = !!s && !!photoIdOf(s.image);
     const done = !!s && s.doneAt !== null;
     const untouched = !s || puzzleUntouched(s);
-    if (s) this.saveNow();
+    if (s) this.saveIfChanged();
     this.state = null;
     this.reset('setup');
     this.host.systemChat(
@@ -403,7 +419,7 @@ export class JigsawGame implements ServerGame {
     this.broadcastState();
   }
 
-  private grab(m: Member, piece: number) {
+  private grab(m: Member, piece: number): void {
     const s = this.state;
     if (this.phase !== 'playing' || !s || piece >= s.pieces.length) return;
     const g = s.pieces[piece].g;
@@ -414,6 +430,12 @@ export class JigsawGame implements ServerGame {
       return;
     }
     this.letGo(m);
+    // Letting go of what they held may have joined this piece's group to it: hold what it's in now.
+    const now = s.pieces[piece].g;
+    if (now !== g) {
+      this.grab(m, piece);
+      return;
+    }
     this.held.set(g, m.session);
     this.holding.set(m.session, { g, piece });
     this.host.broadcast({ t: 'pz-held', g, by: m.alias });
@@ -448,7 +470,7 @@ export class JigsawGame implements ServerGame {
       {
         msg: {
           t: 'pz-moved',
-          pieces: touched.map((i) => [i, s.pieces[i].x, s.pieces[i].y, s.pieces[i].g]),
+          pieces: touched.map((i) => [i, r1(s.pieces[i].x), r1(s.pieces[i].y), s.pieces[i].g]),
           locked: [...s.locked],
           by: m.alias,
           snapped,
@@ -494,14 +516,18 @@ export class JigsawGame implements ServerGame {
           if (Math.abs(s.pieces[n].x - ex) > tol || Math.abs(s.pieces[n].y - ey) > tol) continue;
           // Line the dropped group up exactly with its new neighbour, then merge. Once it has
           // joined the frame it stays put, and the neighbour comes to it: the frame never moves.
-          if (s.locked.includes(g) && !s.locked.includes(other)) this.moveGroup(other, ex - s.pieces[n].x, ey - s.pieces[n].y);
-          else this.moveGroup(g, s.pieces[n].x - ex, s.pieces[n].y - ey);
+          if (s.locked.includes(g) && !s.locked.includes(other)) {
+            this.moveGroup(other, ex - s.pieces[n].x, ey - s.pieces[n].y);
+            for (const k of this.members(other)) touched.add(k);
+          } else this.moveGroup(g, s.pieces[n].x - ex, s.pieces[n].y - ey);
+          // The dropped group's pieces change group (and moved, unless the neighbour came to them).
+          // The neighbour's own pieces, often the whole frame, stay as they were: not re-sent.
+          for (const k of this.members(g)) touched.add(k);
           const wasLocked = s.locked.includes(g) || s.locked.includes(other);
           for (const p of s.pieces) if (p.g === g) p.g = other;
           s.locked = s.locked.filter((x) => x !== g);
           if (wasLocked && !s.locked.includes(other)) s.locked.push(other);
           g = other;
-          for (const k of this.members(g)) touched.add(k);
           snapped = joined = true;
           break;
         }
@@ -515,6 +541,7 @@ export class JigsawGame implements ServerGame {
       const dy = Math.floor(i / s.cols) * ph - s.pieces[i].y;
       if (Math.abs(dx) <= tol && Math.abs(dy) <= tol) {
         this.moveGroup(g, dx, dy);
+        for (const k of this.members(g)) touched.add(k);
         s.locked.push(g);
         snapped = true;
       }
@@ -524,7 +551,10 @@ export class JigsawGame implements ServerGame {
       const group = this.members(g);
       const at = s.pieces[group[0]];
       const to = keepGroupOnTable(s, group, group[0], at.x, at.y);
-      this.moveGroup(g, to.x - at.x, to.y - at.y);
+      if (to.x !== at.x || to.y !== at.y) {
+        this.moveGroup(g, to.x - at.x, to.y - at.y);
+        for (const k of group) touched.add(k);
+      }
     }
     return { g, touched: [...touched], snapped };
   }
@@ -586,7 +616,7 @@ export class JigsawGame implements ServerGame {
 
   dispose() {
     this.disposed = true;
-    if (this.state) this.saveNow();
+    if (this.state) this.saveIfChanged();
   }
 
   stats() {

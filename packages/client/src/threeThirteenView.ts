@@ -161,8 +161,10 @@ export class ThreeThirteenTable implements View {
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
-      const detail = s.out ? '<b class="tt-went-out">Went out</b>' : `${s.cards} card${s.cards === 1 ? '' : 's'}`;
-      const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}<div class="ht-score">${s.score} pts · ${detail}</div>`);
+      // No card count (user, 2026-11-26): everyone holds the round's number, and on a phone the
+      // count left the name no room. The score stays, as in the other card games.
+      const detail = s.out ? ' · <b class="tt-went-out">Went out</b>' : '';
+      const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}<div class="ht-score">${s.score} pts${detail}</div>`);
       tagsChanged ||= changed;
       el.dataset.felt = felts[seat];
       el.classList.toggle('turn', v.turn === seat);
@@ -466,12 +468,16 @@ export class ThreeThirteenTable implements View {
     return [0, 1, 2, 3].map((k) => ((v.seat ?? 0) + k) % 4).filter((s) => v.seats[s].playing);
   }
 
-  /** People at the table we're waiting on before the next round (not computers, not anyone away). */
+  /**
+   * People at the table we're waiting on before the next round (not computers). Someone whose
+   * phone has just dropped is waited for too, for a few seconds until the computer takes over
+   * (the server's rule), so they're named rather than "Everyone else is ready" looking stuck.
+   */
   private waitText(): string {
     const v = this.view!;
-    const waiting = v.seats.flatMap((s, i) => (!s.bot && !s.away && !v.ready.includes(i) ? [i] : []));
+    const waiting = v.seats.flatMap((s, i) => (!s.bot && !v.ready.includes(i) ? [i] : []));
     const mine = v.seat !== null && waiting.includes(v.seat);
-    const others = waiting.filter((i) => i !== v.seat).map((i) => nameHtml(this.name(i)));
+    const others = waiting.filter((i) => i !== v.seat).map((i) => nameHtml(this.name(i)) + (v.seats[i].away ? ' (dropped out)' : ''));
     if (!mine) return others.length ? `Waiting for ${joinNames(others)}…` : '';
     if (!others.length) return 'Everyone else is ready.';
     return '';

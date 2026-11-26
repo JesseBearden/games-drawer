@@ -1,6 +1,6 @@
 import { DataSet, englishDataset } from 'obscenity';
 import { describe, expect, it } from 'vitest';
-import { ALLOWED_WORDS, checkChat, nameAllowed, SLUR_WORDS } from '../src/index';
+import { ALLOWED_WORDS, checkChat, SLUR_WORDS } from '../src/index';
 
 describe('chat filter', () => {
   it('None lets swearing through, Hide stars it out, Block stops the message', () => {
@@ -57,8 +57,9 @@ describe('chat filter', () => {
     expect(checkChat('you are a wombat', 'none', ['wombat'])).toEqual({ ok: false, reason: 'blocked-word' });
   });
 
-  it('names always use the strictest setting', () => {
-    expect(nameAllowed('Captain Pancake')).toBe(true);
-    expect(nameAllowed('Shithead')).toBe(false);
+  // (Names are always checked on Block, whatever the table's setting: the server's room.ts.)
+  it('on Block, a name passes and a rude word inside one is caught', () => {
+    expect(checkChat('Captain Pancake', 'block').ok).toBe(true);
+    expect(checkChat('Shithead', 'block').ok).toBe(false);
   });
 });

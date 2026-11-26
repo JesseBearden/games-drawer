@@ -168,6 +168,41 @@ describe('Net (the connection to a table)', () => {
     expect(seen.messages).toBe(had);
   });
 
+  it('a message that trips up its screen loses only itself, not the rest of its batch', async () => {
+    const { Net } = await import('../src/net');
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const got: number[] = [];
+    const net = new Net({ kind: 'private', code: 'BCDFG' }, () => 'Liz', 'phone', {
+      onMessage: (m) => {
+        if (m.t !== 'pong') return;
+        got.push(m.at);
+        if (m.at === 1 || m.at === 4) throw new Error('a bug drawing this one');
+      },
+      onFatal: () => {},
+      onReconnecting: () => {},
+    });
+    net.connect();
+    latest().open();
+    latest().receive(welcome);
+    latest().receive({ t: 'batch', msgs: [{ t: 'pong', at: 1 }, { t: 'pong', at: 2 }, { t: 'pong', at: 3 }] });
+    // One on its own, too: it doesn't escape, and the next still arrives.
+    latest().receive({ t: 'pong', at: 4 });
+    latest().receive({ t: 'pong', at: 5 });
+    expect(got).toEqual([1, 2, 3, 4, 5]);
+    expect(quiet).toHaveBeenCalledTimes(2);
+    quiet.mockRestore();
+    net.close();
+  });
+
+  it('says "table" where the server says "room"', async () => {
+    const { inTableWords } = await import('../src/net');
+    expect(inTableWords('Room is full.')).toBe('Table is full.');
+    expect(inTableWords('That room has closed or the code is wrong.')).toBe('That table has closed or the code is wrong.');
+    expect(inTableWords("You've made a lot of rooms. Try again in a few minutes.")).toBe("You've made a lot of tables. Try again in a few minutes.");
+    expect(inTableWords('Too many wrong room codes.')).toBe('Too many wrong table codes.');
+    expect(inTableWords('Opened in another tab. Roomy bathroom.')).toBe('Opened in another tab. Roomy bathroom.');
+  });
+
   it('leaving a table normally says "leave"', async () => {
     const { net } = await makeNet();
     const s = latest();

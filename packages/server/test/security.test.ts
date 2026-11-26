@@ -276,7 +276,11 @@ describe('guards', () => {
     const req = (headers: Record<string, string>) => ({ headers, socket: { remoteAddress: '10.0.0.9' } }) as unknown as IncomingMessage;
     expect(clientIp(req({ 'cloudfront-viewer-address': '198.51.100.7:46532', 'x-forwarded-for': '203.0.113.1' }), true)).toBe('198.51.100.7');
     // IPv6 comes unbracketed: the port is after the last colon.
-    expect(clientIp(req({ 'cloudfront-viewer-address': '2001:db8::7:443' }), true)).toBe('2001:db8::7');
+    // An IPv6 address counts by its /64: a household gets a whole one.
+    expect(clientIp(req({ 'cloudfront-viewer-address': '2001:db8::7:443' }), true)).toBe('2001:db8:0:0::/64');
+    expect(clientIp(req({ 'cloudfront-viewer-address': '2001:db8:0:0:ffff:1:2:3:443' }), true)).toBe('2001:db8:0:0::/64');
+    expect(clientIp(req({ 'cloudfront-viewer-address': '2001:DB8:aa:bb:1::9:443' }), true)).toBe('2001:db8:aa:bb::/64');
+    expect(clientIp(req({ 'x-forwarded-for': '::ffff:198.51.100.7' }), true)).toBe('198.51.100.7');
     expect(clientIp(req({ 'x-forwarded-for': '203.0.113.1, 10.0.0.2' }), true)).toBe('203.0.113.1');
     // Without our proxy in front, nobody's say-so counts.
     expect(clientIp(req({ 'cloudfront-viewer-address': '198.51.100.7:46532' }), false)).toBe('10.0.0.9');

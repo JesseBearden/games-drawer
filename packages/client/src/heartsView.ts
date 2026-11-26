@@ -11,7 +11,6 @@ export { scoreSheetHtml };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-export const SUIT_SYMBOL: Record<string, string> = { C: '♣', D: '♦', H: '♥', S: '♠' };
 const RANK_LABEL = (c: Card) => (c[0] === 'T' ? '10' : c[0]);
 const PASS_WORD: Record<PassDir, string> = { left: 'left', right: 'right', across: 'across', none: '' };
 

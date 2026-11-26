@@ -3,12 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG, generateTerrain, PHASES } from '@tank/shared';
 
 const art = vi.hoisted(() => ({ ready: null as object | null, load: (): Promise<object> => new Promise(() => {}), renderers: 0 }));
-vi.mock('../src/terrainRenderer', () => ({ TerrainRenderer: class { reset() {} redraw() {} } }));
+vi.mock('../src/terrainRenderer', () => ({ TerrainRenderer: class { reset() {} redraw() {} release() {} } }));
 vi.mock('../src/sprites', () => ({ tankSpritesNow: () => art.ready, tankSprites: () => art.load() }));
 vi.mock('../src/input', () => ({
   Input: class {
     angle = 60;
     power = 50;
+    moving = 0;
     update() {}
     dispose() {}
   },
@@ -19,6 +20,7 @@ vi.mock('../src/renderer', () => ({
       art.renderers++;
     }
     resize() {}
+    release() {}
   },
 }));
 

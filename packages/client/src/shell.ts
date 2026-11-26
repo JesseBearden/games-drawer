@@ -1,4 +1,4 @@
-import { CHAT_FILTER_LABELS, GAME_NAMES, gameInfo, MAX_CHAT_LENGTH, type ChatFilterMode, type ChatMessage, type GameId, type GameServerMessage, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
+import { CHAT_FILTER_LABELS, cleanName, GAME_NAMES, gameInfo, MAX_CHAT_LENGTH, type ChatFilterMode, type ChatMessage, type GameId, type GameServerMessage, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
 import { fetchGameView, gameViewNow } from './gameViews';
 import { inviteTagHtml, LobbyView, memberTagHtml } from './lobby';
@@ -46,6 +46,13 @@ const SLIM_BAR_PX = 640;
  */
 const COMPACT_PX = 500;
 
+/** Game messages that are each the whole table (every card and tile game's only kind). */
+const WHOLE_TABLE = new Set<string>(['hearts', 'spades', 'dominoes', 'threethirteen', 'mahjong']);
+/** At most this many game messages wait for a screen still downloading... */
+const WAITING_MAX = 1000;
+/** ...always keeping the first few (a game's start-up messages). */
+const WAITING_KEEP_FIRST = 50;
+
 export class RoomApp {
   view: View | null = null;
   gameId: GameId | null = null;
@@ -72,8 +79,8 @@ export class RoomApp {
   private chatSeen = new Set<string>();
   private pingTimer: number;
   private speaking = new Set<string>();
-  /** Waiting for the server to make an invite link (resolved by its 'invite' message). */
-  private inviteWaiting: ((token: string) => void) | null = null;
+  /** Waiting for the server to make an invite link (given its 'invite' message). */
+  private inviteWaiting: ((answer: { token: string; for: string | null }) => void) | null = null;
   /** Players you muted in this room (alias -> name): their chat is hidden and voice silenced. */
   private mutedPlayers = new Map<string, string>();
   private cleanups: (() => void)[] = [];
@@ -106,8 +113,9 @@ export class RoomApp {
     // "Turn your phone sideways", or iPad, or tablet: whatever they're holding.
     $('rotate').querySelector('.overlay-card')!.textContent = `Turn your ${deviceWord(device)} sideways to play`;
     $('chat-log').innerHTML = '';
-    // Unread marks from the last table don't come along to this one.
+    // Unread marks from the last table don't come along to this one, nor a message half typed there.
     $('chat-unread').hidden = true;
+    $<HTMLInputElement>('chat-input').value = '';
     this.alias = welcome.alias;
     this.room = welcome.room;
     this.membersList = welcome.members;
@@ -242,6 +250,19 @@ export class RoomApp {
     );
   }
 
+  /**
+   * Keep a game message for its screen, still downloading. A card or tile game's every message is
+   * its whole table, so only the latest is needed. Others (Tanks, Jigsaw) keep their start-up
+   * messages and the latest after them, so a screen that won't download (and a reload that's held
+   * back) can't pile up Tanks' several a second for as long as that lasts.
+   */
+  private waitForView(m: GameServerMessage) {
+    if (WHOLE_TABLE.has(m.t)) this.waitingForView = [];
+    this.waitingForView.push(m);
+    const over = this.waitingForView.length - WAITING_MAX;
+    if (over > 0) this.waitingForView.splice(WAITING_KEEP_FIRST, over);
+  }
+
   /** Once a game's picked, its screen downloads while everyone's getting ready. */
   private fetchPicked() {
     const pick = this.tableState.pick;
@@ -260,7 +281,7 @@ export class RoomApp {
         return;
       case 'g':
         if (this.view) this.view.onGameMessage?.(msg.m);
-        else this.waitingForView.push(msg.m);
+        else this.waitForView(msg.m);
         return;
       case 'members':
         this.membersList = msg.members;
@@ -310,8 +331,7 @@ export class RoomApp {
         this.view?.onPong?.(msg.at);
         return;
       case 'invite':
-        this.inviteWaiting?.(msg.token);
-        this.inviteWaiting = null;
+        this.inviteWaiting?.(msg);
         return;
       case 'name':
         ($<HTMLInputElement>('menu-name')).value = msg.name;
@@ -345,8 +365,8 @@ export class RoomApp {
     this.updateChatInput();
     $('reconnect').hidden = true;
     this.toast(w.reclaimed ? 'Reconnected. You have your place back.' : 'Reconnected.');
-    // Voice rejoins by itself (the mic is still open).
-    this.voice.rejoin(w.voice);
+    // Voice rejoins by itself (the mic is still open), as whoever the table says we are now.
+    this.voice.rejoin(w.voice, w.alias);
     this.renderMic();
     this.updateRoomInfo();
     // Always rebuild the view: the game will send a fresh start-up message.
@@ -698,7 +718,7 @@ export class RoomApp {
     const el = document.createElement('div');
     if (from) {
       el.className = 'toast-chat';
-      el.innerHTML = `<b>${escapeHtml(from)}:</b> ${escapeHtml(text)}`;
+      el.innerHTML = `<b class="pc-nw">${escapeHtml(from)}:</b> ${escapeHtml(text)}`;
     } else el.textContent = text;
     if (this.view?.showNote?.(el.innerHTML)) return;
     // The same note again (tapping a tile that doesn't fit twice) replaces it rather than stacking.
@@ -922,8 +942,13 @@ export class RoomApp {
         }
         return;
       }
-      if (this.view?.onKey?.(e)) return;
+      // With a sheet open (the Menu, Invite…) the game underneath gets no keys: Tab moves through
+      // the sheet's buttons rather than, in Tanks, showing the scores. (Escape still closes it, below.)
+      const sheet = this.openSheetName();
+      if (!sheet && this.view?.onKey?.(e)) return;
       if (e.key === 'Enter') {
+        // Enter on a button or link presses it, as it always does; and Messages never opens behind a sheet.
+        if (sheet || target.closest?.(PRESSABLE)) return;
         e.preventDefault();
         if (!this.chatOpen) this.setChatOpen(true);
         $<HTMLInputElement>('chat-input').focus();
@@ -935,11 +960,11 @@ export class RoomApp {
       } else if (e.key === 'Escape') {
         // A game's own sheet (Scores) closes first, and never gets the Menu stacked on top of it.
         const gameSheet = document.querySelector<HTMLElement>('#game .view:not([hidden]) .ht-overlay:not([hidden])');
-        if (gameSheet && !this.openSheetName()) {
+        if (gameSheet && !sheet) {
           gameSheet.querySelector<HTMLElement>('[data-act="close-scores"]')?.click();
           return;
         }
-        this.openSheet(this.openSheetName() ? null : 'menu');
+        this.openSheet(sheet ? null : 'menu');
       }
     };
     window.addEventListener('keydown', keys);
@@ -999,10 +1024,21 @@ export class RoomApp {
     if (btn.disabled) return;
     const forName = $<HTMLInputElement>('invite-name').value.trim() || null;
     btn.disabled = true;
+    // The name as the server cleans it. A late answer to an earlier invite (for Sam, after its
+    // wait ran out) mustn't become this one's link (for Bob). One for nobody is fine: that's also
+    // what the server makes when it turns a name down.
+    const want = forName === null ? null : cleanName(forName) || null;
     const token = await new Promise<string | null>((resolve) => {
-      this.inviteWaiting = resolve;
+      const answer = (a: { token: string; for: string | null }) => {
+        if (a.for === null || a.for === want) done(a.token);
+      };
+      const done = (t: string | null) => {
+        if (this.inviteWaiting === answer) this.inviteWaiting = null;
+        resolve(t);
+      };
+      this.inviteWaiting = answer;
       this.net.send({ t: 'invite', for: forName });
-      setTimeout(() => resolve(null), 4000);
+      setTimeout(() => done(null), 4000);
     });
     btn.disabled = false;
     const url = `${location.origin}/r/${this.room.code}${token ? `?i=${token}` : ''}`;
@@ -1121,6 +1157,9 @@ export class RoomApp {
     $('game').classList.remove('landscape-only');
   }
 }
+
+/** What Enter presses by itself (the shell leaves Enter alone there). */
+const PRESSABLE = 'button, a[href], select, summary, [role="button"], [role="radio"], [role="checkbox"], [role="link"]';
 
 /** Ctrl, Cmd or Alt held: the browser's own shortcut (Ctrl+F finds), not ours. */
 const withModifier = (e: KeyboardEvent) => e.ctrlKey || e.metaKey || e.altKey;

@@ -6,6 +6,10 @@ After=network-online.target remote-fs.target
 Wants=network-online.target
 # Jigsaw saves and logs live on the shared disk (EFS), so a box can be replaced without losing them.
 RequiresMountsFor=/mnt/games-drawer
+# Keep restarting a crashed server however often it happens (systemd otherwise gives up after five
+# in ten seconds, e.g. while the shared disk is still coming back). A retiring box turns restarts
+# off (deploy/rollout.ts).
+StartLimitIntervalSec=0
 
 [Service]
 User=games
@@ -16,6 +20,10 @@ EnvironmentFile=/etc/games-drawer/secrets.env
 EnvironmentFile=-/etc/games-drawer/admin.env
 EnvironmentFile=/etc/games-drawer/slot-%i.env
 ExecStart=/usr/local/bin/node ${RELEASE_DIR}/server.mjs
+# File reads and writes run on Node's worker threads (4 by default). The shared disk is mounted
+# "hard", so when it stalls, every waiting read and write waits with it: with only 4, a stall
+# stops the server sending its pages and pictures too. 16 leaves room for those.
+Environment=UV_THREADPOOL_SIZE=16
 # A crash restarts it; finishing a drain (exit 0) does not.
 Restart=on-failure
 RestartSec=2

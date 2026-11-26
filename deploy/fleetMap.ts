@@ -1,6 +1,6 @@
 /**
  * The fleet map: which game server boxes are live, where each one is, and which of them take
- * new tables. The fleet tool (fleet.ts, run from GitHub Actions) writes it to every box; each
+ * new tables. The fleet tool (fleet.ts, run by the pipeline's deploy steps) writes it to every box; each
  * box's rollout tool turns it into Caddy routes (routesSnippet). Shared by both, so both agree.
  *
  * Every box can answer any request: a request for a table on another box (its code names that

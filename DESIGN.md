@@ -295,7 +295,10 @@ Mahjong.
   other people's melds. Unmelded cards: Ace 1, number cards their number, J/Q/K 10, jokers 20;
   lowest total wins. You can't throw back the card you just took from the discards.
   - **The table picks how many play**, 2 to 4 (never fewer than the people there), so two people
-    can play without a computer going out on them. Seats come into play across first.
+    can play without a computer going out on them. Seats come into play across from the first
+    seat picked, then its sides (Dominoes too).
+  - **Name tags** show the name and the score, and "Went out" for whoever did: no card count
+    (user, 2026-11-26), since everyone holds the round's number.
   - **The middle:** the round and what's wild, the pile (with its count) and the top discard; the
     one you can take from glows sunflower.
   - **Your hand:** drag cards into any order (no sort buttons; the server keeps your order). Tap

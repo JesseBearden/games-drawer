@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, newPlayer, test } from './fixtures';
-import { at, createRoom, joinByInvite, watchErrors, tapBar } from './helpers';
+import { createRoom, joinByInvite, watchErrors, tapBar } from './helpers';
 import sharp from 'sharp';
 import { PUZZLE_IMAGES } from '../packages/shared/src/puzzle';
 

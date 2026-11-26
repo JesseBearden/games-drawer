@@ -17,7 +17,7 @@ import {
   type TankInfo,
   type GameInput,
 } from '@tank/shared';
-import type { GameHost, Member, Outgoing, ServerGame } from './types';
+import { leftLongAgo, type GameHost, type Member, type Outgoing, type ServerGame } from './types';
 
 /** A player may ask for a fresh snapshot at most this often. */
 const RESYNC_COOLDOWN_MS = 2000;
@@ -124,6 +124,31 @@ export class TanksGame implements ServerGame {
     this.rebalanceBots();
   }
 
+  /**
+   * Four tanks and more people (a table holds six): the rest watch, and get a tank once one is
+   * free: a person left, or has been gone a while and a computer is driving theirs (user,
+   * 2026-11-26). Someone gone who comes back later watches in turn.
+   */
+  seatWatchers() {
+    const now = this.host.now();
+    for (const m of this.host.members()) {
+      if (!m.conn || this.seats.has(m.session)) continue;
+      const full = !this.unreservedBots().length && this.world.tanks.size >= this.world.cfg.maxTanksPerRoom;
+      if (full) {
+        const gone = [...this.seats.keys()].find((s) => {
+          const o = this.host.member(s);
+          return !o || leftLongAgo(o, now);
+        });
+        if (gone === undefined) return;
+        const o = this.host.member(gone);
+        if (o) this.removePlayer(o);
+        else this.seats.delete(gone);
+      }
+      if (!this.addPlayer(m)) return;
+      this.sendInit(m, false);
+    }
+  }
+
   renamed(m: Member) {
     this.freeNameFromBots(m.name);
     const id = this.seats.get(m.session);
@@ -213,9 +238,12 @@ export class TanksGame implements ServerGame {
       case 'move':
       case 'drop': {
         if (!tank) return;
-        // Any gameplay input while carried is consumed as the drop.
+        // Any gameplay press while carried is consumed as the drop. Aim isn't a press: it streams
+        // while an aim key is held (say, through a respawn), and would drop you where the
+        // helicopter comes in. A fresh press of an aim key arrives as 'drop' (TankView.tryDrop).
         if (tank.phase === 'carried') {
-          w.requestDrop(id);
+          if (msg.t === 'aim') w.setAim(id, msg.angle, msg.power);
+          else w.requestDrop(id);
           return;
         }
         if (msg.t === 'aim') w.setAim(id, msg.angle, msg.power);
@@ -265,8 +293,8 @@ export class TanksGame implements ServerGame {
   }
 
   sendInit(m: Member, reclaimed: boolean) {
-    const id = this.seats.get(m.session);
-    if (id === undefined) return;
+    // No tank (four are playing): they watch the whole battlefield until one frees up (tankId -1).
+    const id = this.seats.get(m.session) ?? -1;
     this.host.send(m, { t: 'init', tankId: id, reclaimed, config: this.world.cfg, snapshot: this.snapshot() });
   }
 
@@ -341,9 +369,12 @@ export class TanksGame implements ServerGame {
         case 'nuke':
         case 'heliDown': {
           const { type, ...rest } = e;
+          // A win carries the winner's name for the screens; the log never holds names (/privacy).
+          const fields: Record<string, unknown> = { ...rest };
+          delete fields.name;
           const tankId = 'tank' in e ? e.tank : 'killer' in e ? e.killer : null;
           const t = tankId !== null ? this.world.tanks.get(tankId) : undefined;
-          this.host.log(type, { ...rest, runId: t?.runId, humans });
+          this.host.log(type, { ...fields, runId: t?.runId, humans });
           break;
         }
         default:

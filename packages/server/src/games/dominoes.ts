@@ -7,11 +7,11 @@ import {
   DominoesRound,
   endCount,
   freshBotName,
-  SEAT_FILL_ORDER,
+  seatsInPlay,
   type DominoesView,
   type GameInput,
 } from '@tank/shared';
-import { botPlays, leftLongAgo, TIMER_GAME_TICKS, type GameHost, type Member, type ServerGame } from './types';
+import { botPlays, leftLongAgo, TIMER_GAME_TICKS, watchersTakeSeats, type GameHost, type Member, type ServerGame } from './types';
 import { HAND_END_MS } from './hearts';
 
 /** Bots (and bots covering for disconnected players) think this long. */
@@ -74,9 +74,7 @@ export class DominoesGame implements ServerGame {
     const picked = (table?.seats ?? []).flatMap((s, i) => (s && sessions.has(s) ? [i] : []));
     const playing = host.members().filter((m) => table?.seats.includes(m.session) || !leftLongAgo(m, host.now()));
     const count = Math.max(2, Math.min(DOMINO_SEATS, Math.max(table?.players ?? DOMINO_SEATS, playing.length)));
-    const active = new Set(picked);
-    for (const i of SEAT_FILL_ORDER) if (active.size < count) active.add(i);
-    this.active = [...active].sort((a, b) => a - b);
+    this.active = seatsInPlay(picked, count);
     this.startHand(undefined);
   }
 
@@ -131,12 +129,23 @@ export class DominoesGame implements ServerGame {
     return 'If they’re not back soon, the computer plays their tiles until they are.';
   }
 
-  removePlayer(m: Member) {
+  removePlayer(m: Member, opts?: { comingBack?: boolean }) {
     const seat = this.seatOf(m.session);
     if (seat === null) return;
     this.seats[seat].session = null;
-    const watcher = this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
+    // Ready was theirs, not the seat's (whoever sits here next says so themselves).
+    if (!opts?.comingBack) this.ready.delete(seat);
+    // (Not when they're coming straight back in a new tab: the seat is still theirs.)
+    const watcher = opts?.comingBack ? undefined : this.host.members().find((o) => o.session !== m.session && this.seatOf(o.session) === null && !leftLongAgo(o, this.host.now()));
     if (watcher) this.seats[seat].session = watcher.session;
+    this.schedule();
+    this.sync();
+  }
+
+  seatWatchers() {
+    const moved = watchersTakeSeats(this.host, this.seats, this.active);
+    if (!moved.length) return;
+    for (const seat of moved) this.ready.delete(seat);
     this.schedule();
     this.sync();
   }

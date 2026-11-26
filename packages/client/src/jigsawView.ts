@@ -332,7 +332,6 @@ export class JigsawTable implements View {
   /** Draw order of groups, bottom to top. */
   private order: number[] = [];
   private cam = { x: 0, y: 0, s: 1 };
-  private dirty = true;
   private raf = 0;
   private edgesOnly = false;
   private cursors = new Map<string, { x: number; y: number; at: number }>();
@@ -1965,6 +1964,11 @@ export class JigsawTable implements View {
 
   dispose() {
     this.freeHeldShadows();
+    // Stop cutting pieces (prepareArt checks artFor between pieces), and give the pieces' canvases
+    // back now: emptied, not just dropped, as Safari is slow to give canvas memory back.
+    this.artFor = '';
+    for (const a of this.art) a.canvas.width = a.canvas.height = a.shadow.width = a.shadow.height = 0;
+    this.art = [];
     this.boxObserver.disconnect();
     clearTimeout(this.cursorSendTimer);
     cancelAnimationFrame(this.cursorRaf);

@@ -83,7 +83,7 @@ export class GamesDrawerStack extends cdk.Stack {
     });
     const subnet = vpc.publicSubnets[0];
 
-    // The voice relay is reached directly; boxes also pass requests to each other on port 80.
+    // The voice relay is reached directly; boxes also pass requests to each other on port 8080.
     const boxFirewall = new ec2.SecurityGroup(this, 'Firewall', { vpc, description: 'Games Drawer boxes: voice relay, and each other', allowAllOutbound: true });
     boxFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3478), 'Voice relay (TURN over TCP)');
     boxFirewall.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(3478), 'Voice relay (TURN over UDP)');

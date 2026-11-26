@@ -22,15 +22,7 @@ export const PROTOCOL_VERSION = 4;
 /** Private room codes: consonants only (they never spell words), this many letters. */
 export const ROOM_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
 export const ROOM_CODE_LENGTH = 6;
-/**
- * Codes were 5 letters until 2026-11-22. A table opened before that keeps its code until it
- * closes (a box finishing its games after the deploy still has some), so 5 letters still read as
- * a code; no new table gets one. With 5 letters and one box's share of the codes, a few hundred
- * addresses guessing could land on an open table within a day; 6 makes that twenty times harder.
- * This can go once the deploy that brought 6 letters is a day old.
- */
-const OLD_ROOM_CODE_LENGTH = 5;
-const isCodeLength = (n: number) => n === ROOM_CODE_LENGTH || n === OLD_ROOM_CODE_LENGTH;
+const isCodeLength = (n: number) => n === ROOM_CODE_LENGTH;
 
 export function normalizeRoomCode(code: string) {
   return code.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, ROOM_CODE_LENGTH);
@@ -127,7 +119,8 @@ export type ThreeThirteenInput =
 export type MahjongInput =
   | { t: 'mj-roll' }
   | { t: 'mj-discard'; tile: string }
-  | { t: 'mj-claim'; claim: 'win' | 'kong' | 'pung' | 'chow' | 'pass'; chow?: string }
+  /** `at`: the discard log's length when the offer was made (which offer this answers). */
+  | { t: 'mj-claim'; claim: 'win' | 'kong' | 'pung' | 'chow' | 'pass'; chow?: string; at?: number }
   | { t: 'mj-win' }
   | { t: 'mj-kong'; tile: string }
   | { t: 'ready' }
@@ -329,7 +322,10 @@ export interface RoomInfo {
 
 /** Messages from the tank game. */
 export type TankServerMessage =
-  /** Everything needed to draw the battlefield: on joining, on a game start, or on resync. */
+  /**
+   * Everything needed to draw the battlefield: on joining, on a game start, on resync, or when a
+   * tank frees up for someone watching. tankId -1: no tank, watching (four are playing).
+   */
   | { t: 'init'; tankId: number; reclaimed: boolean; config: GameConfig; snapshot: Snapshot }
   | { t: 'state'; tick: number; dyn: TankDyn[]; helis: HeliDyn[] }
   | { t: 'events'; tick: number; events: GameEvent[] }
@@ -627,8 +623,11 @@ export function parseGameInput(v: unknown): GameInput | null {
       return isMjTile(o.tile) ? { t: o.t, tile: o.tile } : null;
     case 'mj-claim': {
       if (o.claim !== 'win' && o.claim !== 'kong' && o.claim !== 'pung' && o.claim !== 'chow' && o.claim !== 'pass') return null;
-      if (o.claim === 'chow') return isMjTile(o.chow) ? { t: 'mj-claim', claim: 'chow', chow: o.chow } : null;
-      return { t: 'mj-claim', claim: o.claim };
+      // (A page from before 2026-11-26 doesn't send `at`.)
+      if (o.at !== undefined && !(Number.isInteger(o.at) && (o.at as number) >= 0 && (o.at as number) <= 200)) return null;
+      const at = o.at === undefined ? {} : { at: o.at as number };
+      if (o.claim === 'chow') return isMjTile(o.chow) ? { t: 'mj-claim', claim: 'chow', chow: o.chow, ...at } : null;
+      return { t: 'mj-claim', claim: o.claim, ...at };
     }
     case 'bid':
       return Number.isInteger(o.bid) && (o.bid as number) >= 0 && (o.bid as number) <= 13 ? { t: 'bid', bid: o.bid as number } : null;

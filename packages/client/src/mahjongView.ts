@@ -508,7 +508,8 @@ export class MahjongTable implements View {
     const v = this.view!;
     this.pending = true;
     this.myClaim = { key: offerKey(v), claim: c.t };
-    this.shell.sendGame(c.t === 'chow' ? { t: 'mj-claim', claim: 'chow', chow: c.chow! } : { t: 'mj-claim', claim: c.t });
+    const at = v.log.length;
+    this.shell.sendGame(c.t === 'chow' ? { t: 'mj-claim', claim: 'chow', chow: c.chow!, at } : { t: 'mj-claim', claim: c.t, at });
   }
 
   /** Learning Mode, your own turn: Mahjong or Kong when it can't be done says why. */
@@ -516,7 +517,7 @@ export class MahjongTable implements View {
     const v = this.view!;
     const me = v.seat !== null ? v.seats[v.seat] : null;
     if (!me || !v.self) return;
-    const why = mjTurnWhyNot(c, { hand: v.tiles, melds: me.melds, self: v.self, drew: v.drawn !== null, wallLeft: v.wall.left });
+    const why = mjTurnWhyNot(c, { hand: v.tiles, melds: me.melds, self: v.self, drew: v.drew ?? v.drawn !== null, wallLeft: v.wall.left });
     if (!why) return;
     this.turnHelp = why.help;
     this.showTip(why.text);

@@ -109,6 +109,22 @@ describe('the voice relay on a box', () => {
     expect(setup).toContain('=~ ^[0-9a-f]{32,128}$ ]]');
   });
 
+  it('never puts a secret on a command line, where every account on the box can read it', () => {
+    // The relay's config is filled in by the shell, not sed.
+    expect(setup).not.toMatch(/sed[^\n]*TURN_SECRET/);
+    expect(setup).toContain('${relay_conf//@TURN_SECRET@/"$TURN_SECRET"}');
+    // The first box hands its new secrets to the AWS CLI in a file.
+    expect(setup).toContain('--value "file://$made"');
+    expect(setup).not.toMatch(/--value "\$made"/);
+  });
+
+  it('deletes old journal notes daily, even from a journal nothing writes to', () => {
+    expect(setup).toContain('ExecStart=/usr/bin/journalctl --rotate --vacuum-time=29d');
+    expect(setup).toContain('ExecStart=-/usr/bin/journalctl --namespace=gd-relay --rotate --vacuum-time=29d');
+    expect(setup).toMatch(/^OnCalendar=daily$/m);
+    expect(setup).toContain('systemctl enable --now games-drawer-journal-vacuum.timer');
+  });
+
   it('never turns on coturn’s own speed cap (it stops a long call’s renewals)', () => {
     expect(setting('max-bps')).toBeUndefined();
     expect(setting('bps-capacity')).toBeUndefined();
@@ -142,5 +158,22 @@ describe('the voice relay on a box', () => {
 
   it('ships its firewall in the release', () => {
     expect(read('../scripts/release.ts')).toContain("'relay-firewall.sh'");
+  });
+
+  it('never runs a release from before the firewall', () => {
+    const deployCmd = read('games-drawer-deploy');
+    expect(deployCmd.indexOf('if [ ! -f "$dir/deploy/relay-firewall.sh" ]; then')).toBeGreaterThan(0);
+    expect(deployCmd.indexOf('relay-firewall.sh')).toBeLessThan(deployCmd.indexOf('exec /usr/local/bin/node'));
+  });
+});
+
+describe('the game server’s unit', () => {
+  const unit = read('games-drawer@.service');
+  it('always restarts a crashed server (a retiring box turns that off itself)', () => {
+    expect(unit).toMatch(/^Restart=on-failure$/m);
+    expect(unit.split('[Service]')[0]).toMatch(/^StartLimitIntervalSec=0$/m);
+  });
+  it('has worker threads to spare when the shared disk stalls', () => {
+    expect(unit.split('[Service]')[1]).toMatch(/^Environment=UV_THREADPOOL_SIZE=16$/m);
   });
 });

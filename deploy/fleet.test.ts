@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { chooseSlot, Fleet, fleetMap, RETIRE_GRACE_MINUTES, siteSettings, type Box, type Cloud, type FrontDoor, type Role } from './fleet';
+import {
+  chooseSlot,
+  Fleet,
+  fleetMap,
+  olderThanOldest,
+  OldBoxNotRetired,
+  OLDEST_RELEASE,
+  RETIRE_GRACE_MINUTES,
+  RETIRE_TRIES,
+  siteSettings,
+  type Box,
+  type Cloud,
+  type FrontDoor,
+  type Role,
+} from './fleet';
 import type { FleetMap, Slot } from './fleetMap';
 
 /** A pretend AWS: boxes, the commands run on them, and where the front door points. */
@@ -7,6 +21,7 @@ function fakeCloud(opts: { failOn?: RegExp; runFails?: (box: Box, command: strin
   let boxes: Box[] = [];
   const records: Record<string, string> = {};
   const waited: string[] = [];
+  const slept: number[] = [];
   let n = 0;
   const ran: { slot: Slot; command: string }[] = [];
   const logs: string[] = [];
@@ -40,13 +55,16 @@ function fakeCloud(opts: { failOn?: RegExp; runFails?: (box: Box, command: strin
     async waitForStaging(release) {
       waited.push(release);
     },
+    async sleep(ms) {
+      slept.push(ms);
+    },
     log: (m) => logs.push(m),
   };
   const lastMap = (slot: Slot): FleetMap | null => {
     const r = ran.filter((x) => x.slot === slot && x.command.includes(' route ')).at(-1);
     return r ? JSON.parse(Buffer.from(r.command.split(' ').at(-1)!, 'base64').toString()) : null;
   };
-  return { cloud, ran, logs, lastMap, records, waited, boxes: () => boxes, origin: () => records['origin.games.example'] ?? null };
+  return { cloud, ran, logs, lastMap, records, waited, slept, boxes: () => boxes, origin: () => records['origin.games.example'] ?? null };
 }
 
 const fleetOf = (f: ReturnType<typeof fakeCloud>, frontDoor: FrontDoor = 'cloudfront') => new Fleet(f.cloud, { domain: 'games.example', frontDoor });
@@ -230,6 +248,129 @@ describe('a box that has gone, or won’t answer', () => {
     };
     await expect(fleet.rollback('ccccccc3')).rejects.toThrow('lookup failed');
     expect(f.boxes().map((b) => b.slot)).toContain('c');
+  });
+});
+
+describe('retiring the old box once the new one has taken over', () => {
+  /** b is current, c is on staging; telling b to retire fails `failures` times. */
+  async function goingLive(failures: number) {
+    let left = 0;
+    const f = fakeCloud({ runFails: (_, command) => command.includes(' retire ') && left-- > 0 });
+    const fleet = fleetOf(f, 'direct');
+    for (const rel of ['bbbbbbb2', 'ccccccc3']) {
+      await fleet.launch(rel);
+      if (rel === 'bbbbbbb2') await fleet.promote(rel);
+    }
+    left = failures;
+    return { f, fleet };
+  }
+
+  it('tries again when it doesn’t take the first time', async () => {
+    const { f, fleet } = await goingLive(RETIRE_TRIES - 1);
+    await fleet.promote('ccccccc3');
+    expect(f.ran.filter((r) => r.command.includes(' retire '))).toHaveLength(RETIRE_TRIES);
+    expect(f.slept).toHaveLength(RETIRE_TRIES - 1);
+    expect(Object.fromEntries(f.boxes().map((b) => [b.slot, b.role]))).toEqual({ a: 'retiring', b: 'current' });
+  });
+
+  it('if it never takes, the new release is still live, and it says what is left to do', async () => {
+    const { f, fleet } = await goingLive(99);
+    const promoting = fleet.promote('ccccccc3');
+    await expect(promoting).rejects.toBeInstanceOf(OldBoxNotRetired);
+    await expect(promoting).rejects.toThrow(/ccccccc is live; old box a \(i-1\) still needs to retire: npx tsx deploy\/fleet\.ts retire/);
+    // Nothing to roll back: the site is on the new box, and the old one is marked as on its way out.
+    expect(f.records['games.example']).toBe('3.0.0.2');
+    expect(Object.fromEntries(f.boxes().map((b) => [b.slot, b.role]))).toEqual({ a: 'retiring', b: 'current' });
+    await fleet.rollback('ccccccc3');
+    expect(f.boxes()).toHaveLength(2);
+    expect(f.records['games.example']).toBe('3.0.0.2');
+
+    // Once the old box answers again, `retire` finishes the job.
+    const before = f.ran.length;
+    f.cloud.run = async (box, command) => {
+      f.ran.push({ slot: box.slot, command });
+      return 'ok';
+    };
+    await fleet.retireOld();
+    expect(f.ran.slice(before)).toEqual([{ slot: 'a', command: `games-drawer-deploy bbbbbbb2 retire ${RETIRE_GRACE_MINUTES}` }]);
+  });
+
+  it('`retire` also catches an old box a stopped promote left marked current', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f);
+    await fleet.launch('aaaaaaa1');
+    await fleet.promote('aaaaaaa1');
+    await fleet.launch('bbbbbbb2');
+    // A promote that stopped right after marking the new box current.
+    f.cloud.setRole(f.boxes().find((b) => b.slot === 'b')!, 'current');
+    await fleet.retireOld();
+    expect(Object.fromEntries(f.boxes().map((b) => [b.slot, b.role]))).toEqual({ a: 'retiring', b: 'current' });
+    expect(f.ran.at(-1)).toEqual({ slot: 'a', command: `games-drawer-deploy aaaaaaa1 retire ${RETIRE_GRACE_MINUTES}` });
+  });
+});
+
+describe('a launch never leaves the site, or staging, pointing at a box it removes', () => {
+  it('moves staging to the current box before removing the box it showed', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f, 'direct');
+    await fleet.launch('aaaaaaa1');
+    await fleet.promote('aaaaaaa1');
+    await fleet.launch('bbbbbbb2');
+    const terminate = f.cloud.terminate;
+    const stagingWhenRemoved: (string | undefined)[] = [];
+    f.cloud.terminate = (box) => {
+      stagingWhenRemoved.push(f.records['staging.games.example']);
+      terminate(box);
+    };
+    await fleet.launch('ccccccc3');
+    // b (3.0.0.2) went while staging pointed at the current box, a, not at b's released address.
+    expect(stagingWhenRemoved).toEqual(['3.0.0.1']);
+    expect(f.records['staging.games.example']).toBe('3.0.0.3');
+    expect(f.records['games.example']).toBe('3.0.0.1');
+  });
+
+  it('with nothing taking players, keeps the new box the site points at, as the current box', async () => {
+    for (const frontDoor of ['direct', 'cloudfront'] as const) {
+      const f = fakeCloud();
+      const fleet = fleetOf(f, frontDoor);
+      // The first deploy's staging step: with no site yet, the front door points at the new box.
+      await fleet.launch('aaaaaaa1');
+      // Another push before anyone went live.
+      await fleet.launch('bbbbbbb2');
+      expect(f.boxes().map((b) => `${b.slot}:${b.release.slice(0, 1)}:${b.role}`)).toEqual(['a:a:current', 'b:b:candidate']);
+      expect(f.origin()).toBe('3.0.0.1');
+      // From here it's an ordinary go-live, and nobody on the site is cut off.
+      await fleet.canary('bbbbbbb2', 10);
+      expect(f.lastMap('a')!.newTables).toEqual([['a', 90], ['b', 10]]);
+      await fleet.promote('bbbbbbb2');
+      expect(f.origin()).toBe('3.0.0.2');
+      expect(f.ran).toContainEqual({ slot: 'a', command: `games-drawer-deploy aaaaaaa1 retire ${RETIRE_GRACE_MINUTES}` });
+    }
+  });
+
+  it('a leftover box the site doesn’t point at still goes, even with nothing taking players', async () => {
+    const f = fakeCloud();
+    const fleet = fleetOf(f, 'direct');
+    await fleet.launch('aaaaaaa1');
+    // Say the site's names were moved off it by hand.
+    await f.cloud.pointAt(fleet.frontNames(), '3.9.9.9');
+    await fleet.launch('bbbbbbb2');
+    expect(f.boxes().map((b) => `${b.release.slice(0, 1)}:${b.role}`)).toEqual(['b:candidate']);
+  });
+});
+
+describe('releases older than the oldest a deploy may use', () => {
+  const git = (status: number | null) => () => {
+    if (status !== null) throw Object.assign(new Error('git'), { status });
+  };
+  it('are refused when git says so, and let through quietly when it can’t tell', () => {
+    expect(OLDEST_RELEASE).toMatch(/^a85fbc8[0-9a-f]{33}$/);
+    expect(olderThanOldest('1234567', git(1))).toBe(true);
+    expect(olderThanOldest('1234567', git(null))).toBe(false);
+    // 128: not a repository (the pipeline's copy has no .git) or a commit this checkout lacks.
+    expect(olderThanOldest('1234567', git(128))).toBe(false);
+    // No git at all.
+    expect(olderThanOldest('1234567', git(undefined as unknown as number))).toBe(false);
   });
 });
 

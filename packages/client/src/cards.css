@@ -52,13 +52,6 @@
   font-size: 1rem;
   gap: 6px;
 }
-#game .ht-tag {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 800;
-  color: var(--ink-soft);
-}
-#game .ht-seat.turn .ht-tag,
 #game .ht-seat.turn .ht-score {
   color: var(--ink);
 }
