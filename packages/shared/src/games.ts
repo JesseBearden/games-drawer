@@ -113,11 +113,11 @@ export const GAMES: GameInfo[] = [
     tagline: 'All Fives: match the ends, and score when they add up to a multiple of 5.',
     blurb: 'All Fives: match the ends, and score whenever they add up to a multiple of 5.',
     howTo: [
-      'Everyone gets 7 tiles. Play one that matches an open end; if nothing fits, you pass.',
+      'Everyone gets 7 tiles. Play one that matches an open end. If nothing fits, draw from the boneyard until something does; with four players there’s no boneyard, so you pass.',
       'After you play, if the open ends add up to 5, 10, 15… you score that many.',
       `Go out first to score everyone’s leftover pips. First to ${DOMINOES_RULES.target} wins.`,
     ],
-    players: '4 seats · bots fill in',
+    players: '2 to 4 players · computers fill in',
     offered: true,
     underConstruction: false,
     landscape: false,
@@ -208,7 +208,7 @@ export const CARD_BACK_COUNT = 30;
  * Games where the table chooses how many play, 2 up to SEAT_COUNT (user, 2026-11-20): computers
  * fill only that many seats, so two people can play without a computer going out on them.
  */
-export const CHOOSE_PLAYERS: readonly GameId[] = ['threethirteen'];
+export const CHOOSE_PLAYERS: readonly GameId[] = ['threethirteen', 'dominoes'];
 export const choosesPlayers = (g: GameId | null): boolean => !!g && CHOOSE_PLAYERS.includes(g);
 /** With fewer than four playing, empty seats come into play in this order: across first, so two face each other. */
 export const SEAT_FILL_ORDER: readonly number[] = [0, 2, 1, 3];

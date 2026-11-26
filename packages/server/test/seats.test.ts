@@ -44,6 +44,40 @@ function table() {
   return { clock, room, join, drop, start };
 }
 
+describe('Dominoes for two or three (user, 2026-11-25)', () => {
+  it('two picked: two seats across from each other, 7 tiles each, 14 in the boneyard', () => {
+    const t = table();
+    t.join('jesse');
+    t.start('dominoes', () => t.room.handle('jesse', { t: 'players', n: 2 }));
+    const game = t.room.game as DominoesGame;
+    expect(game.active).toEqual([0, 2]);
+    expect(game.round.hands.map((h) => h.length)).toEqual([7, 0, 7, 0]);
+    expect(game.round.boneyard).toHaveLength(14);
+    const view = game.viewFor('jesse');
+    expect(view.seats.map((s) => s.playing)).toEqual([true, false, true, false]);
+    expect(view.boneyard).toBe(14);
+  });
+
+  it('three picked by three people: everyone plays, 7 left to draw; never fewer than are here', () => {
+    const t = table();
+    for (const who of ['jesse', 'mom', 'sam']) t.join(who);
+    t.start('dominoes', () => t.room.handle('jesse', { t: 'players', n: 2 }));
+    const game = t.room.game as DominoesGame;
+    expect(game.active).toHaveLength(3);
+    expect(game.round.boneyard).toHaveLength(7);
+    expect(game.active.map((i) => game.seats[i].session).sort()).toEqual(['jesse', 'mom', 'sam']);
+  });
+
+  it('four is all 28 dealt, as before', () => {
+    const t = table();
+    t.join('jesse');
+    t.start('dominoes');
+    const game = t.room.game as DominoesGame;
+    expect(game.active).toEqual([0, 1, 2, 3]);
+    expect(game.round.boneyard).toHaveLength(0);
+  });
+});
+
 describe('someone who left long ago', () => {
   it('isn’t dealt in: 2 players at Three Thirteen is the two people here', () => {
     const t = table();

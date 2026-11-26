@@ -3,8 +3,9 @@
  * deal, so the server runs it and tests can replay whole games.
  *
  * House rules live in DOMINOES_RULES below. The rest:
- * - Double-six set (28 tiles). Each player draws `tilesEach`; any left over are the boneyard.
- *   The family game deals all 28 (7 each, 4 players), so there's no boneyard.
+ * - Double-six set (28 tiles). Each player draws `tilesEach` (always 7); any left over are the
+ *   boneyard. The table picks 2, 3 or 4 players (user, 2026-11-25): 14 left to draw with two, 7
+ *   with three; four takes all 28, so there's nothing to draw.
  * - First hand: whoever holds the highest double leads it (the heaviest tile if nobody has a
  *   double). Later hands: the last hand's winner leads anything.
  * - The first double played is the spinner: once both of its sides have tiles, play can also
@@ -215,15 +216,24 @@ export interface DominoesHandResult {
   pips: number[];
 }
 
-/** Shuffle and deal. `randomInt(n)` returns 0..n-1 (crypto on the server). */
-export function dealDominoes(randomInt: (n: number) => number, players = 4, tilesEach = DOMINOES_RULES.tilesEach) {
+/** The table's four seats; two or three of them may play (user, 2026-11-25). */
+export const DOMINO_SEATS = 4;
+
+/**
+ * Shuffle and deal. `randomInt(n)` returns 0..n-1 (crypto on the server). `players`: how many
+ * play (seats 0..n-1), or the seats in play. Every seat gets a hand, empty if it isn't playing;
+ * what isn't dealt is the boneyard (7 each: 14 left with two, 7 with three, none with four).
+ */
+export function dealDominoes(randomInt: (n: number) => number, players: number | readonly number[] = DOMINO_SEATS, tilesEach = DOMINOES_RULES.tilesEach) {
   const set = fullSet();
   for (let i = set.length - 1; i > 0; i--) {
     const j = randomInt(i + 1);
     [set[i], set[j]] = [set[j], set[i]];
   }
-  const hands = Array.from({ length: players }, (_, p) => set.slice(p * tilesEach, p * tilesEach + tilesEach));
-  return { hands, boneyard: set.slice(players * tilesEach) };
+  const seats = typeof players === 'number' ? Array.from({ length: players }, (_, i) => i) : [...players];
+  const hands: TileId[][] = Array.from({ length: Math.max(DOMINO_SEATS, ...seats.map((s) => s + 1)) }, () => []);
+  seats.forEach((s, k) => (hands[s] = set.slice(k * tilesEach, k * tilesEach + tilesEach)));
+  return { hands, boneyard: set.slice(seats.length * tilesEach) };
 }
 
 /** The opening lead for a first hand: the highest double, or the heaviest tile. */
@@ -251,21 +261,36 @@ export class DominoesRound {
   lastPlay: { seat: number; tile: TileId; arm: string; points: number } | null = null;
   result: DominoesHandResult | null = null;
 
+  /** The seats playing this hand, in turn order (the ones dealt tiles). */
+  readonly active: number[];
+
   constructor(dealt: { hands: TileId[][]; boneyard: TileId[] }, opts: { leader?: number }) {
     this.hands = dealt.hands.map((h) => [...h]);
     this.boneyard = [...dealt.boneyard];
+    this.active = this.hands.flatMap((h, i) => (h.length ? [i] : []));
     if (opts.leader === undefined) {
       const lead = openingLead(this.hands);
       this.turn = lead.seat;
       this.mustLead = lead.tile;
     } else {
-      this.turn = opts.leader;
+      // (A leader who isn't playing: the next seat along that is.)
+      this.turn = this.active.includes(opts.leader) ? opts.leader : this.next(opts.leader);
       this.mustLead = null;
     }
   }
 
   get players() {
-    return this.hands.length;
+    return this.active.length;
+  }
+
+  /** The next seat along that's playing. */
+  next(seat: number): number {
+    const n = this.hands.length;
+    for (let k = 1; k <= n; k++) {
+      const s = (seat + k) % n;
+      if (this.active.includes(s)) return s;
+    }
+    return seat;
   }
 
   /** Moves this seat can make now (empty if it isn't their turn). */
@@ -295,7 +320,7 @@ export class DominoesRound {
     const points = pointsFor(endCount(this.layout));
     this.lastPlay = { seat, tile, arm, points };
     if (this.hands[seat].length === 0) this.finish(seat, false);
-    else this.turn = (seat + 1) % this.players;
+    else this.turn = this.next(seat);
     return points;
   }
 
@@ -317,12 +342,13 @@ export class DominoesRound {
     if (!this.mustPass(seat)) return false;
     this.passesInRow++;
     if (this.passesInRow >= this.players) {
+      // (Only the players: a seat that isn't playing has no tiles, which isn't a low hand.)
       const pips = this.pipsLeft();
-      const low = Math.min(...pips);
-      const lows = pips.flatMap((p, i) => (p === low ? [i] : []));
+      const low = Math.min(...this.active.map((s) => pips[s]));
+      const lows = this.active.filter((s) => pips[s] === low);
       this.finish(lows.length === 1 ? lows[0] : null, true);
     } else {
-      this.turn = (seat + 1) % this.players;
+      this.turn = this.next(seat);
     }
     return true;
   }
@@ -378,6 +404,8 @@ export interface DominoesSeatView {
   score: number;
   /** How many tiles they hold. */
   tiles: number;
+  /** Playing this game (with two or three players, the other seats are empty). */
+  playing: boolean;
 }
 
 export interface DominoesView {

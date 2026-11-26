@@ -300,7 +300,7 @@ export class Room {
   private makeGame(id: GameId, table?: { players: number; seats: (string | null)[] }): ServerGame {
     if (id === 'hearts') return new HeartsGame(this.host);
     if (id === 'spades') return new SpadesGame(this.host);
-    if (id === 'dominoes') return new DominoesGame(this.host);
+    if (id === 'dominoes') return new DominoesGame(this.host, table);
     if (id === 'threethirteen') return new ThreeThirteenGame(this.host, table);
     if (id === 'mahjong') return new MahjongGame(this.host, { ...this.mahjongRules });
     if (id === 'jigsaw') return new JigsawGame(this.host, (this.deps.puzzles ??= new PuzzleStore(null)));

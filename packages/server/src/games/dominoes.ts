@@ -1,11 +1,13 @@
 import {
   cloneLayout,
   dealDominoes,
+  DOMINO_SEATS,
   DOMINOES_RULES,
   dominoesBotMove,
   DominoesRound,
   endCount,
   freshBotName,
+  SEAT_FILL_ORDER,
   type DominoesView,
   type GameInput,
 } from '@tank/shared';
@@ -27,14 +29,16 @@ interface Seat {
 }
 
 /**
- * Dominoes (All Fives) for four seats, everyone for themselves. Members take seats in the
- * order they arrived; bots fill the rest and play for anyone who disconnects. Each player only
- * ever sees their own tiles.
+ * Dominoes (All Fives) for two, three or four, everyone for themselves (the table picks how
+ * many: user, 2026-11-25). Members take the seats in play in the order they arrived; bots fill
+ * the rest and play for anyone who disconnects. Each player only ever sees their own tiles.
  */
 export class DominoesGame implements ServerGame {
   readonly id = 'dominoes' as const;
   readonly tickEvery = TIMER_GAME_TICKS;
-  readonly capacity = 4;
+  readonly capacity = DOMINO_SEATS;
+  /** The seats in play this game, in seat order. */
+  readonly active: number[];
   seats: Seat[];
   round!: DominoesRound;
   handNumber = 0;
@@ -49,10 +53,13 @@ export class DominoesGame implements ServerGame {
   private lastLeader: number | undefined;
   private dice = { int: (min: number, max: number) => min + this.host.randomInt(max - min + 1) };
 
-  constructor(private host: GameHost) {
+  constructor(
+    private host: GameHost,
+    table?: { players: number; seats: (string | null)[] },
+  ) {
     const used = new Set(host.members().map((m) => m.name.toLowerCase()));
     const colors = new Set(host.members().map((m) => m.color));
-    this.seats = [0, 1, 2, 3].map(() => {
+    this.seats = Array.from({ length: DOMINO_SEATS }, () => {
       const botName = freshBotName(used, this.dice);
       used.add(botName.toLowerCase());
       let botColor = 0;
@@ -60,6 +67,16 @@ export class DominoesGame implements ServerGame {
       colors.add(botColor);
       return { session: null, botName, botColor, score: 0 };
     });
+    // In play, as in Three Thirteen: the seats people picked, then free ones (across first) up to
+    // how many play (never fewer than the people here, never fewer than 2). Someone who left long
+    // ago isn't one of them, unless they'd picked a seat.
+    const sessions = new Set(host.members().map((m) => m.session));
+    const picked = (table?.seats ?? []).flatMap((s, i) => (s && sessions.has(s) ? [i] : []));
+    const playing = host.members().filter((m) => table?.seats.includes(m.session) || !leftLongAgo(m, host.now()));
+    const count = Math.max(2, Math.min(DOMINO_SEATS, Math.max(table?.players ?? DOMINO_SEATS, playing.length)));
+    const active = new Set(picked);
+    for (const i of SEAT_FILL_ORDER) if (active.size < count) active.add(i);
+    this.active = [...active].sort((a, b) => a - b);
     this.startHand(undefined);
   }
 
@@ -85,8 +102,9 @@ export class DominoesGame implements ServerGame {
 
   addPlayer(m: Member, seat?: number): boolean {
     if (this.seatOf(m.session) !== null) return true;
-    // The seat they picked at the table, if it's free; otherwise the first free one.
-    const free = seat !== undefined && this.seats[seat]?.session === null ? seat : this.seats.findIndex((s) => s.session === null);
+    // The seat they picked at the table, if it's in play and free; otherwise the first free one.
+    const open = (i: number) => this.active.includes(i) && this.seats[i]?.session === null;
+    const free = seat !== undefined && open(seat) ? seat : (this.active.find(open) ?? -1);
     if (free < 0) {
       this.sendInit(m, false);
       return true;
@@ -145,7 +163,7 @@ export class DominoesGame implements ServerGame {
   /** `leader` undefined: the first hand, led by the highest double. */
   private startHand(leader: number | undefined) {
     this.handNumber++;
-    this.round = new DominoesRound(dealDominoes((n) => this.host.randomInt(n)), { leader });
+    this.round = new DominoesRound(dealDominoes((n) => this.host.randomInt(n), this.active), { leader });
     this.lastLeader = this.round.turn;
     this.phase = 'playing';
     this.nextHandAt = null;
@@ -160,12 +178,12 @@ export class DominoesGame implements ServerGame {
    */
   private nextHandIfReady(): boolean {
     if (this.phase !== 'handEnd') return false;
-    const people = this.seats.map((_, i) => i).filter((i) => !this.botControls(i));
+    const people = this.active.filter((i) => !this.botControls(i));
     const go = people.length ? people.every((i) => this.ready.has(i)) : this.nextHandAt !== null && this.host.now() >= this.nextHandAt;
     if (!go) return false;
     // The last hand's winner leads; after a blocked tie, the next player along.
     const res = this.round.result;
-    this.startHand(res?.winner ?? ((this.lastLeader ?? 0) + 1) % 4);
+    this.startHand(res?.winner ?? this.round.next(this.lastLeader ?? 0));
     return true;
   }
 
@@ -310,6 +328,7 @@ export class DominoesGame implements ServerGame {
           away: !!m && !m.conn,
           score: s.score,
           tiles: r.hands[i].length,
+          playing: this.active.includes(i),
         };
       }),
       layout: cloneLayout(r.layout),
@@ -339,6 +358,6 @@ export class DominoesGame implements ServerGame {
   dispose() {}
 
   stats() {
-    return { hand: this.handNumber, phase: this.phase, scores: this.seats.map((s) => s.score), bots: this.seats.filter((_, i) => this.botControls(i)).length };
+    return { hand: this.handNumber, phase: this.phase, players: this.active.length, scores: this.active.map((i) => this.seats[i].score), bots: this.active.filter((i) => this.botControls(i)).length };
   }
 }

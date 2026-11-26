@@ -4,8 +4,8 @@ import { bounds, ghostSpot, layoutSpots, limitsFor, tileSvg, type TileSpot } fro
 import { seatFelts } from './felts';
 import { focusForPad, type PadPress } from './gamepad';
 import { patchHtml, syncKeyed, type KeyedItem } from './dom';
-import { nameHtml } from './html';
-import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml, seatRows } from './heartsView';
+import { escapeHtml, nameHtml } from './html';
+import { fitScoreTable, fitSeatText, scoreSheetHtml, seatNameHtml } from './heartsView';
 import type { SafariGesture, ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -163,6 +163,8 @@ export class DominoesTable implements View {
       tagsChanged ||= changed;
       // Their own felt, the one their name has on Your table.
       el.dataset.felt = felts[seat];
+      // With two or three playing, the empty seats' tags keep their place but don't show.
+      el.style.visibility = s.playing ? '' : 'hidden';
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
@@ -524,7 +526,8 @@ export class DominoesTable implements View {
           : `${who} went out and scores <b>${res.points}</b> for the tiles left.`
       }</p>`;
     }
-    html += scoreSheetHtml(seatRows(v.seats, v.history, v.seat), v.phase === 'handEnd' || v.phase === 'gameOver');
+    const rows = this.inPlay().map((s) => ({ label: escapeHtml(v.seats[s].name), history: v.history.map((h) => h[s]), total: v.seats[s].score }));
+    html += scoreSheetHtml(rows, v.phase === 'handEnd' || v.phase === 'gameOver');
     html += `<p class="pc-small">First to ${v.target} wins.</p>`;
     if (v.phase === 'handEnd') {
       const wait = this.waitText();
@@ -546,6 +549,12 @@ export class DominoesTable implements View {
     html += '</div></div>';
     patchHtml(box, html);
     fitScoreTable(box);
+  }
+
+  /** The seats playing this game, from yours round the table (two, three or four). */
+  private inPlay(): number[] {
+    const v = this.view!;
+    return [0, 1, 2, 3].map((k) => ((v.seat ?? 0) + k) % 4).filter((s) => v.seats[s].playing);
   }
 
   /** Players at the table we're waiting on before the next hand (not bots, not anyone away). */

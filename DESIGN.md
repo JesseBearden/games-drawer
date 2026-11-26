@@ -265,6 +265,12 @@ Mahjong.
   the table as an L (the turning tile just past the end of the line), but never at a double or
   right after one, which would look like a spinner: those run on a little past the edge instead.
   East and west mirror each other (never a pinwheel).
+  - **Two, three or four players** (user, 2026-11-25): the table picks how many, as in
+    Three Thirteen (two sit across from each other; the empty seats don't show, and aren't on the
+    score sheet). Everyone always gets 7, so two leave 14 in the boneyard and three leave 7; four
+    take all 28. Nothing fits: "Nothing fits: draw a tile" and a Draw a tile (13 left) button, one
+    tile a tap, until something fits; with nothing left to draw, you pass. The boneyard shows
+    only as its count under the board ("Boneyard: 13"): no pile, the phone has no room for one.
   - **Playing:** tap a tile, then tap its spot. Tapping the picked tile again puts it back. No
     hint text while you play: the yellow shows whose turn it is, the dashed spots where a tile
     can go. The line under the board appears only when there's news ("Nothing fits: you pass").

@@ -174,3 +174,56 @@ describe('a hand of dominoes', () => {
     }
   });
 });
+
+describe('two or three players (user, 2026-11-25)', () => {
+  it('everyone still gets 7; the rest is the boneyard; empty seats get nothing', () => {
+    const two = dealDominoes(() => 0, [0, 2]);
+    expect(two.hands.map((h) => h.length)).toEqual([7, 0, 7, 0]);
+    expect(two.boneyard).toHaveLength(14);
+    const three = dealDominoes(() => 0, [0, 1, 2]);
+    expect(three.hands.map((h) => h.length)).toEqual([7, 7, 7, 0]);
+    expect(three.boneyard).toHaveLength(7);
+    expect(new Set([...three.hands.flat(), ...three.boneyard]).size).toBe(28);
+  });
+
+  it('turns skip the empty seats, and a leader who isn’t playing passes the lead along', () => {
+    const r = new DominoesRound({ hands: [['6-6', '1-2'], [], ['6-1', '3-4'], []], boneyard: ['0-0'] }, {});
+    expect(r.active).toEqual([0, 2]);
+    expect(r.players).toBe(2);
+    expect(r.turn).toBe(0);
+    r.play(0, '6-6', 'e');
+    expect(r.turn).toBe(2);
+    r.play(2, '6-1', 'e');
+    expect(r.turn).toBe(0);
+    expect(new DominoesRound({ hands: [['1-2'], [], ['3-4'], []], boneyard: [] }, { leader: 1 }).turn).toBe(2);
+  });
+
+  it('a blocked hand goes to the lowest of the players, never an empty seat', () => {
+    const r = new DominoesRound({ hands: [['6-6', '0-0'], ['1-1'], ['2-3'], []], boneyard: [] }, {});
+    r.play(0, '6-6', 'e');
+    for (const s of [1, 2, 0]) expect(r.pass(s)).toBe(true);
+    expect(r.result).toMatchObject({ blocked: true, winner: 0, pips: [0, 2, 5, 0] });
+  });
+
+  it('bots finish every hand with two or three, drawing from the boneyard', () => {
+    const rng = new Rng(5);
+    let drew = 0;
+    for (let h = 0; h < 300; h++) {
+      const seats = h % 2 ? [0, 2] : [0, 1, 2];
+      const r = new DominoesRound(dealDominoes((n) => rng.int(0, n - 1), seats), { leader: h % 5 === 0 ? undefined : h % 4 });
+      let guard = 0;
+      while (r.phase === 'playing' && guard++ < 300) {
+        const s = r.turn;
+        expect(seats).toContain(s);
+        const m = dominoesBotMove(r, s);
+        if (m) expect(r.play(s, m.tile, m.arm)).not.toBeNull();
+        else if (r.mustDraw(s)) {
+          expect(r.draw(s)).not.toBeNull();
+          drew++;
+        } else expect(r.pass(s)).toBe(true);
+      }
+      expect(r.phase).toBe('done');
+    }
+    expect(drew).toBeGreaterThan(100);
+  });
+});
