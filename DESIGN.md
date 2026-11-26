@@ -300,7 +300,8 @@ Mahjong.
     one you can take from glows sunflower.
   - **Your hand:** drag cards into any order (no sort buttons; the server keeps your order). Tap
     a card to lift it, tap it again (or the discards) to throw it. Cards in a meld are tinted
-    light green all over; this round's wild rank wears a small sunflower star; the card you just
+    light green all over; this round's wild rank wears a small sunflower star on its top-left
+    corner, sticking out past it a little (user, 2026-11-25); the card you just
     took says "Taken". A tag says "Left over: 7 pts". **Go out** appears only when you can, and
     the card that does it is outlined.
   - **Between rounds:** everyone's hand, melds first, then the score sheet (headed Round), and

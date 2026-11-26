@@ -1122,13 +1122,22 @@ body.pad-mode #game .dm-mine.pad-cursor {
   mix-blend-mode: multiply;
   pointer-events: none;
 }
-/* This round's wild rank (jokers are wild too, and say so themselves): a star under the corner,
-   on the strip of the card that shows when the hand overlaps. */
+/* This round's wild rank (jokers are wild too, and say so themselves): a star on the card's
+   top-left corner, sticking out past it a little (user, 2026-11-25), where it shows when the hand
+   overlaps. The card lets it out (it rounds its face itself instead). */
+#game .card:has(> .tt-wild) {
+  overflow: visible;
+}
+#game .card:has(> .tt-wild) > svg {
+  clip-path: inset(0 round 8% / 5.7%);
+}
 #game .tt-wild {
   position: absolute;
-  top: 34%;
-  left: 6%;
-  width: 20%;
+  z-index: 1;
+  /* (Top is a share of the card's height, the rest of its width: about the same distance.) */
+  top: -8%;
+  left: -10%;
+  width: 23%;
   aspect-ratio: 1;
   --fc: var(--sunflower);
   background: var(--sunflower);
