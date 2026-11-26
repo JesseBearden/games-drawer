@@ -170,6 +170,15 @@ Mahjong.
   Switch game brings everyone back here with nothing picked. Home → Start a table → Your table
   stays three pages (user, 2026-11-20).
 - **The way in keeps still from page to page** (user, 2026-11-20): home, Start a table and a
+- **Six at a table, for Jigsaw** (user, 2026-11-25). A table holds as many as the game being
+  played takes (`maxPeople` in shared/games.ts: Jigsaw 6, the rest 4 so far), and six while it's
+  picking a game. So a fifth or sixth person can only come in while the table is picking or doing
+  a puzzle; mid-game the join page says the table is playing that game, which is for up to 4, and
+  lets them in by itself once there's room. With more here than a game takes, its tile is laid
+  flat and faded with "Up to 4" on it, and the line under Pick a game says which games fit. A
+  fifth person arriving lets go of a four-person game the table had picked (a line in chat says
+  so). Voice is a mesh, so six people means five streams each way per phone; the relay holds 60
+  slots, 20 per household (deploy/turnserver.conf).
   table's invite page show the hands-and-puzzle picture at exactly the same size, and their buttons
   at the same width, so going from one to the next doesn't zoom. Each fits one screen, down to an
   iPad mini on its side in Safari. Where a page scrolls, its felt moves with it, and it stops at

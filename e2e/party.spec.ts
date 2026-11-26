@@ -1,6 +1,25 @@
 import { expect, test } from './fixtures';
 import { createTable, joinByInvite, newPlayer, passThree, playIfMyTurn, ready, sendChat, watchErrors, tapBar } from './helpers';
 
+test('past four at a table only Jigsaw can be picked; a four-person pick is let go', async ({ page: host, browser }) => {
+  const code = await createTable(host, 'Hana', 'mahjong');
+  for (const name of ['Bo', 'Cy', 'Di', 'Ed']) await joinByInvite(await newPlayer(browser, host), code, name);
+  // Five here: Mahjong is let go, and it and the other four-person games are locked.
+  const mahjong = host.locator('.lobby-games [data-game="mahjong"]');
+  await expect(mahjong).toHaveAttribute('aria-disabled', 'true');
+  await expect(mahjong).toHaveAttribute('aria-pressed', 'false');
+  await expect(mahjong).toContainText('Up to 4');
+  await expect(host.locator('#chat-log')).toContainText('Mahjong is for up to 4: pick a game for 5.');
+  await expect(host.locator('.tb-sub').first()).toContainText('With 5 here, only Jigsaw fits: the other games are for up to 4.');
+  // Tapping a locked one does nothing; Jigsaw can be picked.
+  await mahjong.click({ force: true }); // (it's marked unavailable)
+  await expect(mahjong).toHaveAttribute('aria-pressed', 'false');
+  const jigsaw = host.locator('.lobby-games [data-game="jigsaw"]');
+  await expect(jigsaw).not.toHaveAttribute('aria-disabled', 'true');
+  await jigsaw.click();
+  await expect(jigsaw).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('friends meet at a table, chat, play Hearts and switch games @smoke', async ({ page: host, browser }) => {
   const errors = watchErrors(host);
   const friend = await newPlayer(browser, host);

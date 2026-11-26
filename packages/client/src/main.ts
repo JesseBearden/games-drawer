@@ -21,11 +21,13 @@ import {
   isInviteToken,
   isRoomCode,
   MAX_NAME_LENGTH,
+  maxPeople,
   normalizeRoomCode,
   roomCodeFromEntry,
   randomName,
   ROOM_CODE_LENGTH,
   slotOfCode,
+  TABLE_MAX_PEOPLE,
   type GameId,
   type RoomRequest,
   type ServerMessage,
@@ -360,7 +362,12 @@ async function refreshJoin(p: Extract<Page, { kind: 'join' }>, first = false) {
       return;
     }
     title.textContent = 'This table is full';
-    detail.innerHTML = `${who || 'Four people'} ${info.people.length === 1 ? 'is' : 'are'} already playing. Ask them to make room, or start your own table.`;
+    // (Full for the game they're playing, not the table: a table holds more while it's picking a
+    // game or doing a puzzle. User, 2026-11-25. This page checks again by itself.)
+    const forGame = info.game && info.people.length + info.away.length < TABLE_MAX_PEOPLE;
+    detail.innerHTML = forGame
+      ? `${who} ${info.people.length === 1 ? 'is' : 'are'} playing ${GAME_PHRASE[info.game!]}, which is for up to ${maxPeople(info.game!)}. You can join when they’re back at the table, or doing a puzzle: this page lets you in once there’s room.`
+      : `${who || 'Six people'} ${info.people.length === 1 ? 'is' : 'are'} already playing. Ask them to make room, or start your own table.`;
     again();
     return;
   }

@@ -37,6 +37,9 @@ export interface GameInfo {
   underConstruction: boolean;
   /** Phones play it sideways. */
   landscape: boolean;
+  /** Most people at the table for it: more than this and it can't be picked, and nobody new can
+   *  join while it's being played (user, 2026-11-25: six for Jigsaw, four for the rest so far). */
+  maxPeople: number;
 }
 
 export const GAMES: GameInfo[] = [
@@ -58,6 +61,7 @@ export const GAMES: GameInfo[] = [
     offered: true,
     underConstruction: false,
     landscape: true,
+    maxPeople: 4,
   },
   {
     id: 'hearts',
@@ -77,6 +81,7 @@ export const GAMES: GameInfo[] = [
     offered: true,
     underConstruction: false,
     landscape: false,
+    maxPeople: 4,
   },
   {
     id: 'spades',
@@ -96,6 +101,7 @@ export const GAMES: GameInfo[] = [
     offered: true,
     underConstruction: false,
     landscape: false,
+    maxPeople: 4,
   },
   {
     id: 'dominoes',
@@ -115,6 +121,7 @@ export const GAMES: GameInfo[] = [
     offered: true,
     underConstruction: false,
     landscape: false,
+    maxPeople: 4,
   },
   {
     id: 'threethirteen',
@@ -135,6 +142,7 @@ export const GAMES: GameInfo[] = [
     offered: true,
     underConstruction: false,
     landscape: false,
+    maxPeople: 4,
   },
   {
     id: 'mahjong',
@@ -154,6 +162,7 @@ export const GAMES: GameInfo[] = [
     offered: true,
     underConstruction: false,
     landscape: false,
+    maxPeople: 4,
   },
   {
     id: 'jigsaw',
@@ -170,10 +179,11 @@ export const GAMES: GameInfo[] = [
       'It saves as you go: come back and pick “Continue a puzzle” (a puzzle nobody plays for 30 days is cleared away).',
       'Or use your own photo: only your table sees it, and it’s deleted when the table closes.',
     ],
-    players: 'Up to 4 together',
+    players: 'Up to 6 together',
     offered: true,
     underConstruction: false,
     landscape: false,
+    maxPeople: 6,
   },
 ];
 
@@ -182,6 +192,10 @@ export const GAME_IDS: GameId[] = GAMES.map((g) => g.id);
 export const SEATED_GAMES: readonly GameId[] = ['hearts', 'spades', 'dominoes', 'threethirteen', 'mahjong'];
 export const isSeated = (g: GameId | null): boolean => !!g && SEATED_GAMES.includes(g);
 export const SEAT_COUNT = 4;
+/** Most people a table holds, picking a game or playing one that takes that many (Jigsaw: 6). */
+export const TABLE_MAX_PEOPLE = Math.max(...GAMES.map((g) => g.maxPeople));
+/** Most people at the table for this game. */
+export const maxPeople = (id: GameId): number => GAMES.find((g) => g.id === id)!.maxPeople;
 
 /**
  * The user's felt card backs, art/backs/back-01.webp to back-30.webp (cut from

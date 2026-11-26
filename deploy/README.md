@@ -276,11 +276,11 @@ systemctl show coturn -p MemoryCurrent -p MemoryPeak -p NRestarts
 ```
 
 **Limits:** the relay refuses to forward to private and internal addresses (including the AWS
-metadata service). It has **40 slots per box** (`total-quota`): 40 relayed links, or six tables of
-four where every link needs the relay (a lot more where only some do). A link takes two slots if
-Firefox makes it, or if UDP is blocked at the answering end. One household holds at most 18
-(`user-quota`). Counted where it leaves the box (the firewall), each slot sends at most 14 KB/s
-each way and all of them 620 KB/s, so flat out all month is about 1.6 TB (about $140; the kill
+metadata service). It has **60 slots per box** (`total-quota`): 60 relayed links, or ten tables of
+four, or four of six, where every link needs the relay (a lot more where only some do). A link
+takes two slots if Firefox makes it, or if UDP is blocked at the answering end. One household
+holds at most 20 (`user-quota`). Counted where it leaves the box (the firewall), each slot sends at
+most 14 KB/s each way and all of them 930 KB/s, so flat out all month is about 2.4 TB (about $220; the kill
 switch stops the boxes at $65). **Don't use coturn's `max-bps` or `bps-capacity` for that:** with
 them on it stops answering a long call's renewals, and the call drops. The voice code asks every
 browser for mono at 32 kbit/s, which those numbers allow for (voice.ts `speechBitrate`). When

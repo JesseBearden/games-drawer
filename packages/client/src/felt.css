@@ -560,6 +560,17 @@ body {
   width: 60px;
   height: 60px;
 }
+/* A game for fewer people than are at the table (user, 2026-11-25): laid flat and faded, "Up to
+   4" under its name. */
+.pc-choice.is-locked,
+.pc-choice.is-locked:hover,
+.pc-choice.is-locked:active {
+  opacity: 0.5;
+  filter: saturate(0.6);
+  transform: none;
+  box-shadow: var(--lift-0);
+  cursor: default;
+}
 @container (max-width: 199px) {
   .pc-choice img {
     width: 48px;

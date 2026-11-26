@@ -18,6 +18,8 @@ import {
   photoUrl,
   PROTOCOL_VERSION,
   SEAT_COUNT,
+  TABLE_MAX_PEOPLE,
+  maxPeople,
   Rng,
   uniqueName,
   type ChatMessage,
@@ -357,9 +359,13 @@ export class Room {
     return n;
   }
 
-  /** People the table holds. */
+  /**
+   * People the table holds: as many as the game being played takes (four, or Jigsaw's six), or
+   * picking a game, the most any game takes. So a fifth or sixth person can only come in while
+   * the table is picking or doing a puzzle (user, 2026-11-25).
+   */
   capacity() {
-    return this.cfg.maxTanksPerRoom;
+    return this.game ? this.game.capacity : TABLE_MAX_PEOPLE;
   }
 
   /** Places a newcomer could take: the free ones, and any that people gone a while give up. */
@@ -449,6 +455,7 @@ export class Room {
       existing.pendingLeave = null;
       if (wasAway && existing.leaveAnnounced) this.announce(existing, 'arrive', `${existing.name} is back.`);
       existing.leaveAnnounced = false;
+      this.letGoOfPickTooSmall();
       this.broadcastMembers();
       return { ok: true, reclaimed: wasAway && seatBack, name: existing.name };
     }
@@ -522,6 +529,7 @@ export class Room {
     // Back before anyone was told they'd left: nothing to say.
     if (!old) this.announce(p, 'arrive', `${p.name} is here.`);
     else if (old.leaveAnnounced) this.announce(p, 'arrive', `${p.name} is back.`);
+    this.letGoOfPickTooSmall();
     this.broadcastMembers();
     return { ok: true, reclaimed: false, name: p.name };
   }
@@ -703,9 +711,28 @@ export class Room {
       this.notice(p, 'Go back to the table to pick another game.');
       return;
     }
+    // (More people here than it takes: only a game for that many, so far just Jigsaw.)
+    const here = this.humansConnected();
+    if (here > maxPeople(id)) {
+      this.notice(p, `${GAME_NAMES[id]} is for up to ${maxPeople(id)}, and there are ${here} here.`);
+      return;
+    }
     if (this.setup.pick === id) return;
     this.setPick(id);
     this.systemChat(`${p.name} picked ${GAME_NAMES[id]}.`);
+    this.broadcastTable();
+  }
+
+  /**
+   * Someone came to the table and now there are more here than the picked game takes: the pick
+   * is let go (with a line in chat), so nobody waits on a game that can't start.
+   */
+  private letGoOfPickTooSmall() {
+    const pick = this.setup.pick;
+    const here = this.humansConnected();
+    if (this.game || !pick || here <= maxPeople(pick)) return;
+    this.setPick(null);
+    this.systemChat(`${GAME_NAMES[pick]} is for up to ${maxPeople(pick)}: pick a game for ${here}.`);
     this.broadcastTable();
   }
 
@@ -766,7 +793,7 @@ export class Room {
     const pick = this.setup.pick;
     if (this.game || !pick) return;
     const here = [...this.players.values()].filter((m) => m.conn);
-    if (!here.length || !here.every((m) => this.setup.ready.has(m.session))) return;
+    if (!here.length || here.length > maxPeople(pick) || !here.every((m) => this.setup.ready.has(m.session))) return;
     this.startGame(pick);
   }
 

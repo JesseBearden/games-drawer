@@ -19,7 +19,8 @@ import {
 /**
  * Peer-to-peer voice chat at the table.
  *
- * Every player in voice connects directly to every other (a "mesh"; fine for 4 players). The
+ * Every player in voice connects directly to every other (a "mesh"; fine for the six a table
+ * holds: each phone sends and hears five streams of mono speech). The
  * game server only relays the WebRTC set-up messages between voice members of the same room;
  * audio never passes through it. The player with the smaller alias always makes the offer, so
  * two peers never both start negotiating at once.

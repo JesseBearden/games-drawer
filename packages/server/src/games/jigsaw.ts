@@ -1,6 +1,7 @@
 import {
   gridFor,
   keepGroupOnTable,
+  maxPeople,
   maxPieces,
   photoIdOf,
   PIECE_COUNTS,
@@ -71,7 +72,7 @@ function slotLines(lo: number, hi: number, size: number, min: number, max: numbe
  */
 export class JigsawGame implements ServerGame {
   readonly id = 'jigsaw' as const;
-  readonly capacity = 4;
+  readonly capacity = maxPeople('jigsaw');
   readonly tickEvery = JIGSAW_TICKS;
   phase: PuzzlePhase = 'setup';
   state: PuzzleState | null = null;

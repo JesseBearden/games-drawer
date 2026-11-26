@@ -31,7 +31,7 @@
 #
 # Where packets leave the box (table netdev gd_relay_bill, which is what AWS bills): each slot
 # sends at most 14 KB/s each way (room for the hungriest browser's voice), and all of them
-# together at most 620 KB/s, which is the spending cap. coturn's own (max-bps) has to stay off:
+# together at most 930 KB/s (every one of 60 slots full of voice), which is the spending cap. coturn's own (max-bps) has to stay off:
 # with it on, coturn stops answering a long call's renewals. A drop here is the one kind on the
 # way out that's safe, because the kernel doesn't report it to coturn as a failed send.
 set -euo pipefail
@@ -222,7 +222,7 @@ table netdev gd_relay_bill {
   }
 
   chain spending {
-    limit rate over 620 kbytes/second burst 2 mbytes counter drop comment "the whole relay"
+    limit rate over 930 kbytes/second burst 2 mbytes counter drop comment "the whole relay"
   }
 }
 RULES

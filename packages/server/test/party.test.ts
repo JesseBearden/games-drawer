@@ -299,6 +299,49 @@ describe('private rooms are parties', () => {
     expect(() => joinPrivate(mgr, 'session-bbbb', a.room.code)).toThrow('room-full');
   });
 
+  it('six at a table: picking a game or doing a puzzle, but four for the other games', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    for (const s of ['bbbb', 'cccc', 'dddd', 'eeee', 'ffff']) joinPrivate(mgr, `session-${s}`, a.room.code);
+    // Six picking a game: the table holds no more.
+    expect(a.room.members()).toHaveLength(6);
+    expect(full(a.room)).toBe(true);
+    expect(() => joinPrivate(mgr, 'session-gggg', a.room.code)).toThrow('room-full');
+    // A four-person game can't be picked by six; Jigsaw can.
+    a.room.handle('session-aaaa', { t: 'pick', game: 'mahjong' });
+    expect(a.room.tableSetup().pick).toBeNull();
+    expect(a.conn.of('chat').some((m) => m.msg.text === 'Mahjong is for up to 4, and there are 6 here.')).toBe(true);
+    play(a.room, 'jigsaw');
+    expect(a.room.game?.id).toBe('jigsaw');
+    expect(a.room.capacity()).toBe(6);
+  });
+
+  it('a fifth person can come in only while the table is picking or doing a puzzle', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    for (const s of ['bbbb', 'cccc', 'dddd']) joinPrivate(mgr, `session-${s}`, a.room.code);
+    play(a.room, 'hearts');
+    // Four playing Hearts: full, and the join page says it's the game.
+    expect(a.room.capacity()).toBe(4);
+    expect(full(a.room)).toBe(true);
+    expect(() => joinPrivate(mgr, 'session-eeee', a.room.code)).toThrow('room-full');
+  });
+
+  it('a fifth person arriving lets go of a four-person game the table had picked', () => {
+    const { mgr } = setup();
+    const a = joinPrivate(mgr, 'session-aaaa');
+    for (const s of ['bbbb', 'cccc', 'dddd']) joinPrivate(mgr, `session-${s}`, a.room.code);
+    a.room.handle('session-aaaa', { t: 'pick', game: 'spades' });
+    a.room.handle('session-aaaa', { t: 'ready', ready: true });
+    expect(a.room.tableSetup().pick).toBe('spades');
+    joinPrivate(mgr, 'session-eeee', a.room.code);
+    expect(a.room.tableSetup().pick).toBeNull();
+    expect(a.room.tableSetup().ready).toEqual([]);
+    expect(a.conn.of('chat').some((m) => m.msg.text === 'Spades is for up to 4: pick a game for 5.')).toBe(true);
+    // Even if all five say ready, nothing starts until a game for five is picked.
+    expect(a.room.game).toBeNull();
+  });
+
   it('a table opened from a game’s page has that game picked, waiting for people', () => {
     const { mgr } = setup();
     const lookup = mgr.resolve({ kind: 'create-private', game: 'hearts' }, 'session-aaaa');

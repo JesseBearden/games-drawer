@@ -51,6 +51,11 @@ _Last updated: 2026-11-25 (the new bar; Mahjong scaled to fit)_
       first flower shows, or (on a phone) the wall as the dice are rolled and the deal starts;
       only a Pung or Kong being laid down changes sizes. The discards now fill
       from the left (or the top), with room kept for the rest: does that look right?
+- [ ] **Six at a table (Jigsaw):** with five or six people (tabs or phones), only Jigsaw can be
+      picked; the others are faded with "Up to 4". Build a puzzle with six: are the cursors and
+      names clear? With six on the mic, can everyone hear everyone (try an older phone)? While
+      four play Hearts, a fifth person's join page should say the table is playing Hearts, and let
+      them in once the table is back picking a game.
 - [ ] **Dealer's first move:** when you deal, the moment the deal ends a yellow note says "It's
       your turn. Choose a tile to discard." and fades after about 2 s. Long enough to read?
 - [ ] **iPhone sideways:** your tag and the buttons sit in the middle of the cream strip, and the

@@ -116,7 +116,7 @@ describe('the voice relay on a box', () => {
 
   it('caps spending where packets leave, with room for every browser’s voice', () => {
     const slots = Number(setting('total-quota'));
-    expect(slots).toBe(40);
+    expect(slots).toBe(60);
     const household = Number(setting('user-quota'));
     // A table of four all relayed in Firefox: 6 links, 2 slots where it's made and 1 where it's answered.
     expect(household).toBeGreaterThanOrEqual(6 * 3);
@@ -131,8 +131,8 @@ describe('the voice relay on a box', () => {
     const all = Number(/limit rate over (\d+) kbytes\/second/.exec(chain('spending').join('\n'))![1]);
     // Every slot full of voice fits (7.4 KB/s up, 8.3 down)...
     expect(all * 1024).toBeGreaterThan(slots * (7_400 + 8_300));
-    // ...and a month flat out stays under 1.7 TB.
-    expect(all * 1024 * 86_400 * 30).toBeLessThan(1.7e12);
+    // ...and a month flat out stays under 2.5 TB (60 slots since tables hold six: user, 2026-11-25).
+    expect(all * 1024 * 86_400 * 30).toBeLessThan(2.5e12);
   });
 
   it('relays audio only: UDP, over IPv4', () => {

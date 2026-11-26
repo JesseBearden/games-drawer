@@ -146,12 +146,19 @@ export class LobbyView implements View {
       html += `<div class="pc-alert" data-key="mic"><span style="flex: 1">Your mic is off. ${why}</span><button class="pc-btn pc-btn-plain" data-act="voice" type="button">Turn on mic</button></div>`;
     }
 
-    // The games: anyone can pick, or change the pick.
-    html += `<h2 class="pc-h3">Pick a game</h2><p class="tb-sub">Anyone at the table can pick${t.pick ? ' another' : ''}.</p>`;
+    // The games: anyone can pick, or change the pick. With more here than a game takes, it can't
+    // be picked, and says so (user, 2026-11-25: up to six at a table, for Jigsaw).
+    const here = this.members.filter((m) => m.connected).length;
+    const fits = pickable().filter((g) => here <= g.maxPeople);
+    const fitting = fits.map((g) => g.name);
+    const why = fits.length < pickable().length ? ` With ${here} here, only ${fitting.length > 1 ? `${fitting.slice(0, -1).join(', ')} and ${fitting.at(-1)}` : fitting[0]} ${fitting.length > 1 ? 'fit' : 'fits'}: the other games are for up to ${SEAT_COUNT}.` : '';
+    html += `<h2 class="pc-h3">Pick a game</h2><p class="tb-sub">Anyone at the table can pick${t.pick ? ' another' : ''}.${why}</p>`;
     html += '<div class="pc-choices lobby-games" data-key="games">';
     for (const g of pickable()) {
       const picked = g.id === t.pick;
-      html += `<button class="pc-choice paper-${GAME_PAPER[g.id] ?? 'sky'}${picked ? ' is-picked' : ''}" data-game="${g.id}" type="button" aria-pressed="${picked}"><img src="/art/games/${g.id}.webp" alt="" width="52" height="52" /><span>${escapeHtml(g.name)}${g.underConstruction ? '<small>Work in Progress</small>' : ''}</span></button>`;
+      const locked = here > g.maxPeople;
+      const small = locked ? `<small>Up to ${g.maxPeople}</small>` : g.underConstruction ? '<small>Work in Progress</small>' : '';
+      html += `<button class="pc-choice paper-${GAME_PAPER[g.id] ?? 'sky'}${picked ? ' is-picked' : ''}${locked ? ' is-locked' : ''}" data-game="${g.id}" type="button" aria-pressed="${picked}"${locked ? ' aria-disabled="true"' : ''}><img src="/art/games/${g.id}.webp" alt="" width="52" height="52" /><span>${escapeHtml(g.name)}${small}</span></button>`;
     }
     html += '</div>';
 
@@ -240,7 +247,6 @@ export class LobbyView implements View {
       const [one, two] = [team(0, 2), team(1, 3)].sort((x, y) => y.length - x.length);
       notes.push(`Partners sit across from each other.${one.length ? ` ${side(one)} ${one.length === 1 ? 'plays' : 'play'} against ${side(two)}.` : ''}`);
     }
-    if (this.members.filter((m) => m.connected).length > SEAT_COUNT) notes.push('Only four can play: anyone without a seat watches.');
     html += notes.map((n) => `<p class="tb-sub">${n}</p>`).join('');
     return html + '</section>';
   }
@@ -271,7 +277,7 @@ export class LobbyView implements View {
     const t = e.target as HTMLElement;
     const game = t.closest<HTMLElement>('[data-game]')?.dataset.game;
     if (isGameId(game) && isOffered(game)) {
-      if (game === this.table.pick) return;
+      if (game === this.table.pick || t.closest('[aria-disabled="true"]')) return;
       this.shell.play('lobbyJoin');
       this.showSeats = isSeated(game);
       this.shell.pickGame(game);
