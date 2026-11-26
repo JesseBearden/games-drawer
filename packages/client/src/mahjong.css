@@ -1690,9 +1690,14 @@
   line-height: 1.35;
   text-align: center;
   cursor: pointer;
+  transition: opacity 0.4s ease;
 }
 #game .mahjong-view .mj-tip[hidden] {
   display: none;
+}
+/* (Its last moments: it fades away rather than vanishing.) */
+#game .mahjong-view .mj-tip.is-fading {
+  opacity: 0;
 }
 
 /* ------------------------------------------------------------------ your buttons never resize your strip */

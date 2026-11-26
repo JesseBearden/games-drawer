@@ -355,7 +355,10 @@ Mahjong.
     screen pixels for the table's scale (`--side-gap`), so no gap comes out thicker than another.
   - **No turn words** (user, 2026-11-23): whose turn it is shows only by the yellow tag. The
     status line carries news only: a discard you can take, "You can go Mahjong!", "Waiting for
-    the others…", and the opening.
+    the others…", and the opening. One exception (user, 2026-11-25): when the deal ends and
+    you're the dealer, a yellow note over your tiles says "It's your turn. Choose a tile to
+    discard." for about 2 s, then fades (with so many buttons it wasn't obvious what the first
+    move is). Every note over your tiles fades away now, rather than vanishing.
   - **Kongs** are three tiles with the fourth on top of the middle one (a concealed Kong shows its
     ends face down); every strip and close-up leaves room above for it. Upright, your face-up sets
     always fit one row, up to four Kongs: the set tiles shrink (your own don't).

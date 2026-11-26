@@ -51,6 +51,8 @@ _Last updated: 2026-11-25 (the new bar; Mahjong scaled to fit)_
       first flower shows, or (on a phone) the wall as the dice are rolled and the deal starts;
       only a Pung or Kong being laid down changes sizes. The discards now fill
       from the left (or the top), with room kept for the rest: does that look right?
+- [ ] **Dealer's first move:** when you deal, the moment the deal ends a yellow note says "It's
+      your turn. Choose a tile to discard." and fades after about 2 s. Long enough to read?
 - [ ] **iPhone sideways:** your tag and the buttons sit in the middle of the cream strip, and the
       buttons are a little taller. Tap Discard and Scores near the bottom edge: do they work
       without the home bar getting in the way? Does a flower under your tag fit? The tiles left

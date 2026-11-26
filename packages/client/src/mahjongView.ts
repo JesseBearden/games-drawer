@@ -328,23 +328,32 @@ export class MahjongTable implements View {
     }
     this.render(prev);
     if (made) this.showClaim(made, prev!.offer && !prev!.offer.kong ? from : null);
+    // The deal is done and you're the dealer: the first move is yours, and with so many buttons
+    // about it isn't obvious what it is (user, 2026-11-25).
+    if (prev?.phase === 'opening' && v.phase === 'playing' && this.myTurnToDiscard()) this.showTip('It’s your turn. Choose a tile to discard.', FIRST_TURN_TIP_MS);
   }
 
   private learning() {
     return !!this.view?.rules.learning && this.view.seat !== null;
   }
 
-  /** Learning Mode: a note over your tiles for a few seconds (tap it to close it sooner). */
-  private showTip(text: string | null) {
+  /** A note over your tiles for a few seconds, fading away at the end (tap it to close it sooner). */
+  private showTip(text: string | null, ms = TIP_MS) {
     window.clearTimeout(this.tipTimer);
     this.tip = text;
+    const el = this.q('.mj-tip');
+    el.classList.remove('is-fading');
     if (text) {
       this.tipTimer = window.setTimeout(() => {
-        this.tip = null;
-        this.turnHelp = [];
-        this.renderTip();
-        this.renderMine();
-      }, TIP_MS);
+        el.classList.add('is-fading');
+        this.tipTimer = window.setTimeout(() => {
+          this.tip = null;
+          this.turnHelp = [];
+          el.classList.remove('is-fading');
+          this.renderTip();
+          this.renderMine();
+        }, TIP_FADE_MS);
+      }, Math.max(0, ms - TIP_FADE_MS));
     }
     this.renderTip();
   }
@@ -612,7 +621,6 @@ export class MahjongTable implements View {
     this.deal = null;
   }
 
-  /** How many tiles a seat holds, or before the deal how many they will (the dealer 14). */
   /**
    * The room someone's hidden tiles keep: the most they can hold (14, three fewer for each set
    * face up), from the deal until the next shuffle. So nothing moves as they draw and throw away
@@ -1524,6 +1532,10 @@ const SHOW_CLAIM_MS = 2500;
 
 /** Learning Mode: how long a note stays over your tiles. */
 const TIP_MS = 8000;
+/** The dealer's "It's your turn" note: about 2 s, then it fades (user, 2026-11-25). */
+const FIRST_TURN_TIP_MS = 2400;
+/** How long a note takes to fade away. */
+const TIP_FADE_MS = 400;
 
 /** Which tile is on offer (a new one, or the same kind thrown again later, is a different offer). */
 function offerKey(v: MahjongView): string {
