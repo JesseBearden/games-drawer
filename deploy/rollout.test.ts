@@ -9,6 +9,7 @@ import {
   RETIRE_DEADLINE_MS,
   RETIRE_POLL_MS,
   ROUTES_FILE,
+  FLEET_MAP_FILE,
   Rollout,
   serverProblems,
   shareAssets,
@@ -115,7 +116,10 @@ describe('the rollout tool on a box', () => {
     const m = fakeBox();
     const r = new Rollout(m.sys, 'aaaaaaa1', releaseDir('aaaaaaa1'));
     await r.start('a');
+    // A new box isn't on the live site (no counts to CloudWatch) until the fleet says so.
+    expect(m.files.has(FLEET_MAP_FILE)).toBe(false);
     r.route(two);
+    expect(JSON.parse(m.files.get(FLEET_MAP_FILE)!)).toEqual(two);
     const routes = m.files.get(ROUTES_FILE)!;
     // Tables on box a stay here; new tables go to box b.
     expect(routes).toMatch(/handle @slot_a \{\n\treverse_proxy 127\.0\.0\.1:8801 \{\n\t\tstream_close_delay 4h\n\t\}\n\}/);

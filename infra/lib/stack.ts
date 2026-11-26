@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as cdk from 'aws-cdk-lib';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
+import * as cw from 'aws-cdk-lib/aws-cloudwatch';
 import * as ce from 'aws-cdk-lib/aws-ce';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as codepipeline from 'aws-cdk-lib/aws-codepipeline';
@@ -18,6 +19,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { GAME_IDS, GAME_NAMES } from '@tank/shared';
 import { PIPELINE } from '../../deploy/pipeline';
 import { FrontDoor } from './edge';
 
@@ -25,6 +27,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 
 /** Canonical's current Ubuntu 24.04 image for ARM (Graviton) machines. */
 export const UBUNTU_AMI_PARAMETER = '/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id';
+/** The boxes' minute counts go here (METRICS_NAMESPACE in packages/server/src/metrics.ts). */
+export const METRICS_NAMESPACE = 'GamesDrawer';
 /** The launch template the fleet tool starts boxes from (LAUNCH_TEMPLATE in GitHub). */
 export const LAUNCH_TEMPLATE_NAME = 'games-drawer-box';
 
@@ -153,6 +157,8 @@ export class GamesDrawerStack extends cdk.Stack {
     // The automatic check for photos people add to a jigsaw (Rekognition's moderation labels; the
     // photo goes in the request, nothing is stored in S3). The action has no resource to name.
     role.addToPolicy(new iam.PolicyStatement({ actions: ['rekognition:DetectModerationLabels'], resources: ['*'] }));
+    // The minute counts (packages/server/src/metrics.ts): numbers, into the site's own namespace only.
+    role.addToPolicy(new iam.PolicyStatement({ actions: ['cloudwatch:PutMetricData'], resources: ['*'], conditions: { StringEquals: { 'cloudwatch:namespace': METRICS_NAMESPACE } } }));
     const profile = new iam.CfnInstanceProfile(this, 'ServerProfile', { roles: [role.roleName] });
 
     const userData = ec2.UserData.forLinux();
@@ -393,7 +399,114 @@ export class GamesDrawerStack extends cdk.Stack {
       description: 'Where you approve a release to go live',
     });
     new cdk.CfnOutput(this, 'SharedDiskId', { value: sharedDisk.fileSystemId });
+
+    siteDashboard(this);
   }
+}
+
+/**
+ * The CloudWatch dashboard for the boxes' minute counts (packages/server/src/metrics.ts). Each live
+ * box sends one value a minute, with no box name and no zeros, so a minute's Sum is the whole site
+ * and a missing minute is nobody: over a longer period, Sum ÷ minutes is the average at once.
+ */
+function siteDashboard(scope: Construct) {
+  const metric = (name: string, statistic: string, dims?: Record<string, string>) =>
+    new cw.Metric({ namespace: METRICS_NAMESPACE, metricName: name, statistic, dimensionsMap: dims });
+  // Each expression's metric needs its own name in a graph.
+  let n = 0;
+  /** People (or voice, or relay) at once, on average over each point's period. */
+  const atOnce = (name: string, label: string, dims?: Record<string, string>, period = cdk.Duration.minutes(5)) => {
+    const id = `m${n++}`;
+    return new cw.MathExpression({ expression: `FILL(${id}, 0) / (PERIOD(${id}) / 60)`, usingMetrics: { [id]: metric(name, 'Sum', dims) }, label, period });
+  };
+  /** The share of people in voice who go through the relay, in %. */
+  const relayShare = (label: string, period: cdk.Duration) => {
+    const [r, v] = [`r${n}`, `v${n++}`];
+    return new cw.MathExpression({ expression: `100 * FILL(${r}, 0) / ${v}`, usingMetrics: { [r]: metric('OnRelay', 'Sum'), [v]: metric('InVoice', 'Sum') }, label, period });
+  };
+  const games = [...GAME_IDS.map((g) => ({ id: g as string, name: GAME_NAMES[g] })), { id: 'lobby', name: 'Choosing a game' }];
+  const day = cdk.Duration.days(1);
+  /** A number for the last few minutes: the highest value sent then, or 0 if none was. */
+  const recent = (title: string, name: string, start: string) => {
+    const id = `m${n++}`;
+    return new cw.SingleValueWidget({
+      title,
+      width: 6,
+      height: 4,
+      start,
+      setPeriodToTimeRange: true,
+      metrics: [new cw.MathExpression({ expression: `FILL(${id}, 0)`, usingMetrics: { [id]: metric(name, 'Maximum') }, label: title })],
+    });
+  };
+
+  const dashboard = new cw.Dashboard(scope, 'SiteDashboard', { dashboardName: 'GamesDrawer', defaultInterval: day });
+  dashboard.addWidgets(
+    new cw.TextWidget({
+      width: 24,
+      height: 2,
+      markdown:
+        '## Games Drawer\nPeople at a table, counted by device (two tabs are one person; a family on one Wi-Fi is several). Automated tests and the staging site are left out. Days run midnight to midnight UTC.',
+    }),
+  );
+  dashboard.addWidgets(
+    // Over the last few minutes, not this one: this minute's numbers may not have arrived yet.
+    recent('At a table (most at once, last 5 minutes)', 'People', '-PT5M'),
+    recent('In voice (most at once, last 5 minutes)', 'InVoice', '-PT5M'),
+    recent('Different devices today', 'DevicesToday', '-PT5M'),
+    new cw.SingleValueWidget({
+      title: 'Voice through the relay (last hour)',
+      width: 6,
+      height: 4,
+      start: '-PT1H',
+      setPeriodToTimeRange: true,
+      metrics: [relayShare('% of people in voice', cdk.Duration.hours(1))],
+    }),
+  );
+  dashboard.addWidgets(
+    new cw.GraphWidget({
+      title: 'People at a table',
+      width: 12,
+      height: 7,
+      left: [atOnce('People', 'At once (average)'), metric('People', 'Maximum').with({ label: 'Busiest minute', period: cdk.Duration.minutes(5) })],
+      leftYAxis: { min: 0, showUnits: false },
+    }),
+    new cw.GraphWidget({
+      title: 'People by game',
+      width: 12,
+      height: 7,
+      stacked: true,
+      left: games.map((g) => atOnce('People', g.name, { Game: g.id })),
+      leftYAxis: { min: 0, showUnits: false },
+    }),
+  );
+  dashboard.addWidgets(
+    new cw.GraphWidget({
+      title: 'Share of play time by game',
+      width: 8,
+      height: 7,
+      view: cw.GraphWidgetView.PIE,
+      setPeriodToTimeRange: true,
+      left: games.filter((g) => g.id !== 'lobby').map((g) => metric('People', 'Sum', { Game: g.id }).with({ label: g.name })),
+    }),
+    new cw.GraphWidget({
+      title: 'Voice, and how much goes through the relay',
+      width: 8,
+      height: 7,
+      left: [atOnce('InVoice', 'In voice (average)'), atOnce('OnRelay', 'Through the relay (average)')],
+      right: [relayShare('Through the relay (%)', cdk.Duration.minutes(5))],
+      leftYAxis: { min: 0, showUnits: false },
+      rightYAxis: { min: 0, max: 100, showUnits: false },
+    }),
+    // One value per day that ended, stamped at its noon, so any day-long period holds just one.
+    new cw.GraphWidget({
+      title: 'Different devices each day (last 30)',
+      width: 8,
+      height: 7,
+      start: '-P30D',
+      left: [metric('DevicesPerDay', 'Maximum').with({ period: day, label: 'Devices' })],
+      leftYAxis: { min: 0, showUnits: false },
+    }),
+  );
 }
 
 /** The kill switch's function (AWS's Node runtime includes the SDK). */

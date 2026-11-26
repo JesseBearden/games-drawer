@@ -3,6 +3,7 @@ import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
 import { GamesDrawerDnsStack } from '../lib/edge';
 import { GamesDrawerGitHubStack } from '../lib/github';
+import { GAME_IDS, GAME_NAMES } from '@tank/shared';
 import { PIPELINE } from '../../deploy/pipeline';
 import { bootScript, GamesDrawerStack, LAUNCH_TEMPLATE_NAME, type GamesDrawerProps } from '../lib/stack';
 
@@ -50,6 +51,20 @@ describe('Games Drawer AWS stack (the boxes)', () => {
     const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
     expect(policies).toContain('"Action":"rekognition:DetectModerationLabels"');
     expect(policies.match(/rekognition:/g)).toHaveLength(1);
+  });
+
+  it('lets the boxes send their minute counts to CloudWatch, into the site’s own namespace only', () => {
+    const policies = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+    expect(policies).toContain('"Action":"cloudwatch:PutMetricData","Condition":{"StringEquals":{"cloudwatch:namespace":"GamesDrawer"}}');
+    expect(policies.match(/cloudwatch:/g)).toHaveLength(2); // the action and its condition key
+  });
+
+  it('has one dashboard for those counts, each game in it, averaging minutes so a busy hour isn’t sixty times too big', () => {
+    t.resourceCountIs('AWS::CloudWatch::Dashboard', 1);
+    const body = JSON.stringify(Object.values(t.findResources('AWS::CloudWatch::Dashboard'))[0]);
+    for (const name of GAME_IDS.map((g) => GAME_NAMES[g])) expect(body).toContain(name);
+    expect(body).toContain('PERIOD(');
+    expect(body).toContain('\\"view\\":\\"pie\\"');
   });
 
   it('keeps what matters off the boxes: a shared disk that survives them, reachable only from them', () => {

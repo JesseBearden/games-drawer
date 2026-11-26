@@ -221,6 +221,30 @@ Systems Manager policy they also have (`AmazonSSMManagedInstanceCore`) lets them
 parameter in the account; so keep nothing else secret in this account's Parameter Store. The
 admin page on any box adds up every box's logs from the shared disk.
 
+## Counts in CloudWatch
+
+Once a minute each box sends CloudWatch a few numbers, in the `GamesDrawer` namespace
+([packages/server/src/metrics.ts](../packages/server/src/metrics.ts), turned on by `METRICS=cloudwatch`
+in [setup.sh](setup.sh)):
+
+- `People`: devices at a table (two tabs on one phone are one; a family on one Wi-Fi is several),
+  and the same with a `Game` dimension (`lobby` for a table choosing a game).
+- `InVoice`, and `OnRelay`: people in voice, and those with a voice link through the relay.
+- `DevicesToday`: different devices at a table since midnight UTC. Just after midnight,
+  `DevicesPerDay` sends the day that ended, stamped at its noon (any day-long period then holds
+  exactly one).
+
+Zeros aren't sent, so a missing minute means nobody. Each box sends one value a minute with no box
+name, so a minute's Sum is the whole site even while an old box drains. The smoke tests (their browsers say they're automated) and anyone on the staging site
+aren't counted. Only the live site's boxes send anything: one the fleet sends new tables to (a
+canary too), or one finishing its games after a deploy. Each box learns which from the fleet map
+`route` leaves in `/etc/games-drawer/fleet-map.json`, so a staging box sends nothing.
+
+The **GamesDrawer** dashboard (CloudWatch → Dashboards) shows them. The stack makes it, along with
+the boxes' permission to send (`cloudwatch:PutMetricData`, into `GamesDrawer` only), so both need a
+`cdk deploy`. A box without the permission plays on as normal and logs `metrics_failed` once an hour.
+Only the numbers leave the box; the privacy page says so.
+
 ## Your own photos (jigsaw)
 
 People at a table can add their own photo for a jigsaw. The phone shrinks it, the box

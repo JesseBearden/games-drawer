@@ -10,6 +10,7 @@ import {
   type Slot,
 } from '@tank/shared';
 import { WindowCounter } from './guard';
+import type { CensusEntry } from './metrics';
 import { Room, type RoomDeps } from './room';
 
 /**
@@ -81,6 +82,13 @@ export class RoomManager {
     let n = 0;
     for (const r of this.rooms.values()) if (r.startedFrom === from) n++;
     return n;
+  }
+
+  /** Everyone connected at every table here, for the minute counts (metrics.ts). */
+  census(): CensusEntry[] {
+    const out: CensusEntry[] = [];
+    for (const room of this.rooms.values()) if (!room.closed) out.push(...room.census());
+    return out;
   }
 
   /** Run per-second housekeeping: reservation expiry, and closing empty or idle rooms. */

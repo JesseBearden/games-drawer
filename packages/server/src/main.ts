@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isAdminPasswordHash } from './adminAuth';
 import { FileLog, pruneLogs } from './eventlog';
+import { CloudWatchPublisher, takesNewTables } from './metrics';
 import { pretendChecker, RekognitionChecker } from './photoCheck';
 import { startGameServer } from './server';
 import { readSettings } from './settings';
@@ -41,6 +42,12 @@ import { isSlot, type GameConfig } from '@tank/shared';
  *                      password itself). In development it's read from .env.local (git ignores it).
  *   ADMIN_LOG_DIRS     comma-separated log folders /admin adds up, with the folders directly inside
  *                      them (on AWS, one per box on the shared disk; default: LOG_DIR)
+ *   METRICS            cloudwatch | off: send the minute counts (how many people, by game, in voice,
+ *                      on the relay; metrics.ts) to CloudWatch with the box's role (default off);
+ *                      METRICS_REGION (or AWS_REGION, default us-east-2) is CloudWatch's region
+ *   FLEET_MAP_FILE     the fleet map the deploy tool leaves on the box (deploy/rollout.ts): counts
+ *                      go only while it sends this box new tables, or while it finishes its games
+ *                      after a deploy, never from a staging box (without the file: always)
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 // A release bundle (npm run release) puts server.mjs next to client/ and blocklist.txt.
@@ -105,6 +112,14 @@ if (!['rekognition', 'pretend', 'off'].includes(photoCheckMode)) {
 const photoCheck =
   photoCheckMode === 'rekognition' ? new RekognitionChecker({ region: env.PHOTO_CHECK_REGION || env.AWS_REGION || 'us-east-2' }) : photoCheckMode === 'pretend' ? pretendChecker : null;
 console.log(`Photo uploads: ${photoCheck ? `on (${photoCheck.name} check)` : 'off'}`);
+const metricsMode = env.METRICS ?? 'off';
+if (!['cloudwatch', 'off'].includes(metricsMode)) {
+  console.error('METRICS must be cloudwatch or off.');
+  process.exit(1);
+}
+const metrics = metricsMode === 'cloudwatch' ? new CloudWatchPublisher({ region: env.METRICS_REGION || env.AWS_REGION || 'us-east-2' }) : undefined;
+console.log(`Minute counts: ${metrics ? 'to CloudWatch' : 'off'}`);
+const fleetMapFile = env.FLEET_MAP_FILE || undefined;
 const { port, limits } = settings;
 const server = await startGameServer({
   port,
@@ -129,6 +144,8 @@ const server = await startGameServer({
   photoCheck,
   adminPasswordHash,
   adminLogDirs,
+  metrics,
+  metricsLive: () => takesNewTables(fleetMapFile, slot),
   // Local testing opens lots of tabs (and phones, which reach the server through Vite as the same
   // address) from one machine.
   limits: { ...(production ? {} : { maxConnectionsPerIp: 40, connectsPerMinute: 200, privateRoomsPer10Min: 100 }), ...limits },

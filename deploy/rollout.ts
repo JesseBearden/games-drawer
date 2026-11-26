@@ -24,6 +24,8 @@ import { fileURLToPath } from 'node:url';
 import { GAME_PORT, isFleetMap, routesSnippet, soloMap, SLOTS, type FleetMap, type Slot } from './fleetMap';
 
 export const ETC = '/etc/games-drawer';
+/** The fleet's latest map, for the game server (FLEET_MAP_FILE in setup.sh). */
+export const FLEET_MAP_FILE = `${ETC}/fleet-map.json`;
 export const STATE_FILE = `${ETC}/state.json`;
 export const ROUTES_FILE = '/etc/caddy/games-drawer-routes.caddy';
 export const RELEASES = '/opt/games-drawer/releases';
@@ -262,6 +264,9 @@ export class Rollout {
     const slot = this.mySlot();
     if (!map.boxes[slot]) throw new Error(`The fleet map doesn't include this box (slot ${slot}).`);
     this.writeRoutes(map, slot);
+    // For the game server: it sends counts to CloudWatch only while it takes new tables (or is
+    // finishing its games), so a staging box sends none. Only the fleet's own maps, not soloMap.
+    this.sys.writeFile(FLEET_MAP_FILE, JSON.stringify(map) + '\n');
     this.sys.log(`Box ${slot}: new tables → ${map.newTables.map(([s, w]) => `${s} ${w}%`).join(', ')}; staging → ${map.staging ?? 'none'}.`);
   }
 

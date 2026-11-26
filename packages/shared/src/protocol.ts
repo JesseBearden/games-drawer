@@ -152,7 +152,8 @@ export type ClientMessage =
    * `batch`: this page takes several messages as one (`{t:'batch'}`), and doesn't mind Tanks
    * leaving out repeats of a still battlefield. Pages from before it just don't ask.
    */
-  | { t: 'hello'; v: number; session: string | null; name: string; room: RoomRequest; device: Device; deviceId?: string; batch?: boolean }
+  /** auto: the browser is run by a program (an automated test), so it's left out of the site's counts. */
+  | { t: 'hello'; v: number; session: string | null; name: string; room: RoomRequest; device: Device; deviceId?: string; batch?: boolean; auto?: boolean }
   | { t: 'chat'; text: string }
   | { t: 'name'; name: string }
   | { t: 'ping'; at: number }
@@ -512,7 +513,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       else return null;
       // A device number that isn't one of ours is just left off (it only feeds the admin counts).
       const deviceId = isDeviceId(o.deviceId) ? o.deviceId : undefined;
-      return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device, ...(deviceId && { deviceId }), ...(o.batch === true && { batch: true }) };
+      return { t: 'hello', v: o.v, session: o.session as string | null, name: o.name, room: req, device: o.device, ...(deviceId && { deviceId }), ...(o.batch === true && { batch: true }), ...(o.auto === true && { auto: true }) };
     }
     case 'leave':
       return { t: 'leave' };

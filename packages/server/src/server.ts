@@ -29,6 +29,7 @@ import { photoRoutes } from './photos';
 import { serveStatic } from './static';
 import { createAdmin } from './admin';
 import { startGameClock, type GameClock } from './gameClock';
+import { devicesInLogs, DevicesToday, startMinuteMetrics, type MetricsPublisher } from './metrics';
 
 export interface Limits {
   /** Open WebSockets per IP. */
@@ -118,6 +119,13 @@ export interface ServerOptions {
   adminPasswordHash?: string;
   /** Log folders the admin page adds up (default: none, so empty numbers). */
   adminLogDirs?: string[];
+  /** Where the minute counts go (CloudWatch on AWS; metrics.ts). None: they aren't counted. */
+  metrics?: MetricsPublisher;
+  /**
+   * Is this box part of the live site (the fleet sends it new tables)? Only then are counts sent;
+   * a staging box sends none. A box finishing its games after a deploy still counts. Default: yes.
+   */
+  metricsLive?: () => boolean;
 }
 
 export interface GameServer {
@@ -138,8 +146,17 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   const sweepPuzzles = (which: 'all' | 'old') =>
     void puzzles.sweep(Date.now(), undefined, which).catch((err) => o.log.event('puzzle_sweep_failed', { error: String(err) }));
   sweepPuzzles('all');
+  // Today's different devices, started from the day's logs so a deploy doesn't begin it again.
+  const devices = new DevicesToday();
+  if (o.metrics) {
+    const day = new Date().toISOString().slice(0, 10);
+    void devicesInLogs(o.adminLogDirs ?? [], day)
+      .then((keys) => devices.addFromDay(day, keys))
+      .catch((err) => o.log.event('metrics_failed', { error: String(err) }));
+  }
   const manager = new RoomManager({
     now: () => Date.now(),
+    seen: o.metrics ? (key) => devices.add(key) : undefined,
     log: o.log,
     moderator: new ChatModerator(o.blocklistPath),
     emptyRoomMs: o.emptyRoomMs,
@@ -317,10 +334,12 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
       return reject(429, 'Too Many Requests');
     }
     connects.add(ip, now);
-    wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, ip));
+    // The staging site is the owner trying a new build: left out of the site's counts.
+    const staging = /^https:\/\/staging\./.test(req.headers.origin ?? '');
+    wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, ip, staging));
   });
 
-  function onConnection(ws: WebSocket, ip: string) {
+  function onConnection(ws: WebSocket, ip: string, staging = false) {
     counters.connections++;
     openPerIp.set(ip, (openPerIp.get(ip) ?? 0) + 1);
     let room: Room | null = null;
@@ -333,6 +352,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
 
     const conn: Conn = {
       net: hashIp(ip).slice(0, 8),
+      ...(staging && { test: true }),
       send: (data) => {
         if (ws.readyState !== ws.OPEN) return;
         if (ws.bufferedAmount > limits.maxBufferedBytes) {
@@ -419,6 +439,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
           if (!lookup.ok) return fail(lookup.code, lookup.message);
           if (req.kind === 'create-private') privateCreates.add(ip, now);
           conn.batches = msg.batch === true;
+          if (msg.auto) conn.test = true;
           let result;
           try {
             result = lookup.room.join(conn, session, msg.name || randomName(), msg.device, msg.deviceId);
@@ -474,6 +495,15 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
   // ---------------------------------------------------------------- tick loop
 
   const timers: NodeJS.Timeout[] = [];
+  const stopMetrics = o.metrics
+    ? startMinuteMetrics({
+        publisher: o.metrics,
+        census: () => manager.census(),
+        devices,
+        log: o.log,
+        live: () => manager.draining || (o.metricsLive?.() ?? true),
+      })
+    : () => {};
   if (o.autoTick !== false) {
     const tickMs = 1000 / DEFAULT_CONFIG.tickRate;
     // Old jigsaw saves go every 6 hours, not just at start-up: the privacy page promises 30 days
@@ -517,6 +547,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     });
   } catch (err) {
     for (const t of timers) clearInterval(t);
+    stopMetrics();
     clock?.stop();
     wss.close();
     throw err;
@@ -556,6 +587,7 @@ export async function startGameServer(o: ServerOptions): Promise<GameServer> {
     close: () =>
       new Promise<void>((resolve) => {
         for (const t of timers) clearInterval(t);
+        stopMetrics();
         clock?.stop();
         // Tables close properly (puzzles saved, play time logged, people told) before the sockets go.
         manager.closeAll('update');

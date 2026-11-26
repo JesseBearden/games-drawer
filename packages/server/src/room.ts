@@ -33,6 +33,7 @@ import {
   type MjRules,
   type TableSetup,
   type VoicePeer,
+  type VoiceLinkRoute,
   type VoiceSettings,
 } from '@tank/shared';
 import { MAX_CHAT_LENGTH, RateLimiter, RULE_VERSION, type ChatModerator } from './chat';
@@ -47,6 +48,7 @@ import { JigsawGame } from './games/jigsaw';
 import { PuzzleStore } from './puzzleStore';
 import { TanksGame } from './games/tanks';
 import { leftLongAgo, type Conn, type GameHost, type Member, type Outgoing, type ServerGame } from './games/types';
+import { LOBBY, personKey, type CensusEntry } from './metrics';
 import type { TablePhoto } from './photos';
 
 export type { Conn } from './games/types';
@@ -85,6 +87,8 @@ export interface RoomDeps {
   photoUploads?: boolean;
   /** Puzzles started per scrambled address, shared by every table. */
   puzzleStartsFrom?: WindowCounter;
+  /** Someone joined a table (their count key, metrics.ts personKey): for today's device count. */
+  seen?: (key: string) => void;
 }
 
 /** Default idle time before a table closes, and the warning before it does. */
@@ -163,6 +167,8 @@ interface Player extends Member {
   chatPausedUntil: number;
   /** Voice links this player has told us about ("alias:route"), so each is logged once. */
   voiceRoutes: Set<string>;
+  /** How each of their voice links goes now, by the other person's alias (for the minute counts). */
+  voiceVia: Map<string, VoiceLinkRoute>;
   /** Last time they played, typed, tapped or talked (for closing idle tables). */
   lastActive: number;
 }
@@ -511,6 +517,7 @@ export class Room {
       caughtTimes: [],
       chatPausedUntil: 0,
       voiceRoutes: new Set(),
+      voiceVia: new Map(),
       lastActive: now,
     };
     this.players.set(session, p);
@@ -531,7 +538,9 @@ export class Room {
     this.countPeople();
     this.emptySince = null;
     // did: the browser's device number, scrambled, so the admin page counts devices, not tabs.
-    this.log('join', { pid: p.pid, device, ...(deviceId && { did: devicePseudonym(deviceId) }) });
+    // test: an automated test or the staging site, left out of the minute counts (metrics.ts).
+    this.log('join', { pid: p.pid, device, ...(did && { did }), ...(conn.test && { test: true }) });
+    if (!conn.test) this.deps.seen?.(personKey(did, p.pid));
     // Back before anyone was told they'd left: nothing to say.
     if (!old) this.announce(p, 'arrive', `${p.name} is here.`);
     else if (old.leaveAnnounced) this.announce(p, 'arrive', `${p.name} is back.`);
@@ -958,8 +967,11 @@ export class Room {
         // How a voice link connected, for the admin page: logged once per link and outcome.
         if (!p.inVoice) return;
         const to = [...this.players.values()].find((o) => o.alias === msg.to);
+        if (!to || to === p) return;
+        p.voiceVia.set(msg.to, msg.route);
+        if (p.voiceVia.size > 30) for (const alias of p.voiceVia.keys()) if (![...this.players.values()].some((o) => o.alias === alias)) p.voiceVia.delete(alias);
         const key = `${msg.to}:${msg.route}`;
-        if (!to || to === p || p.voiceRoutes.has(key) || p.voiceRoutes.size >= 30) return;
+        if (p.voiceRoutes.has(key) || p.voiceRoutes.size >= 30) return;
         p.voiceRoutes.add(key);
         this.log('voice_link', { pid: p.pid, route: msg.route });
         return;
@@ -1032,6 +1044,22 @@ export class Room {
     return a;
   }
 
+  /**
+   * Everyone connected here, for the minute counts (metrics.ts): automated tests and the staging
+   * site left out. Relayed means a link to someone still in voice goes through our relay.
+   */
+  census(): CensusEntry[] {
+    const game = this.game?.id ?? LOBBY;
+    const inVoice = new Set([...this.players.values()].filter((o) => o.inVoice && o.conn).map((o) => o.alias));
+    const out: CensusEntry[] = [];
+    for (const p of this.players.values()) {
+      if (!p.conn || p.conn.test) continue;
+      const relayed = p.inVoice && [...p.voiceVia].some(([alias, route]) => route === 'relayed' && inVoice.has(alias));
+      out.push({ key: personKey(p.did, p.pid), game, inVoice: p.inVoice, relayed });
+    }
+    return out;
+  }
+
   voicePeers(): VoicePeer[] {
     return [...this.players.values()].filter((p) => p.inVoice && p.conn).map((p) => ({ id: p.alias, name: p.name }));
   }
@@ -1043,6 +1071,7 @@ export class Room {
   private setVoice(p: Player, join: boolean) {
     if (p.inVoice === join) return;
     p.inVoice = join;
+    if (!join) p.voiceVia.clear();
     this.log(join ? 'voice_join' : 'voice_leave', { pid: p.pid, inVoice: this.voicePeers().length });
     this.broadcastVoice();
   }

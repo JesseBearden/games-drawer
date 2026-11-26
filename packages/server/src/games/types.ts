@@ -7,6 +7,8 @@ export interface Conn {
   batches?: boolean;
   /** Which network they came from, scrambled (the relay counts slots by it). */
   net?: string;
+  /** An automated test, or someone on the staging site: left out of the site's counts (metrics.ts). */
+  test?: boolean;
   close(code?: number, reason?: string): void;
 }
 

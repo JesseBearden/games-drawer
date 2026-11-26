@@ -125,6 +125,7 @@
               <li><b>Saved puzzles:</b> kept on our server so anyone at the table can carry on later. Just the picture and where the pieces are, no names. A finished puzzle is deleted, and a puzzle nobody has played for 30 days is deleted.</li>
               <li><b>Logs:</b> what happens in the games (a table opened, a game played, for how long) under scrambled numbers instead of your name, and how many chat messages were sent, not what they said. When a photo is added or turned away, they note that (and what kind of thing the check found), never the photo itself. They help us see what people enjoy and fix problems, and only the people who run the site see them. Your internet address is kept in our servers’ memory while you’re connected and for up to about an hour after, to stop abuse like too many tries, and these logs only ever have it scrambled, in a way that can’t be worked back into the address. A table also remembers, scrambled the same way, the address it was started from until it closes, so one connection can’t take every table. Logs are deleted after 30 days.</li>
               <li><b>Our servers’ own logs:</b> the voice relay and the web server keep short technical notes, which can include internet addresses. They’re deleted after 30 days too.</li>
+              <li><b>Counts:</b> once a minute, our server counts how many devices are at a table, in each game, in voice and going through our voice relay, and how many different devices have been at a table that day. Only those numbers go to Amazon CloudWatch, part of Amazon Web Services, which keeps them for up to 15 months so we can see how busy the site is. No names, internet addresses or device numbers go with them. To count different devices, the server keeps the day’s scrambled device numbers (the same ones in the logs) in its memory until the end of the day.</li>
             </ul>
             <h2>Who else is involved</h2>
             <p>Only Amazon Web Services, which runs the computers the site is on, in the United States, and checks the photos people add for puzzles. The fonts and pictures come from the site itself, so your browser doesn’t contact anyone else.</p>
@@ -132,7 +133,7 @@
             <p>Games Drawer isn’t meant for children under 13 on their own. Kids are welcome to play alongside a parent or grandparent.</p>
             <h2>Questions</h2>
             <p>Want something deleted, or have a question? Write to us on <a class="entry-link" href="https://github.com/JesseBearden/games-drawer/issues" target="_blank" rel="noopener">GitHub</a>.</p>
-            <p class="pc-small">Last updated November 24, 2026. If this page changes, so will this date.</p>
+            <p class="pc-small">Last updated November 26, 2026. If this page changes, so will this date.</p>
           </div>
           <a class="pc-btn pc-btn-plain entry-home" href="/" data-nav="/">Back to home</a>
         </section>

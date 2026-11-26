@@ -22,6 +22,9 @@ to that region):
     test, goes to staging, and waits for approval to go live. It's all inside the account; GitHub
     never signs in to AWS. GitHub Actions tests every push and pull request too.
   - **The spending guardrails.**
+  - **The GamesDrawer dashboard** (CloudWatch): the boxes' minute counts, people at a table,
+    by game, in voice and on the relay, and devices a day
+    ([deploy/README.md](../deploy/README.md#counts-in-cloudwatch)).
 
 How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md).
 
@@ -38,6 +41,7 @@ How a deploy moves from box to box is in [deploy/README.md](../deploy/README.md)
 | The pipeline (CodeBuild and CodePipeline) | Tests each push, deploys staging, then the site | free for 100 build minutes and 100 pipeline minutes a month, then about half a cent and a fifth of a cent a minute: roughly 25¢ a push that goes live |
 | A staging box | The release being tried, until it's live or taken down | about 1.4¢/hour |
 | Budgets, the kill switch, the GitHub connection | Guardrails and deploy access | free |
+| CloudWatch counts and the dashboard | How busy the site is | 30¢ a month per number for the hours it's sent; zeros aren't, so about 40¢–70¢ a month (at most $4 if someone's always on). Sending is one request a minute, inside the free million a month. The dashboard is free as one of the account's first three |
 
 No load balancer or NAT gateway: either one costs more than the server. With the `direct` front
 door, game traffic goes straight from the box: free for the first 100 GB a month across AWS, then

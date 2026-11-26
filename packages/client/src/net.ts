@@ -22,6 +22,15 @@ export function getDeviceId(): string | null {
   }
 }
 
+/** Run by a program (the deploy's smoke tests), not a person: left out of the site's counts. */
+function automated(): boolean {
+  try {
+    return navigator.webdriver === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The session credential lets a player reclaim their tank after a disconnect. It lives in
  * sessionStorage, so each browser tab is its own player (handy for local multiplayer tests)
@@ -126,7 +135,7 @@ export class Net {
     ws.onopen = () => {
       this.lastHeard = Date.now();
       const deviceId = getDeviceId();
-      this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device, batch: true, ...(deviceId && { deviceId }) });
+      this.send({ t: 'hello', v: PROTOCOL_VERSION, session: getSession(), name: this.name(), room: this.room, device: this.device, batch: true, ...(deviceId && { deviceId }), ...(automated() && { auto: true }) });
     };
     const take = (msg: ServerMessage) => {
       if (msg.t === 'welcome') {

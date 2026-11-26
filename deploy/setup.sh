@@ -176,6 +176,12 @@ PUZZLE_DIR=${mnt}/puzzles
 # AI services opt-out policy must be on first (deploy/README.md), or the privacy page isn't true.
 PHOTO_CHECK=rekognition
 PHOTO_CHECK_REGION=${REGION}
+# Once a minute, how many people are at a table (by game, in voice, on the relay): just the
+# numbers, to CloudWatch, with this box's role. The privacy page says so.
+# Only while the fleet sends this box new tables (or it's finishing its games): never from staging.
+METRICS=cloudwatch
+METRICS_REGION=${REGION}
+FLEET_MAP_FILE=/etc/games-drawer/fleet-map.json
 LOG_DIR=${mnt}/logs/${instance_id}
 ADMIN_LOG_DIRS=${mnt}/logs
 TURN_URLS=turn:${public_ip}:3478?transport=udp,turn:${public_ip}:3478?transport=tcp

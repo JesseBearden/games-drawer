@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-26 (fixes from the third code review)_
+_Last updated: 2026-11-26 (counts in CloudWatch)_
 
 ## Getting set up
 
@@ -12,6 +12,19 @@ _Last updated: 2026-11-26 (fixes from the third code review)_
 - For phones (and anything with voice): `npm run dev:https`, open the **https** Network URL it
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player table.
+
+## Counts in CloudWatch (2026-11-26)
+
+These need the push, a `cdk deploy`, and a go-live first. Then open CloudWatch → Dashboards →
+**GamesDrawer** in the AWS console.
+
+- Sit at a table on the site: within two or three minutes "At a table" shows 1, and your game
+  shows in "People by game".
+- Open the same table in a second tab on the same phone: still 1.
+- A table on staging.gamesdrawer.com doesn't change any number.
+- Turn the mic on with someone else at the table: "In voice" shows 2.
+- The next day: "Different devices each day" has a point for the day before.
+- The privacy page has a new "Counts" item and says "Last updated November 26, 2026".
 
 ## Fixes from the third code review (2026-11-26)
 
