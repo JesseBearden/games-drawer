@@ -76,7 +76,7 @@ test('if joining fails, the reason shows under the join buttons', async ({ page 
       }, 600);
     }),
   );
-  await page.goto(at('/r/BCDFG'));
+  await page.goto(at('/r/BCDFGH'));
   // Gus invited you and is there: one line says it all.
   await expect(page.locator('#join-title')).toHaveText('Join Gus for a puzzle');
   await expect(page.locator('#join-detail')).toBeHidden();
@@ -94,7 +94,7 @@ test('before joining you see everyone at the table, kept up to date', async ({ p
   let people = ['Jesse', 'Sam', 'Mory'];
   let away: string[] = [];
   await page.route('**/api/table**', (route) => route.fulfill({ json: { ok: true, from: 'Jesse', for: null, game: 'jigsaw', people, away, full: false } }));
-  await page.goto(at('/r/BCDFG'));
+  await page.goto(at('/r/BCDFGH'));
   const title = page.locator('#join-title');
   const detail = page.locator('#join-detail');
   await expect(title).toHaveText('Join Jesse, Sam and Mory for a puzzle');
@@ -122,7 +122,7 @@ test('back at a table you just left: you’re told it’s yours, not that it’s
     device = route.request().headers()['x-gd-device'] ?? '';
     return route.fulfill({ json: info });
   });
-  await page.goto(at('/r/BCDFG'));
+  await page.goto(at('/r/BCDFGH'));
   const title = page.locator('#join-title');
   const detail = page.locator('#join-detail');
   const join = page.getByRole('button', { name: 'Join with mic off' });
