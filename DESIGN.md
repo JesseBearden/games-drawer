@@ -70,10 +70,11 @@ ours out like it. Add a colour when something needs it; each one needs its own f
   notes are ink, underlined in the tank's colour (coloured text is hard to read).
 - **Each person's own felt** (a trial, user 2026-11-22; `felts.ts`): a light felt that stays with
   the name. Their name tag on Your table, the seat they pick there, and their name tag in
-  Dominoes are all in it; the computers take the colours nobody has. They're sky, lilac, peach and
+  every card and tile game (Dominoes first; Hearts, Spades and Three Thirteen since 2026-11-25)
+  are all in it; the computers take the colours nobody has. They're sky, lilac, peach and
   mint first, then blush, kraft, white and dove. Never sunflower or butter (whose turn it is),
   tomato (something's off), cobalt (a button) or grass (it vanishes into the green table). In
-  Dominoes whose turn it is shows as a band of sunflower round that person's tag. Ready on Your
+  a game whose turn it is shows as a band of sunflower round that person's tag. Ready on Your
   table is a cobalt tick on the tag's corner.
 - **Talking shows as rings** of the tile's own colour rippling out from a person's tile: their
   name tag and seat on Your table and their name tag in every card game (user 2026-11-23), as
@@ -169,7 +170,6 @@ Mahjong.
   plays the empty seats. A game's own page (`/dominoes`) opens the table with that game picked.
   Switch game brings everyone back here with nothing picked. Home → Start a table → Your table
   stays three pages (user, 2026-11-20).
-- **The way in keeps still from page to page** (user, 2026-11-20): home, Start a table and a
 - **Six at a table, for Jigsaw** (user, 2026-11-25). A table holds as many as the game being
   played takes (`maxPeople` in shared/games.ts: Jigsaw 6, the rest 4 so far), and six while it's
   picking a game. So a fifth or sixth person can only come in while the table is picking or doing
@@ -179,6 +179,7 @@ Mahjong.
   fifth person arriving lets go of a four-person game the table had picked (a line in chat says
   so). Voice is a mesh, so six people means five streams each way per phone; the relay holds 60
   slots, 20 per household (deploy/turnserver.conf).
+- **The way in keeps still from page to page** (user, 2026-11-20): home, Start a table and a
   table's invite page show the hands-and-puzzle picture at exactly the same size, and their buttons
   at the same width, so going from one to the next doesn't zoom. Each fits one screen, down to an
   iPad mini on its side in Safari. Where a page scrolls, its felt moves with it, and it stops at
@@ -246,13 +247,14 @@ Mahjong.
   table.
   - **Name tags** are felt laid flat on the table (they aren't buttons); whose turn it is gets
     sunflower. **Every tag is the same size, whatever the name** (user, 2026-11-20): a long name
-    shrinks a little, then ends in "…". On a phone held upright the three across the top split
-    the width evenly. Tags never grow a third line: someone who dropped out gets a small "zzz"
-    after their name, and computer players a small computer screen; both stay in view when a
-    long name is cut, and score sheets leave them off.
+    shrinks a little, then ends in "…". Tags never grow a third line: someone who dropped out
+    gets a small "zzz" after their name, and computer players a small computer screen; both stay
+    in view when a long name is cut, and score sheets leave them off.
   - **Computer players** have made-up robot names (`ROBOT_NAMES`; never robots from films, shows
     or toys, and no two that look alike). No "Computer" or "Partner" label on the tag.
-  - **Spades:** your team's tags are lilac, Spades' own colour.
+  - **Spades:** every tag is its player's own colour (the team colour went, user 2026-11-25:
+    your partner is always the one across). On a phone, Us and Them sit in the middle's top-left
+    corner, under the player across.
   - **Other players' hands** aren't shown; the tags keep just the name and score.
   - **Your name and Scores** sit side by side, the same height. There's only ever one Scores
     button: after a hand, while you look at the board, it becomes a cobalt "Back to scores".
@@ -270,14 +272,17 @@ Mahjong.
   - **The board zooms** with a pinch, the mouse wheel (or a trackpad pinch), or a controller's
     shoulder buttons; no zoom buttons. Drag to look around; a drag is never a tap. The green
     cloth zooms with the tiles, and tiles fade near the screen's edges, under the side tags.
-  - **Dominoes on a phone** (user, 2026-11-22): everyone sits on their own side of the board.
+  - **On a phone, every card and tile game** (user, 2026-11-22 for Dominoes, 2026-11-25 for
+    Hearts, Spades and Three Thirteen): everyone sits on their own side of the table.
     The players on your left and right have their tags turned on their side up the edges (the
     tops of the letters toward the screen's edge, so left reads upward and right downward:
     mirror images, never a pinwheel), the player across is one line along the top, and your own
-    tag leaves out your tile count. Held upright, every tag is one line and "Ends add up to" sits
-    above your name; held sideways, the side tags are two lines (name, then points and tiles),
-    your tiles run along the bottom a fifth smaller, with your name over Scores on their left and
-    the total on their right.
+    tag (in Dominoes) leaves out your tile count. Held upright, every tag is one line, and in
+    Dominoes "Ends add up to" sits above your name; held sideways, the side tags are two lines
+    (name, then the score), your hand runs along the bottom, with your name over Scores on its
+    left (Three Thirteen adds what's left over between them). Dominoes' tiles are a fifth
+    smaller there, with the total on their right. On tablets and computers the side players' tags
+    lie flat at the sides, as before.
 - **Three Thirteen** (user, 2026-11-20), with the user's family rules: two decks with their
   jokers, 11 rounds (3 cards up to 13), jokers and the round's own rank wild, Ace low with no
   wrapping, any number of wilds in a meld, one last turn each after someone goes out, no adding to

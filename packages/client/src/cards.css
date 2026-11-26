@@ -286,6 +286,9 @@ body.pad-mode #game .card.pad-cursor {
 }
 #game .ht-panel {
   padding-bottom: 0;
+  /* The sheet's felt scrolls with what's written on it (it used to stay put while the words
+     slid over it). */
+  background-attachment: local;
 }
 #game .ht-panel .actions {
   position: sticky;
@@ -358,15 +361,6 @@ body.pad-mode #game .card.pad-cursor {
 #game .sp-bid.pending {
   color: var(--ink-soft);
   font-weight: 400;
-}
-/* Your team's tags are lilac (Spades' own paper), the other team's plain paper. */
-#game .ht-seat.sp-us:not(.turn) {
-  --fc: var(--lilac);
-  background: var(--lilac) var(--lilac-img) 0 0 / var(--paper-size);
-}
-#game .ht-seat.sp-us .ht-score,
-#game .ht-seat.sp-us .ht-tag {
-  color: var(--ink);
 }
 #game .sp-result .neg {
   color: var(--card-red);
@@ -508,8 +502,7 @@ body.pad-mode #game .card.pad-cursor {
 #game .ht-away svg {
   width: 1.15em;
 }
-#game .ht-seat.turn .ht-cpu,
-#game .ht-seat.sp-us .ht-cpu {
+#game .ht-seat.turn .ht-cpu {
   color: var(--ink);
 }
 /* Your tiles sit straight on the mat: ivory on blue needs no rack under it. */
@@ -532,11 +525,11 @@ body.pad-mode #game .dm-mine.pad-cursor {
   color: var(--ink);
 }
 
-/* Phones held sideways. Hearts and Spades keep their own layout. Dominoes seats everyone on their
-   own side of the board, as on a phone held upright (the user, 2026-11-22; it used to line
-   everyone up down the left, with your tiles in a block on the right). */
+/* Phones held sideways. Every card table and Dominoes seats everyone on their own side, as on a
+   phone held upright (the user, 2026-11-22 for Dominoes, 2026-11-25 for the card games; Dominoes
+   used to line everyone up down the left, with your tiles in a block on the right). */
 @media (max-height: 460px) {
-  /* Hearts and Spades stack your name over Scores here, so they keep their own widths. */
+  /* Your name over Scores. */
   #game .ht-mine {
     align-items: flex-start;
   }
@@ -551,15 +544,23 @@ body.pad-mode #game .dm-mine.pad-cursor {
   /* The player across: one line along the top, between the mic and menu tabs. The players on
      your left and right: tags turned on their side halfway up the edges, the name on one line
      and the points and tiles on a second beside it. Along the bottom: your tiles in a row, your
-     name over Scores to their left, and what the ends add up to on their right. The side tags
-     are thin, so the board runs out to them; the pieces beside your tiles need more width, which
-     they take from under the board's ends (the second and fourth columns). */
-  #game .dominoes-view .ht {
+     name over Scores to their left, and (Dominoes) what the ends add up to on their right. The
+     side tags are thin, so the board or the trick runs out to them; the pieces beside your hand
+     need more width, which they take from under the middle's ends (the second and fourth
+     columns). The card games' hand runs on to the right edge. */
+  #game .hearts-view .ht {
     --side-w: clamp(112px, 16vw, 136px);
     --tag-thick: 44px;
     --side-len: clamp(140px, 40dvh, 180px);
     --beside: calc(var(--side-w) - var(--tag-thick) - 10px);
     grid-template-columns: var(--tag-thick) var(--beside) minmax(0, 1fr) var(--beside) var(--tag-thick);
+    grid-template-areas:
+      '. top top top .'
+      'left center center center right'
+      'mine mine hand hand hand';
+    column-gap: 10px;
+  }
+  #game .dominoes-view .ht {
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       '. top top top .'
@@ -567,7 +568,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
       'mine mine hand info info';
     gap: 4px 10px;
   }
-  #game .dominoes-view .ht-seat {
+  #game .hearts-view .ht-seat {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -576,22 +577,22 @@ body.pad-mode #game .dm-mine.pad-cursor {
     padding: 5px 10px;
     font-size: 0.8125rem;
   }
-  #game .dominoes-view .ht-seat .ht-name {
+  #game .hearts-view .ht-seat .ht-name {
     flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
     font-size: inherit;
   }
-  #game .dominoes-view .ht-seat .ht-score {
+  #game .hearts-view .ht-seat .ht-score {
     flex: none;
     white-space: nowrap;
     font-size: 0.75rem;
   }
-  #game .dominoes-view :is(.ht-pos-0, .ht-pos-2) .ht-score::before {
+  #game .hearts-view :is(.ht-pos-0, .ht-pos-2) .ht-score::before {
     content: '· ';
   }
-  /* (.ht-seat twice over: these beat the card tables' one-size rules further down.) */
-  #game .dominoes-view .ht-seat.ht-pos-2 {
+  /* (.ht-seat twice over: these beat the one-size rules further down.) */
+  #game .hearts-view .ht-seat.ht-pos-2 {
     width: clamp(200px, 36vw, 250px);
     max-width: 100%;
     justify-self: center;
@@ -600,7 +601,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   /* Turned on their side like on a phone held upright: the tops of the letters face the
      screen's edges, so the left tag reads upward and the right one downward (mirror images,
      never a pinwheel), and the name is the line nearer the edge. */
-  #game .dominoes-view .ht-seat:is(.ht-pos-1, .ht-pos-3) {
+  #game .hearts-view .ht-seat:is(.ht-pos-1, .ht-pos-3) {
     flex-direction: column;
     gap: 1px;
     width: var(--tag-thick);
@@ -610,39 +611,51 @@ body.pad-mode #game .dm-mine.pad-cursor {
     align-self: center;
     padding: 8px 4px;
   }
-  #game .dominoes-view .ht-seat.ht-pos-3 {
+  #game .hearts-view .ht-seat.ht-pos-3 {
     writing-mode: vertical-rl;
   }
   /* Left: each line is turned over in place (the tag itself isn't, so its shadow still falls
      downward like everyone else's). */
-  #game .dominoes-view .ht-seat.ht-pos-1 {
+  #game .hearts-view .ht-seat.ht-pos-1 {
     writing-mode: vertical-lr;
   }
-  #game .dominoes-view .ht-pos-1 > :is(.ht-name, .ht-score) {
+  #game .hearts-view .ht-pos-1 > :is(.ht-name, .ht-score) {
     transform: rotate(180deg);
   }
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-name {
+  #game .hearts-view :is(.ht-pos-1, .ht-pos-3) .ht-name {
     max-width: none;
     max-height: 100%;
     min-height: 0;
   }
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-nm {
+  #game .hearts-view :is(.ht-pos-1, .ht-pos-3) .ht-nm {
     min-height: 0;
   }
   /* The marks are pictures, which sideways writing leaves standing up: turn them a quarter too
      (the left one's line is already turned over, which finishes the job). */
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-cpu {
+  #game .hearts-view :is(.ht-pos-1, .ht-pos-3) .ht-cpu {
     writing-mode: horizontal-tb;
     transform: rotate(90deg);
   }
-  /* (Down by the room the tiles leave over them to rise into, so all three line up.) */
-  #game .dominoes-view .ht-mine {
+  /* Your name over Scores, the same width. */
+  #game .hearts-view .ht-mine {
     align-items: stretch;
     align-self: center;
     gap: 7px;
+  }
+  /* (Down by the room the tiles leave over them to rise into, so all three line up.) */
+  #game .dominoes-view .ht-mine {
     margin-top: 10px;
   }
-  #game .dominoes-view .ht-mine > .ht-seat.ht-pos-0 {
+  /* Three Thirteen stacks three things there (your name, what's left over, Scores): a little
+     slimmer, so they fit beside your cards. */
+  #game .tt-view .ht-mine {
+    gap: 4px;
+  }
+  #game .tt-view .ht-mine > :is(.tt-loose, .ht-scores-btn) {
+    min-height: 32px;
+    padding-block: 2px;
+  }
+  #game .hearts-view .ht-mine > .ht-seat.ht-pos-0 {
     width: auto;
     max-width: none;
     padding-block: 4px;
@@ -811,41 +824,34 @@ body.pad-mode #game .dm-mine.pad-cursor {
   width: var(--seat-w);
   max-width: 100%;
 }
-/* Phones held upright: the three across the top split the width evenly, and yours (beside
-   Scores) is as wide as one of them. */
-@media (max-width: 600px) {
-  #game .hearts-view .ht-pos-1,
-  #game .hearts-view .ht-pos-2,
-  #game .hearts-view .ht-pos-3 {
-    width: auto;
-    justify-self: stretch;
-    align-self: stretch;
-  }
-  #game .hearts-view .ht-mine > .ht-seat {
-    width: calc((100% - 12px) / 3);
-  }
-}
-/* Phones held sideways: a little narrower. (Dominoes sizes its own, above.) */
-@media (max-height: 460px) {
-  #game .hearts-view {
-    --seat-w: clamp(104px, 16vw, 170px);
-  }
-}
+/* (On phones the tags size themselves: above for one held sideways, below for one upright.) */
 
-/* ------------------------------------------------------------------ Dominoes: sideways names (2026-11-22)
-   Phones held upright: the players on your left and right sit up the sides of the board, their
+/* ------------------------------------------------------------------ sideways names (2026-11-22)
+   Phones held upright: the players on your left and right sit up the sides of the table, their
    name tags turned on their side, and the player across stays at the top (the user's "version A",
-   a trial). The tops of the letters face the screen's edges, so the left tag reads upward and the
-   right one downward: mirror images, never a pinwheel. Every tag is one line, name then score
-   ("Robo-Bob · 5 pts · 5 tiles"), so they're thin (the user, 2026-11-22: two lines gave back too
-   little of the board), and all four are the same length. Yours leaves out your tile count (your
-   tiles are right there), and what the open ends add up to sits just above it. The marks
-   (computer, zzz) turn with the writing. fitOneLine measures a sideways line by
-   its height. */
+   Dominoes first, every card game since 2026-11-25). The tops of the letters face the screen's
+   edges, so the left tag reads upward and the right one downward: mirror images, never a
+   pinwheel. Every tag is one line, name then score ("Robo-Bob · 5 pts · 5 tiles"), so they're
+   thin (the user, 2026-11-22: two lines gave back too little of the board), and all four are the
+   same length. In Dominoes yours leaves out your tile count (your tiles are right there), and
+   what the open ends add up to sits just above it. The marks (computer, zzz) turn with the
+   writing. fitOneLine measures a sideways line by its height. */
 @media (max-width: 600px) and (min-height: 461px) {
-  #game .dominoes-view .ht {
+  #game .hearts-view .ht {
     --tag-len: clamp(170px, 32dvh, 240px);
     grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      '. top .'
+      'left center right'
+      'mine mine mine'
+      'hand hand hand';
+  }
+  /* Spades: the bid buttons shrink to fit between the side tags. */
+  #game .spades-view .sp-bids {
+    grid-template-columns: repeat(7, minmax(0, 52px));
+    gap: 5px;
+  }
+  #game .dominoes-view .ht {
     grid-template-rows: auto minmax(0, 1fr) auto auto auto;
     grid-template-areas:
       '. top .'
@@ -854,19 +860,19 @@ body.pad-mode #game .dm-mine.pad-cursor {
       'mine mine mine'
       'hand hand hand';
   }
-  #game .dominoes-view .ht-seat {
+  #game .hearts-view .ht-seat {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.35em;
     font-size: 0.8125rem;
   }
-  #game .dominoes-view .ht-pos-2 {
+  #game .hearts-view .ht-pos-2 {
     width: var(--tag-len);
     justify-self: center;
     padding: 6px 12px;
   }
-  #game .dominoes-view .ht-mine > .ht-pos-0 {
+  #game .hearts-view .ht-mine > .ht-pos-0 {
     flex: 0 1 auto;
     width: var(--tag-len);
     min-width: 0;
@@ -875,8 +881,8 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .ht-pos-0 .dm-tiles {
     display: none;
   }
-  #game .dominoes-view .ht-pos-1,
-  #game .dominoes-view .ht-pos-3 {
+  #game .hearts-view .ht-pos-1,
+  #game .hearts-view .ht-pos-3 {
     width: auto;
     height: var(--tag-len);
     justify-self: stretch;
@@ -884,35 +890,35 @@ body.pad-mode #game .dm-mine.pad-cursor {
     padding: 12px 6px;
   }
   /* Right: the writing turned a quarter clockwise, read top to bottom. */
-  #game .dominoes-view .ht-pos-3 {
+  #game .hearts-view .ht-pos-3 {
     writing-mode: vertical-rl;
   }
   /* Left: the mirror image, read bottom to top. Each piece is turned over and the pieces run
      upward (the tag itself isn't turned, so its shadow still falls downward like everyone
      else's). */
-  #game .dominoes-view .ht-pos-1 {
+  #game .hearts-view .ht-pos-1 {
     writing-mode: vertical-lr;
     flex-direction: row-reverse;
   }
-  #game .dominoes-view .ht-pos-1 > .ht-name,
-  #game .dominoes-view .ht-pos-1 > .ht-score {
+  #game .hearts-view .ht-pos-1 > .ht-name,
+  #game .hearts-view .ht-pos-1 > .ht-score {
     transform: rotate(180deg);
   }
-  #game .dominoes-view .ht-seat .ht-name {
+  #game .hearts-view .ht-seat .ht-name {
     flex: 0 1 auto;
     min-width: 0;
     min-height: 0;
     font-size: inherit;
   }
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-nm {
+  #game .hearts-view :is(.ht-pos-1, .ht-pos-3) .ht-nm {
     min-height: 0;
   }
-  #game .dominoes-view .ht-seat .ht-score {
+  #game .hearts-view .ht-seat .ht-score {
     flex: none;
     white-space: nowrap;
     font-size: 0.75rem;
   }
-  #game .dominoes-view .ht-seat .ht-score::before {
+  #game .hearts-view .ht-seat .ht-score::before {
     content: '· ';
   }
   /* What the open ends add up to: its own line just above your name and Scores (the user,
@@ -931,30 +937,49 @@ body.pad-mode #game .dm-mine.pad-cursor {
   }
   /* The marks are pictures, which sideways writing leaves standing up: turn them a quarter too
      (the left one's piece is already turned over, which finishes the job). */
-  #game .dominoes-view :is(.ht-pos-1, .ht-pos-3) .ht-cpu {
+  #game .hearts-view :is(.ht-pos-1, .ht-pos-3) .ht-cpu {
     writing-mode: horizontal-tb;
     transform: rotate(90deg);
   }
 }
 
-/* ------------------------------------------------------------------ Dominoes: a colour each (2026-11-22)
-   A trial (the user's idea): each player's name tag is their own light felt, the one their name
-   has on Your table (felts.ts). Whose turn it is: the tag keeps its colour and sits on a band of
+/* Spades on a phone, upright or sideways: the team scores sit in the middle's top-left corner,
+   under the player across and beside the player on your left (the corner of the screen is
+   theirs now). */
+@media (max-width: 600px) and (min-height: 461px), (max-height: 460px) {
+  #game .spades-view .ht-center {
+    position: relative;
+  }
+  #game .spades-view .ht-center > .sp-score {
+    top: 0;
+    left: 0;
+  }
+}
+/* (Sideways, the mic tab reaches a little below the middle's top: clear it.) */
+@media (max-height: 460px) {
+  #game .spades-view .ht-center > .sp-score {
+    top: 14px;
+  }
+}
+
+/* ------------------------------------------------------------------ a colour each (2026-11-22)
+   The user's idea, Dominoes first and every card game since 2026-11-25: each player's name tag is
+   their own light felt, the one their name has on Your table (felts.ts). Whose turn it is: the tag keeps its colour and sits on a band of
    sunflower felt a little bigger than it, its shadow falling on the yellow. Talking: rings of the
    tag's own colour ripple out from it, outside the band (paper.css, as on every tile). */
-#game .dominoes-view .ht-seat[data-felt],
-#game .dominoes-view .ht-seat.turn[data-felt] {
+#game .hearts-view .ht-seat[data-felt],
+#game .hearts-view .ht-seat.turn[data-felt] {
   --fc: var(--own);
   --ring-w: 0px;
   background: var(--own) var(--own-img) 0 0 / var(--paper-size);
 }
 /* On coloured felt the softer ink is too faint: points, tiles and the computer mark go full ink. */
-#game .dominoes-view .ht-seat[data-felt] :is(.ht-score, .ht-tag, .ht-cpu) {
+#game .hearts-view .ht-seat[data-felt] :is(.ht-score, .ht-tag, .ht-cpu) {
   color: var(--ink);
 }
 /* (Both lie flat, like every name tag: the tag's thin shadow falls on the yellow, the yellow's on
    the table.) */
-#game .dominoes-view .ht-seat.turn[data-felt] {
+#game .hearts-view .ht-seat.turn[data-felt] {
   --ring-w: 5px;
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.22),
@@ -1152,6 +1177,13 @@ body.pad-mode #game .dm-mine.pad-cursor {
   padding: 0;
   display: grid;
   gap: 8px;
+}
+/* Phones held upright: as big as on a phone held sideways (the user, 2026-11-25: they were far
+   too small); the sheet scrolls a little more instead. */
+@media (max-width: 600px) {
+  #game .tt-reveal {
+    --cw: clamp(30px, 9.2vw, 36px);
+  }
 }
 #game .tt-reveal li {
   display: grid;

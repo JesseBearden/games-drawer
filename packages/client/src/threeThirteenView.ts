@@ -5,6 +5,7 @@ import { cardFaceSvg, feltBackHtml, type Rank, type Suit } from './paperArt';
 import { patchHtml, syncKeyed } from './dom';
 import { escapeHtml, nameHtml } from './html';
 import type { ShellApi, View } from './views';
+import { seatFelts } from './felts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -155,12 +156,15 @@ export class ThreeThirteenTable implements View {
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
     let tagsChanged = false;
+    // Each player's own felt, the one their name has on Your table.
+    const felts = seatFelts(v.seats);
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
       const detail = s.out ? '<b class="tt-went-out">Went out</b>' : `${s.cards} card${s.cards === 1 ? '' : 's'}`;
       const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}<div class="ht-score">${s.score} pts · ${detail}</div>`);
       tagsChanged ||= changed;
+      el.dataset.felt = felts[seat];
       el.classList.toggle('turn', v.turn === seat);
       // A seat not in play (the table chose fewer players) keeps its place but shows nothing.
       el.style.visibility = s.playing ? '' : 'hidden';

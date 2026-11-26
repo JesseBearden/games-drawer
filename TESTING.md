@@ -244,6 +244,24 @@ _Last updated: 2026-11-25 (the new bar; Mahjong scaled to fit)_
       "Ready" is a blue tick on the tag's corner. Start Dominoes: each person's tag in the game
       is the same colour as on Your table.
 
+## Card games like Dominoes (2026-11-25)
+
+- [ ] **Hearts, Spades and Three Thirteen on a phone held upright:** the players on your left and
+      right sit up the sides on thin one-line tags, as in Dominoes; the player across is one line
+      along the top. Is the trick (Hearts, Spades) or the piles (Three Thirteen) comfortable
+      between them?
+- [ ] **Held sideways:** the side tags turn on their side, your name over Scores to the left of
+      your cards (Three Thirteen: "Left over" between them, all three fit beside your cards).
+- [ ] **A colour each** in every card game: each tag is its player's own felt, the same as on
+      Your table; whose turn it is, a band of yellow. Spades' lilac team tags are gone: is it
+      still clear who your partner is (always the one across)?
+- [ ] **Three Thirteen's end of a round, phone held upright:** everyone's cards are as big as
+      when the phone is held sideways (the sheet scrolls a little more). Scrolling any score
+      sheet, the paper moves with the words.
+- [ ] **Spades on a phone:** Us and Them sit just under the player across, left of the middle,
+      clear of the mic tab and the side tag; the bid buttons fit between the side tags on a small
+      phone.
+
 ## Dominoes on a phone (trials, 2026-11-22)
 
 - [ ] **Held upright:** the players on your left and right sit up the sides of the board on thin

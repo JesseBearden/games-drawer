@@ -6,6 +6,7 @@ import { suitSvg, SUIT_NAME, type Suit } from './paperArt';
 import { escapeHtml, nameHtml } from './html';
 import { focusForPad, type PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
+import { seatFelts } from './felts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -160,6 +161,8 @@ export class SpadesTable implements View {
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
     let tagsChanged = false;
+    // Each player's own felt, the one their name has on Your table.
+    const felts = seatFelts(v.seats);
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
@@ -168,8 +171,8 @@ export class SpadesTable implements View {
       const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
         <div class="ht-score">${bid}${won}</div>`);
       tagsChanged ||= changed;
+      el.dataset.felt = felts[seat];
       el.classList.toggle('turn', v.turn === seat);
-      el.classList.toggle('sp-us', s.team === this.myTeam());
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));

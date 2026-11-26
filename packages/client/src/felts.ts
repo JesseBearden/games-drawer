@@ -1,6 +1,6 @@
 /**
  * Each person's own felt (a trial, the user's idea, 2026-11-22): their name tag on Your table, the
- * seat they pick there, and their name tag in a game (Dominoes so far). It comes from the colour
+ * seat they pick there, and their name tag in a game (every card and tile game). It comes from the colour
  * number the table gives everyone as they arrive (kept if they drop out and come back; computer
  * players get the free ones), so it stays with the name and everyone sees the same.
  *

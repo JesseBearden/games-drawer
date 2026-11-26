@@ -6,6 +6,7 @@ import { cardFaceSvg, suitSvg, SUIT_NAME, type Rank, type Suit } from './paperAr
 import type { PadPress } from './gamepad';
 import type { ShellApi, View } from './views';
 import { scoreSheetHtml } from './scoreSheet';
+import { seatFelts } from './felts';
 export { scoreSheetHtml };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -279,6 +280,8 @@ export class HeartsTable implements View {
     q<HTMLElement>('.ht').dataset.phase = v.phase;
 
     let tagsChanged = false;
+    // Each player's own felt, the one their name has on Your table.
+    const felts = seatFelts(v.seats);
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const el = q<HTMLElement>(`.ht-pos-${this.pos(seat)}`);
@@ -289,6 +292,7 @@ export class HeartsTable implements View {
       const changed = patchHtml(el, `${seatNameHtml(s.name, { bot: s.bot, away: s.away })}
         <div class="ht-score">${s.score} pts${taken}${status}</div>`);
       tagsChanged ||= changed;
+      el.dataset.felt = felts[seat];
       el.classList.toggle('turn', v.turn === seat);
       if (s.alias) el.dataset.alias = s.alias;
       else delete el.dataset.alias;
