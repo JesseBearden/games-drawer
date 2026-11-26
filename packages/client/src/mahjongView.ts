@@ -1,5 +1,5 @@
 import './mahjong.css';
-import { CARD_SOUNDS } from './audio';
+import { CARD_SOUNDS, TILE_SOUNDS } from './audio';
 import {
   mjClaimShow,
   mjIndex,
@@ -264,7 +264,7 @@ export class MahjongTable implements View {
     this.observer.observe(this.el);
     // (The middle's own size settles after the rest: the wall and discards follow it.)
     this.observer.observe(this.q('.mj-mid'));
-    shell.sfx.preloadSounds(CARD_SOUNDS);
+    shell.sfx.preloadSounds([...CARD_SOUNDS, ...TILE_SOUNDS]);
     // In a phone's browser held sideways, a swipe up on the table tucks the browser's bars away,
     // as in Tanks.
     this.untuck = tuckBars(shell.device.small);

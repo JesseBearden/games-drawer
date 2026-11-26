@@ -56,7 +56,13 @@ const TARGET_DB: Record<string, number> = {
   handEnd: -27,
   lobbyJoin: -29.9,
   tileClack: -30,
-  tileShuffle: -30,
+  tileShuffle: -27.4,
+  dominoShuffle: -27.4,
+  dominoPlay: -31.8,
+  dominoDraw: -32.6,
+  dominoScore: -31.5,
+  dominoKnock: -30.1,
+  dominoSlam: -24.8,
   rotor: -24.9,
   wind: -13.8,
 };
@@ -104,6 +110,8 @@ const ELEVEN: Source = {
   date: '2026-11-24',
   inRepo: true,
 };
+/** The Dominoes set, made later with the newer sound model. */
+const ELEVEN_DOMINOES: Source = { ...ELEVEN, date: '2026-11-26' };
 
 interface FileSpec {
   /** Path under the downloads dir (or under sfx-sources/ for a source that's `inRepo`). */
@@ -195,6 +203,19 @@ const files: Record<string, FileSpec> = {
   'ui/power-up-12': { src: 'kenney-digital-audio/extracted/Audio/powerUp12.ogg', from: K_DIGITAL, rate: 24000 },
   'ui/low-three-tone': { src: 'kenney-digital-audio/extracted/Audio/lowThreeTone.ogg', from: K_DIGITAL, rate: 24000 },
   'ui/impact-glass-heavy-001': { src: 'kenney-impact-sounds/extracted/Audio/impactGlass_heavy_001.ogg', from: K_IMPACT, rate: 24000 },
+  // ---- Dominoes (ElevenLabs)
+  // ElevenLabs (eleven_text_to_sound_v3), 2 s, 0.6: "Continuous shuffling of dominoes face down on a table with both hands, constant clicking and sliding of many tiles, close up, dry."
+  'dominoes/shuffle-wash-elevenlabs': { src: 'elevenlabs/domino-shuffle-wash.wav', from: ELEVEN_DOMINOES, rate: 24000, fadeOut: 0.4 },
+  // ElevenLabs (eleven_text_to_sound_v3), 0.6 s, 0.6: "Bone domino tapped down against another domino on a hardwood table, one sharp bright clack, close microphone, dry, single hit."
+  'dominoes/play-clack-elevenlabs': { src: 'elevenlabs/domino-play-clack.wav', from: ELEVEN_DOMINOES, rate: 24000, fadeOut: 0.08 },
+  // ElevenLabs (eleven_text_to_sound_v3), 0.7 s, 0.6: "One domino tile pulled off a small pile on a felt table, a soft slide and a light tap, close up, dry."
+  'dominoes/draw-felt-elevenlabs': { src: 'elevenlabs/domino-draw-felt.wav', from: ELEVEN_DOMINOES, rate: 24000, fadeOut: 0.15 },
+  // ElevenLabs (eleven_text_to_sound_v3), 0.7 s, 0.6: "Two poker chips clicked onto a small stack, a bright clean clink, close up, dry, nothing else."
+  'dominoes/score-chips-elevenlabs': { src: 'elevenlabs/domino-score-chips.wav', from: ELEVEN_DOMINOES, rate: 24000, fadeOut: 0.08 },
+  // ElevenLabs (eleven_text_to_sound_v3), 0.8 s, 0.6: "Knock, knock: two separate quick knocks with a knuckle on a wooden tabletop, a short gap between them, close up, dry, nothing else."
+  'dominoes/knock-double-elevenlabs': { src: 'elevenlabs/domino-knock-double.wav', from: ELEVEN_DOMINOES, rate: 24000, start: 0.16, fadeOut: 0.08 },
+  // ElevenLabs (eleven_text_to_sound_v3), 0.8 s, 0.6: "The last domino slammed down onto a table in triumph, a heavy clack and a small jingle of tiles bouncing, close up."
+  'dominoes/slam-triumph-elevenlabs': { src: 'elevenlabs/domino-slam-triumph.wav', from: ELEVEN_DOMINOES, rate: 24000, fadeOut: 0.15 },
   // ---- cards (Hearts)
   'cards/card-slide-1': { src: 'kenney-casino-audio/extracted/Audio/card-slide-1.ogg', from: K_CASINO, rate: 28000 },
   'cards/card-slide-3': { src: 'kenney-casino-audio/extracted/Audio/card-slide-3.ogg', from: K_CASINO, rate: 28000 },
@@ -376,7 +397,7 @@ const slots: Record<string, SlotSpec> = {
     ],
   },
   cardPlay: {
-    default: 'card-place-1',
+    default: 'card-place-2',
     candidates: [
       { file: 'cards/card-place-1', label: 'Card placed' },
       { file: 'cards/card-place-2', label: 'Card placed (soft)' },
@@ -392,7 +413,7 @@ const slots: Record<string, SlotSpec> = {
     ],
   },
   trickTake: {
-    default: 'card-fan-1',
+    default: 'cards-pack-take-out-1',
     candidates: [
       { file: 'cards/card-fan-1', label: 'Cards gathered' },
       { file: 'cards/card-shove-2', label: 'Cards swept' },
@@ -400,7 +421,7 @@ const slots: Record<string, SlotSpec> = {
     ],
   },
   heartsBroken: {
-    default: 'jingle-hit-03',
+    default: 'impact-glass-heavy-001',
     candidates: [
       { file: 'ui/jingle-hit-03', label: 'Dramatic rising hit' },
       { file: 'ui/glass-004', label: 'Glass chime' },
@@ -424,7 +445,7 @@ const slots: Record<string, SlotSpec> = {
     ],
   },
   handEnd: {
-    default: 'jingle-pizzi-15',
+    default: 'jingle-steel-15',
     candidates: [
       { file: 'ui/jingle-pizzi-15', label: 'Pizzicato cadence' },
       { file: 'ui/jingle-steel-15', label: 'Steel drum cadence' },
@@ -438,9 +459,51 @@ const slots: Record<string, SlotSpec> = {
       { file: 'ui/pluck-002', label: 'Pluck' },
     ],
   },
-  // Mahjong's tiles: made in code. ElevenLabs takes were tried and not kept (user, 2026-11-24).
+  // Mahjong's tiles: the clack is made in code (ElevenLabs takes were tried and not kept, user
+  // 2026-11-24); the shuffle is Dominoes' busy wash (user, 2026-11-26).
   tileClack: { default: 'synth', candidates: [] },
-  tileShuffle: { default: 'synth', candidates: [] },
+  tileShuffle: {
+    default: 'shuffle-wash-elevenlabs',
+    candidates: [
+      { file: 'dominoes/shuffle-wash-elevenlabs', label: "Washed by hand, busy clatter (ElevenLabs)" },
+    ],
+  },
+  dominoShuffle: {
+    default: 'shuffle-wash-elevenlabs',
+    candidates: [
+      { file: 'dominoes/shuffle-wash-elevenlabs', label: "Washed by hand, busy clatter (ElevenLabs)" },
+    ],
+  },
+  dominoPlay: {
+    default: 'play-clack-elevenlabs',
+    candidates: [
+      { file: 'dominoes/play-clack-elevenlabs', label: "Sharp clack (ElevenLabs)" },
+    ],
+  },
+  dominoDraw: {
+    default: 'draw-felt-elevenlabs',
+    candidates: [
+      { file: 'dominoes/draw-felt-elevenlabs', label: "Pulled off the pile on felt (ElevenLabs)" },
+    ],
+  },
+  dominoScore: {
+    default: 'score-chips-elevenlabs',
+    candidates: [
+      { file: 'dominoes/score-chips-elevenlabs', label: "Chips clicked on a stack (ElevenLabs)" },
+    ],
+  },
+  dominoKnock: {
+    default: 'knock-double-elevenlabs',
+    candidates: [
+      { file: 'dominoes/knock-double-elevenlabs', label: "Knock knock on a wooden table (ElevenLabs)" },
+    ],
+  },
+  dominoSlam: {
+    default: 'slam-triumph-elevenlabs',
+    candidates: [
+      { file: 'dominoes/slam-triumph-elevenlabs', label: "Slammed down, tiles bounce (ElevenLabs)" },
+    ],
+  },
   rotor: {
     default: 'helicopter-wuxiascrub',
     candidates: [

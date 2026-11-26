@@ -3,6 +3,7 @@
 import {
   AMBIENCE_NAMES,
   CARD_SOUNDS,
+  DOMINO_SOUNDS,
   PICKS_KEY,
   Sfx,
   SOUND_NAMES,
@@ -108,6 +109,7 @@ renderSlots('tank-slots', TANK_SOUNDS);
 renderSlots('ambience-slots', AMBIENCE_NAMES);
 renderSlots('card-slots', CARD_SOUNDS);
 renderSlots('tile-slots', TILE_SOUNDS);
+renderSlots('domino-slots', DOMINO_SOUNDS);
 refreshPicks();
 
 $('copy-picks').addEventListener('click', async () => {

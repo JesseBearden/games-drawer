@@ -1,4 +1,4 @@
-import { CARD_SOUNDS } from './audio';
+import { DOMINO_SOUNDS, type SoundName } from './audio';
 import { DOMINOES_RULES, type DominoesView, type GameServerMessage, type Move, type TileId } from '@tank/shared';
 import { bounds, ghostSpot, layoutSpots, limitsFor, tileSvg, type TileSpot } from './dominoLayout';
 import { seatFelts } from './felts';
@@ -94,7 +94,7 @@ export class DominoesTable implements View {
     board.addEventListener('gestureend', this.onGestureEnd);
     this.observer.observe(board);
     this.observer.observe(this.middle());
-    shell.sfx.preloadSounds(CARD_SOUNDS);
+    shell.sfx.preloadSounds([...DOMINO_SOUNDS, 'yourTurn', 'handEnd']);
   }
 
   private board() {
@@ -576,20 +576,26 @@ export class DominoesTable implements View {
   }
 
   private sounds(prev: DominoesView | null, v: DominoesView) {
-    const play = (name: string) => this.shell.play(name);
+    const play = (name: SoundName) => this.shell.play(name);
     if (!prev || prev.hand !== v.hand) {
-      play('cardDeal');
+      play('dominoShuffle');
       return;
     }
+    const ended = prev.phase !== v.phase && (v.phase === 'handEnd' || v.phase === 'gameOver');
+    // Anyone drawing from the boneyard, you or the others.
+    if (v.boneyard < prev.boneyard) play('dominoDraw');
     const lp = v.lastPlay;
     if (lp && (lp.tile !== prev.lastPlay?.tile || lp.seat !== prev.lastPlay?.seat)) {
-      play('cardPlay');
+      // Going out: the last tile is slapped down.
+      play(ended && v.result && !v.result.blocked ? 'dominoSlam' : 'dominoPlay');
       if (lp.points > 0) {
-        play('trickTake');
+        play('dominoScore');
         this.popPoints(lp.points, lp.seat);
       }
+    } else if (prev.phase === 'playing' && v.phase === 'playing' && prev.turn !== null && v.turn !== prev.turn) {
+      // The turn moved on with nothing laid: they knocked on the table to pass.
+      play('dominoKnock');
     }
-    if (v.tiles.length > prev.tiles.length && v.hand === prev.hand) play('cardPass');
     if (prev.turn !== v.seat && v.turn === v.seat && v.seat !== null) play('yourTurn');
     if (prev.phase !== v.phase && (v.phase === 'handEnd' || v.phase === 'gameOver')) play(v.phase === 'gameOver' && v.seat !== null && v.winners.includes(v.seat) ? 'win' : 'handEnd');
   }

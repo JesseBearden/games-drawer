@@ -42,7 +42,14 @@ export type SoundName =
   | 'lobbyJoin'
   // Mahjong
   | 'tileClack'
-  | 'tileShuffle';
+  | 'tileShuffle'
+  // Dominoes
+  | 'dominoShuffle'
+  | 'dominoPlay'
+  | 'dominoDraw'
+  | 'dominoScore'
+  | 'dominoKnock'
+  | 'dominoSlam';
 
 /** Sounds of the tank game: the Tanks screen loads their samples when it opens. */
 export const TANK_SOUNDS: SoundName[] = [
@@ -82,10 +89,16 @@ export const CARD_SOUNDS: SoundName[] = [
   'lobbyJoin',
 ];
 
-/** Mahjong's tiles (made in code: no samples to load). */
+/** Mahjong's tiles: the clack is made in code; the shuffle is a sample (Dominoes' busy wash). */
 export const TILE_SOUNDS: SoundName[] = ['tileClack', 'tileShuffle'];
 
-export const SOUND_NAMES: SoundName[] = [...TANK_SOUNDS, ...CARD_SOUNDS, ...TILE_SOUNDS];
+/**
+ * Dominoes: the tiles washed for a new hand, one laid on the line, one drawn from the boneyard,
+ * points scored, a knock on the table to pass, and the last tile slapped down to go out.
+ */
+export const DOMINO_SOUNDS: SoundName[] = ['dominoShuffle', 'dominoPlay', 'dominoDraw', 'dominoScore', 'dominoKnock', 'dominoSlam'];
+
+export const SOUND_NAMES: SoundName[] = [...TANK_SOUNDS, ...CARD_SOUNDS, ...TILE_SOUNDS, ...DOMINO_SOUNDS];
 
 /** What any table can play: the only samples that load as soon as audio unlocks (the default `preload`). */
 export const SHARED_SOUNDS: SoundName[] = ['chat', 'win'];
@@ -238,6 +251,33 @@ export class Synth {
         return;
       case 'tileShuffle':
         this.shuffle(t, v);
+        return;
+      // Dominoes: the Mahjong tile recipes, a little lower (bigger tiles), with the table under them.
+      case 'dominoShuffle':
+        this.shuffle(t, v);
+        return;
+      case 'dominoPlay':
+        this.clack(t, v, 1.35, 0.75);
+        this.tone(t, v, 'sine', 170, 110, 0.06, 0.19, 0.001);
+        return;
+      case 'dominoDraw':
+        this.noiseHit(t, v, 'bandpass', 1300, 700, 0.18, 0.4, 0.03, 1.2);
+        this.clack(t + 0.16, v, 1.1, 0.8);
+        return;
+      case 'dominoScore':
+        this.clack(t, v, 1, 1.35);
+        this.clack(t + 0.08, v, 0.85, 1.5);
+        return;
+      case 'dominoKnock':
+        for (const at of [t, t + 0.14]) {
+          this.tone(at, v, 'sine', 190, 120, 0.08, 0.28, 0.001);
+          this.noiseHit(at, v, 'lowpass', 900, 300, 0.06, 0.21, 0.001, 0.7);
+        }
+        return;
+      case 'dominoSlam':
+        this.clack(t, v, 1.3, 0.7);
+        this.tone(t, v, 'sine', 140, 60, 0.18, 0.5, 0.002);
+        for (let i = 0; i < 3; i++) this.clack(t + 0.05 + i * 0.045 + Math.random() * 0.02, v, 0.3, 1.1);
         return;
     }
   }
@@ -455,10 +495,13 @@ const MIN_GAP_MS: Partial<Record<SoundName, number>> = {
   cardPlay: 40,
   lobbyJoin: 150,
   yourTurn: 300,
+  dominoPlay: 40,
+  dominoDraw: 60,
+  dominoKnock: 150,
 };
 
 /** Sounds that repeat a lot get a slight random pitch so they don't sound machine-gunned. */
-const VARY_PITCH = new Set<SoundName>(['fire', 'explosion', 'land', 'tick', 'cardDeal', 'cardPlay', 'cardPass', 'trickTake']);
+const VARY_PITCH = new Set<SoundName>(['fire', 'explosion', 'land', 'tick', 'cardDeal', 'cardPlay', 'cardPass', 'trickTake', 'dominoPlay', 'dominoDraw', 'dominoKnock']);
 
 const PREFS_KEY = 'tank.sound';
 /** A sound that wouldn't download is tried again after this long. */

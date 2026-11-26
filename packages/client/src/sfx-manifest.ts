@@ -660,7 +660,7 @@ export const SFX_MANIFEST: Record<SfxSlot, SfxEntry> = {
     ],
   },
   cardPlay: {
-    default: 'card-place-1',
+    default: 'card-place-2',
     candidates: [
       {
         id: 'card-place-1',
@@ -724,7 +724,7 @@ export const SFX_MANIFEST: Record<SfxSlot, SfxEntry> = {
     ],
   },
   trickTake: {
-    default: 'card-fan-1',
+    default: 'cards-pack-take-out-1',
     candidates: [
       {
         id: 'card-fan-1',
@@ -756,7 +756,7 @@ export const SFX_MANIFEST: Record<SfxSlot, SfxEntry> = {
     ],
   },
   heartsBroken: {
-    default: 'jingle-hit-03',
+    default: 'impact-glass-heavy-001',
     candidates: [
       {
         id: 'jingle-hit-03',
@@ -852,7 +852,7 @@ export const SFX_MANIFEST: Record<SfxSlot, SfxEntry> = {
     ],
   },
   handEnd: {
-    default: 'jingle-pizzi-15',
+    default: 'jingle-steel-15',
     candidates: [
       {
         id: 'jingle-pizzi-15',
@@ -912,8 +912,108 @@ export const SFX_MANIFEST: Record<SfxSlot, SfxEntry> = {
     ],
   },
   tileShuffle: {
-    default: 'synth',
+    default: 'shuffle-wash-elevenlabs',
     candidates: [
+      {
+        id: 'shuffle-wash-elevenlabs',
+        file: 'sfx/dominoes/shuffle-wash-elevenlabs.wav',
+        label: "Washed by hand, busy clatter (ElevenLabs)",
+        source: 'https://elevenlabs.io/sound-effects',
+        author: "ElevenLabs (generated)",
+        duration: 2.00,
+        gain: 0.467,
+        license: "ElevenLabs Starter plan (commercial use)",
+      },
+    ],
+  },
+  dominoShuffle: {
+    default: 'shuffle-wash-elevenlabs',
+    candidates: [
+      {
+        id: 'shuffle-wash-elevenlabs',
+        file: 'sfx/dominoes/shuffle-wash-elevenlabs.wav',
+        label: "Washed by hand, busy clatter (ElevenLabs)",
+        source: 'https://elevenlabs.io/sound-effects',
+        author: "ElevenLabs (generated)",
+        duration: 2.00,
+        gain: 0.467,
+        license: "ElevenLabs Starter plan (commercial use)",
+      },
+    ],
+  },
+  dominoPlay: {
+    default: 'play-clack-elevenlabs',
+    candidates: [
+      {
+        id: 'play-clack-elevenlabs',
+        file: 'sfx/dominoes/play-clack-elevenlabs.wav',
+        label: "Sharp clack (ElevenLabs)",
+        source: 'https://elevenlabs.io/sound-effects',
+        author: "ElevenLabs (generated)",
+        duration: 0.60,
+        gain: 0.303,
+        license: "ElevenLabs Starter plan (commercial use)",
+      },
+    ],
+  },
+  dominoDraw: {
+    default: 'draw-felt-elevenlabs',
+    candidates: [
+      {
+        id: 'draw-felt-elevenlabs',
+        file: 'sfx/dominoes/draw-felt-elevenlabs.wav',
+        label: "Pulled off the pile on felt (ElevenLabs)",
+        source: 'https://elevenlabs.io/sound-effects',
+        author: "ElevenLabs (generated)",
+        duration: 0.55,
+        gain: 0.148,
+        license: "ElevenLabs Starter plan (commercial use)",
+      },
+    ],
+  },
+  dominoScore: {
+    default: 'score-chips-elevenlabs',
+    candidates: [
+      {
+        id: 'score-chips-elevenlabs',
+        file: 'sfx/dominoes/score-chips-elevenlabs.wav',
+        label: "Chips clicked on a stack (ElevenLabs)",
+        source: 'https://elevenlabs.io/sound-effects',
+        author: "ElevenLabs (generated)",
+        duration: 0.44,
+        gain: 0.242,
+        license: "ElevenLabs Starter plan (commercial use)",
+      },
+    ],
+  },
+  dominoKnock: {
+    default: 'knock-double-elevenlabs',
+    candidates: [
+      {
+        id: 'knock-double-elevenlabs',
+        file: 'sfx/dominoes/knock-double-elevenlabs.wav',
+        label: "Knock knock on a wooden table (ElevenLabs)",
+        source: 'https://elevenlabs.io/sound-effects',
+        author: "ElevenLabs (generated)",
+        duration: 0.63,
+        gain: 0.521,
+        license: "ElevenLabs Starter plan (commercial use)",
+      },
+    ],
+  },
+  dominoSlam: {
+    default: 'slam-triumph-elevenlabs',
+    candidates: [
+      {
+        id: 'slam-triumph-elevenlabs',
+        file: 'sfx/dominoes/slam-triumph-elevenlabs.wav',
+        label: "Slammed down, tiles bounce (ElevenLabs)",
+        source: 'https://elevenlabs.io/sound-effects',
+        author: "ElevenLabs (generated)",
+        duration: 0.80,
+        gain: 0.744,
+        license: "ElevenLabs Starter plan (commercial use)",
+      },
     ],
   },
   rotor: {
