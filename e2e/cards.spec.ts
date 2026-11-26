@@ -42,6 +42,8 @@ test('three buttons on a small phone leave everyone’s score in sight', async (
   await createRoom(page, 'Dot', 'dominoes');
   const view = page.locator('#dominoes-view');
   await view.locator('.ht-scores-btn').click();
+  // (The pointer off the buttons: on a computer a button under it lifts 2 px, which isn't layout.)
+  await page.mouse.move(1, 1);
   const panel = view.locator('.ht-panel');
   await panel.locator('.actions').evaluate((el) => {
     el.innerHTML = ['New game', 'See the board', 'Switch game'].map((t) => `<button class="pc-btn pc-btn-plain" type="button">${t}</button>`).join('');
