@@ -4,7 +4,7 @@ A running list of changes that need a hands-on check. Claude adds to it whenever
 changes and removes items once you've tried them. Tell me what was wrong (or just "all good")
 and I'll update it.
 
-_Last updated: 2026-11-24 (Mahjong Learning Mode)_
+_Last updated: 2026-11-25 (the new bar; Mahjong scaled to fit)_
 
 ## Getting set up
 
@@ -12,6 +12,49 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
 - For phones (and anything with voice): `npm run dev:https`, open the **https** Network URL it
   prints, and accept the certificate warning once.
 - Each browser tab is its own player, so two tabs (or a phone plus the PC) make a two-player table.
+
+## The new bar (2026-11-25)
+
+- [ ] **Every screen:** the mic tab top left; Messages and the menu as two tabs top right. Is it
+      clear that the speech bubble is Messages and the three lines are the menu? Does a tomato dot
+      show on Messages when someone writes while it's closed?
+- [ ] **The menu:** a raised kraft header with Close that stays put while only the body scrolls;
+      New puzzle (in Jigsaw), Switch game and Leave table; then, with no heading, everyone's name
+      tag in their own colour, you too, each with a mic mark (struck through when off; yours
+      tomato when muted), and a white tag with a big + to invite someone (on Your table too).
+      With two people talking, do both tags ripple (yours too)? With four or more on a phone, do
+      the tags wrap neatly? Thin kraft strips between the parts; Game Rules at the bottom opens
+      with the same header.
+- [ ] **On a computer:** when the menu is taller than the window, its scroll bar is a strip of
+      kraft felt in a groove; drag it.
+- [ ] **Your name:** tap your own tag in the menu (it has a pencil), change the name, Save or
+      press Enter. Cancel leaves it as it was.
+- [ ] **Message filter** is now the funnel in Messages, beside Close: None / Hide / Block open
+      under the heading.
+- [ ] **A phone held sideways,** in every game: nothing sits under the two right-hand tabs (Tanks'
+      wind sits beside them). Jigsaw's picture picker has its top corners under the tabs, as its
+      left corner already was under the mic.
+
+## Mahjong scaled to fit (2026-11-25)
+
+- [ ] The table is now one fixed design, scaled to the screen. On your phone upright and sideways,
+      an iPad both ways, and the computer (Messages open and closed): does anything look too
+      small, or too big? Is there too much empty green round it anywhere?
+- [ ] Drag your tiles into a new order, and watch a Pung or Chow: the tile should still slide into
+      the set, and the word pop up by the name.
+- [ ] **Your strip:** your name tag is on the green above it, and Scores is with your buttons. On
+      a phone upright: two rows of tiles, then Mahjong, Kong, Scores, Discard in one row. On a
+      narrower window, an iPad and the computer: the block of four beside your tiles. Does it
+      look calmer? Is "Your turn"-style news in the middle easy enough to notice?
+- [ ] **The table holds still:** on the iPhone upright and sideways, play a hand. Nothing should
+      shift as people draw and throw away, as "Waiting for the others…" comes and goes, or when the
+      first flower shows, or (on a phone) the wall as the dice are rolled and the deal starts;
+      only a Pung or Kong being laid down changes sizes. The discards now fill
+      from the left (or the top), with room kept for the rest: does that look right?
+- [ ] **iPhone sideways:** your tag and the buttons sit in the middle of the cream strip, and the
+      buttons are a little taller. Tap Discard and Scores near the bottom edge: do they work
+      without the home bar getting in the way? Does a flower under your tag fit? The tiles left
+      now sits under All discards, and the discards make a square round it (columns at the sides).
 
 ## New sounds made with ElevenLabs (2026-11-24)
 
@@ -29,9 +72,13 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
 
 - [ ] **Game type:** at your table pick Mahjong: one choice, Learning / No points / Points
       (How long? shows only with Points). Do the three lines under it read well?
-- [ ] **The card:** every tile a computer throws away brings up the card over the table, with
-      your tiles still in view. Try each choice when it can't be done: does each explanation make
-      sense, and do the right tiles in your hand light up? Is anything confusing for a beginner?
+- [ ] **The card (new layout, 2026-11-25):** every tile a computer throws away brings up the
+      card: the tile and its name at the top, the four plays two by two, "Make a play or pass to
+      continue". Tap each play: "To make a Pung" with your tiles (missing ones dashed) + the
+      discard, and a sentence. Does the picture make sense for a beginner? Does the card stay
+      the same size as you tap around? The play you pick wears a blue ring; tap it again to put
+      it down. When you can make it, Pass becomes Confirm. With two runs you could make, pick one,
+      then Confirm. Upright, sideways and on an iPad: does it all fit without scrolling?
 - [ ] **Pass:** pass on a tile you could have taken for a set: a yellow note over your tiles
       says what you could have made (tap it to close it). On your winning tile, Pass asks first.
 - [ ] **Your own turn:** Mahjong and Kong are always there; tapping one you can't use explains
@@ -71,7 +118,7 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
       computers play on; it shouldn't jump out from under your finger.
 - [ ] **Mahjong, the claim bar** (two people): when you both could take a tile and the other
       passes, your bar keeps running down smoothly instead of jumping ahead.
-- [ ] **Mahjong, after a hand:** See the table, then See all discards: the sheet opens; Close goes
+- [ ] **Mahjong, after a hand:** See the table, then All discards: the sheet opens; Close goes
       back to the table, and nothing pops up over the next hand's shuffle or dice.
 - [ ] **Mahjong, long names:** a long name in the line saying what's happening ("… threw away")
       ends in "…" rather than breaking over two lines.
@@ -98,7 +145,7 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
       appear one by one with a click, a short drop, never from above your name. Too long?
 - [ ] **iPhone held sideways, in Safari:** swipe up on the table: Safari's tabs and address bar
       tuck away and the table grows. Your strip is one row (your name at the left, Discard at the
-      right); Scores and the news line ("Botley threw away…") are on the table under See all discards. Are
+      right); Scores and the news line ("Botley threw away…") are on the table under All discards. Are
       your tiles still big enough?
 - [ ] **The deal:** four tiles at a time round the table (then one each, and one more for the
       dealer); the wall opens as it goes and everyone's tiles appear as they're dealt.
@@ -106,7 +153,7 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
       discards inside it (the one on offer a little bigger). Nothing should overlap your tiles, the wall or anyone's
       tiles. Are the small discards readable? Every discard and set taken clicks.
 - [ ] **No "Your turn" words:** whose turn it is shows only by the yellow tag; the line under
-      your name (or under See all discards sideways) only has news: a discard you can take, "You
+      your name (or under All discards sideways) only has news: a discard you can take, "You
       can go Mahjong!", "Waiting for the others…".
 - [ ] **Your tiles:** two rows of 7 upright, one row sideways (on an iPhone in Safari too: nothing should overlap, and the side players keep clear of the mic and caret tabs). Tap a tile to lift it, then
       Discard (or tap it twice). Drag one to move it. The tile you drew says New. Big enough?
@@ -267,14 +314,9 @@ _Last updated: 2026-11-24 (Mahjong Learning Mode)_
 
 ## The bar, Menu and Messages
 
-- [ ] **iPad and computer**: your mic on the left; Messages, Invite, Help and Menu on the right,
-      each with a small icon. **Phones**: a red mic tab top-left and a caret tab top-right that
-      drops the others as a stack; using one, touching the game or turning the phone folds it. A
-      red dot on the caret means unread messages.
-- [ ] **Menu**: Switch game and Leave table at the top, the Mic part, your name, the sound slider
-      (a cobalt groove with a white knob, end to end), Full screen and the message filter, then
-      Privacy and House rules (they open in a new tab). Menu, Help and Invite always open at the
-      top. On a phone held sideways the felt scrolls with the words.
+- [ ] **Sound slider** in the menu: a cobalt groove with a white knob, end to end. Privacy and House
+      rules open in a new tab. On a phone held sideways the menu scrolls with the words, its
+      heading and Close staying put.
 - [ ] **Full screen on an iPhone** opens "Play full screen" with the Add to Home Screen steps.
       From the home screen icon it's full screen and the button is gone.
 - [ ] **iPhone home screen icon, turning the phone** (first delete the icon and add it again):
@@ -457,7 +499,7 @@ The real check (Amazon Rekognition) only runs on the site.
 
 ## Chat, privacy and the admin page
 
-- [ ] **Chat filter**: every table starts on Hide (****); Menu → message filter switches None,
+- [ ] **Chat filter**: every table starts on Hide (****); the funnel in Messages switches None,
       Hide, Block, and chat says who changed it; slurs stay blocked on None; names with swearing
       are refused; Send greys out for a caught word right after joining. Tell me any harmless
       message it stops.

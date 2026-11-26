@@ -1,13 +1,13 @@
 import { CHAT_FILTER_LABELS, GAME_NAMES, gameInfo, MAX_CHAT_LENGTH, type ChatFilterMode, type ChatMessage, type GameId, type GameServerMessage, type MemberInfo, type ServerMessage, type TableSetup, type VoicePeer } from '@tank/shared';
 import { SOUND_NAMES, type PlayOptions, type Sfx, type SoundName } from './audio';
 import { fetchGameView, gameViewNow } from './gameViews';
-import { LobbyView } from './lobby';
+import { inviteTagHtml, LobbyView, memberTagHtml } from './lobby';
 import { PING_MS, type Net } from './net';
 import { patchHtml } from './dom';
 import { colorCss, escapeHtml } from './html';
 import { reloadIfSiteAnswers } from './reload';
 import type { AsItWas } from './resume';
-import type { Device, ShellApi, View } from './views';
+import type { Device, MicMark, ShellApi, View } from './views';
 import { micUnsupportedText, Voice } from './voice';
 import { moveFocus, type Gamepads, type PadButton, type PadPress } from './gamepad';
 
@@ -38,10 +38,7 @@ type Sheet = (typeof SHEETS)[number];
  * Everything about being in a room that isn't the game: chat, voice, invites, the menu, and
  * the view on screen (the lobby or a game). Chat and voice keep going when the game changes.
  */
-/**
- * The bar folds (as on a phone) in a window narrower than this. Its words in full (Unmute mic,
- * Messages, Invite, Help, Menu) need 600 px; the rest is room for Messages' unread count.
- */
+/** In a window narrower than this, sending a message closes Messages (it covers the table there). */
 const SLIM_BAR_PX = 640;
 /**
  * A window narrower or shorter than this is laid out as a phone is. Phones are under 500 px one
@@ -111,7 +108,6 @@ export class RoomApp {
     $('chat-log').innerHTML = '';
     // Unread marks from the last table don't come along to this one.
     $('chat-unread').hidden = true;
-    $('bar-tab').querySelector<HTMLElement>('.bar-tab-dot')!.hidden = true;
     this.alias = welcome.alias;
     this.room = welcome.room;
     this.membersList = welcome.members;
@@ -128,6 +124,7 @@ export class RoomApp {
     this.liveChat = true;
     this.updateRoomInfo();
     this.renderMic();
+    this.renderMenuPeople();
     this.showGame(welcome.game);
     this.fetchFilter();
     this.pingTimer = window.setInterval(() => this.net.send({ t: 'ping', at: performance.now() }), PING_MS);
@@ -174,6 +171,7 @@ export class RoomApp {
           return shell.voice.micProblem;
         },
         join: () => shell.voice.turnOn(),
+        micOf: (alias: string) => shell.micOf(alias),
       },
       pads: this.pads,
       get chatFilter() {
@@ -197,7 +195,6 @@ export class RoomApp {
     const gameEl = $('game');
     gameEl.classList.remove('landscape-only');
     gameEl.dataset.view = id ?? 'lobby';
-    this.setBarOpen(false);
     // Help: how to play what's on screen (the game picker has its own few words).
     $('help-title').textContent = id ? `How to play ${gameInfo(id).name}` : 'At the table';
     $('help-body').innerHTML = '';
@@ -268,6 +265,7 @@ export class RoomApp {
       case 'members':
         this.membersList = msg.members;
         this.view?.onMembers?.(msg.members);
+        this.renderMenuPeople();
         return;
       case 'table':
         this.tableState = msg.table;
@@ -374,11 +372,50 @@ export class RoomApp {
         this.speaking = aliases;
         if (aliases.has(this.alias)) this.markActive();
         this.view?.onSpeaking?.(aliases);
-        for (const li of document.querySelectorAll<HTMLElement>('#menu-mic [data-peer]')) li.classList.toggle('is-talking', aliases.has(li.dataset.peer!));
+        for (const li of document.querySelectorAll<HTMLElement>('#menu-people [data-alias]')) li.classList.toggle('is-talking', aliases.has(li.dataset.alias!));
       },
     });
     for (const alias of this.mutedPlayers.keys()) v.setPeerMuted(alias, true);
     return v;
+  }
+
+  /**
+   * The menu's "At the table": everyone here as on Your table, each in their own felt, you too,
+   * with the rings that ripple out while someone talks (yours as well). They wrap onto more rows
+   * when they don't fit across.
+   */
+  private renderMenuPeople() {
+    const v = this.voice;
+    const html = this.membersList
+      .map((m) => {
+        const me = m.id === this.alias;
+        // (Someone on the mic whose voice hasn't reached you yet, or can't.)
+        const route = !me && v.inVoice && v.peers.some((p) => p.id === m.id) ? v.routeTo(m.id) : null;
+        const notes = [me ? 'You' : '', m.connected ? '' : 'Away', route === 'connecting' ? 'Connecting…' : route === 'failed' ? 'Couldn’t connect' : ''];
+        return memberTagHtml(m, notes, this.speaking.has(m.id), { mic: this.micOf(m.id), edit: me });
+      })
+      .join('');
+    patchHtml($('menu-people'), html + inviteTagHtml('btn-share'));
+  }
+
+  /** Someone's mic for their name tag; null where there's no voice at all. */
+  private micOf(alias: string): MicMark | null {
+    const v = this.voice;
+    if (!v?.available || !v.supported) return null;
+    if (alias === this.alias) return !v.inVoice ? 'off' : v.selfMuted ? 'muted' : 'on';
+    return v.peers.some((p) => p.id === alias) ? 'on' : 'off';
+  }
+
+  /** Your tag in the menu, tapped: the box to change your name opens under the tags. */
+  private openNameBox(open: boolean) {
+    const row = $('menu-name-row');
+    row.hidden = !open;
+    const input = $<HTMLInputElement>('menu-name');
+    if (open) {
+      input.value = this.membersList.find((m) => m.id === this.alias)?.name ?? input.value;
+      input.focus();
+      input.select();
+    }
   }
 
   private keepForReload() {
@@ -388,8 +425,9 @@ export class RoomApp {
 
   /**
    * The mic button says what it will do (DESIGN.md): Mute mic, Unmute mic, or Turn on mic.
-   * Muted or off is tomato, so it's hard to miss: talking is the point of a table. The menu's
-   * Mic part has who's on the mic (each can be muted just for you) and turning yours off.
+   * Muted or off is tomato, so it's hard to miss: talking is the point of a table. Who's on the
+   * mic shows on everyone's name tag in the menu (user, 2026-11-25: one list of people, not two);
+   * under the tags, turning yours on or off.
    */
   private renderMic() {
     const v = this.voice;
@@ -406,31 +444,18 @@ export class RoomApp {
     btn.textContent = label;
     btn.classList.toggle('pc-btn-main', v.inVoice && !v.selfMuted);
     btn.classList.toggle('pc-btn-alert', !v.inVoice || v.selfMuted);
-    // The lobby shows mic state too.
+    // The lobby shows mic state too, and so do the menu's name tags.
     this.view?.onVoiceChanged?.();
-    const others = v.peers.filter((p) => p.id !== v.alias);
-    let html = '<h3 class="pc-h3">Mic</h3>';
+    this.renderMenuPeople();
+    let html = '';
     if (!v.supported) {
       html += `<p>${micUnsupportedText()}</p>`;
     } else if (!v.inVoice) {
       if (v.micProblem === 'blocked') html += '<p>Your browser is blocking the mic. <button class="pc-link" type="button" data-v="help">Show me how to allow it</button></p>';
       else if (v.micProblem === 'missing') html += '<p>No microphone found. Plug one in (or use headphones with a mic), then tap Turn on mic.</p>';
-      else html += `<p>Your mic is off. ${others.length ? `${others.length === 1 ? 'One person is' : `${others.length} people are`} talking.` : ''}</p>`;
-      html += '<button class="pc-btn pc-btn-main pc-btn-wide" type="button" data-v="join">Turn on mic</button>';
+      html += '<button class="pc-btn pc-btn-main" type="button" data-v="join">Turn on mic</button>';
     } else {
-      if (others.length) {
-        html += '<ul class="mic-people">';
-        for (const p of others) {
-          const muted = v.isPeerMuted(p.id);
-          const route = v.routeTo(p.id);
-          const state = route === 'connecting' ? ' <small>(connecting…)</small>' : route === 'failed' ? ' <small>(couldn’t connect)</small>' : '';
-          html += `<li data-peer="${escapeHtml(p.id)}" class="${this.speaking.has(p.id) ? 'is-talking' : ''}"><span class="pc-talk"><i></i><i></i><i></i></span><span class="mic-name"><span class="pc-nm">${escapeHtml(p.name)}</span>${state}</span><button class="pc-btn pc-btn-plain" type="button" data-v="mute" data-alias="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">${muted ? `Hear ${escapeHtml(p.name)}` : 'Mute for me'}</button></li>`;
-        }
-        html += '</ul>';
-      } else {
-        html += '<p>Nobody else has their mic on yet.</p>';
-      }
-      html += '<button class="pc-btn pc-btn-plain pc-btn-wide" type="button" data-v="leave">Turn my mic off</button>';
+      html += '<button class="pc-btn pc-btn-plain" type="button" data-v="leave">Turn my mic off</button>';
       html += '<p class="pc-small">Headphones keep game sounds out of your mic.</p>';
       if (v.relayOnly) html += '<p class="pc-small">Relay test mode: all voice goes through the relay server.</p>';
     }
@@ -445,10 +470,6 @@ export class RoomApp {
     if (action === 'join') v.turnOn();
     else if (action === 'leave') v.leave();
     else if (action === 'help') this.openSheet('mic-help');
-    else if (action === 'mute') {
-      const alias = el.dataset.alias!;
-      this.mutePlayer(alias, el.dataset.name ?? 'player', !v.isPeerMuted(alias));
-    }
     this.renderMic();
   };
 
@@ -505,7 +526,7 @@ export class RoomApp {
     input.classList.toggle('caught', caught);
   }
 
-  /** The None / Hide / Block switch in the menu. */
+  /** The None / Hide / Block switch, under Messages' heading. */
   private renderFilterSetting() {
     const box = $('menu-filter');
     for (const b of box.querySelectorAll<HTMLElement>('[data-filter]')) {
@@ -552,7 +573,6 @@ export class RoomApp {
     if (this.liveChat && !this.chatOpen && !m.system && !(missed && m.speaker === this.alias)) {
       this.unread++;
       $('chat-unread').hidden = false;
-      $('bar-tab').querySelector<HTMLElement>('.bar-tab-dot')!.hidden = false;
       // It pops up too, so it's read without opening Messages ("Sammy: I can't hear you").
       if (!missed && m.speaker !== this.alias) this.note(m.text.length > 90 ? `${m.text.slice(0, 88).trimEnd()}…` : m.text, m.from);
     }
@@ -577,20 +597,12 @@ export class RoomApp {
     return this.membersList.some((m) => m.id !== this.alias && m.connected && !onMic.has(m.id));
   }
 
-  /** Fold the bar (as on a phone) in a window narrower than SLIM_BAR_PX; unfold it in a wider one. */
+  /** A window narrower than SLIM_BAR_PX (Messages covers the table there, as on a phone). */
   private fitBar(slim: boolean) {
     const game = $('game');
     if (this.device.small || game.classList.contains('slim') === slim) return;
     game.classList.toggle('slim', slim);
-    if (!slim) this.setBarOpen(false);
     requestAnimationFrame(() => this.view?.resize?.());
-  }
-
-  private setBarOpen(open: boolean) {
-    $('game').classList.toggle('bar-open', open);
-    const tab = $('bar-tab');
-    tab.setAttribute('aria-expanded', String(open));
-    tab.setAttribute('aria-label', open ? 'Hide the bar' : 'Show the bar');
   }
 
   /** Open or close Messages; `chosen` when you did it (then it's never opened or closed for you). */
@@ -601,7 +613,6 @@ export class RoomApp {
     if (open) {
       this.unread = 0;
       $('chat-unread').hidden = true;
-      $('bar-tab').querySelector<HTMLElement>('.bar-tab-dot')!.hidden = true;
       const log = $('chat-log');
       log.scrollTop = log.scrollHeight;
     }
@@ -741,7 +752,6 @@ export class RoomApp {
       document.addEventListener(ev, fullscreenLabel);
       this.cleanups.push(() => document.removeEventListener(ev, fullscreenLabel));
     }
-    on('btn-share', () => this.share());
     on('btn-menu', () => this.openSheet($('menu').hidden ? 'menu' : null));
     on('btn-mic', this.onMicButton);
     // At the table, a pinch never zooms the whole page (Safari does that with a trackpad or an
@@ -789,29 +799,6 @@ export class RoomApp {
         $('game').classList.remove('compact');
       });
     }
-    // Tanks on a phone held sideways: the tab pulls the folded bar down and pushes it back up.
-    // Using the bar folds it again (Mute mic a moment later, so you see it change), and so does
-    // touching the battlefield.
-    on('bar-tab', () => this.setBarOpen(!$('game').classList.contains('bar-open')));
-    // Turning the phone folds it too: it was laid out for the way the phone was held.
-    const upright = matchMedia('(orientation: portrait)');
-    const foldOnTurn = () => this.setBarOpen(false);
-    upright.addEventListener('change', foldOnTurn);
-    this.cleanups.push(() => upright.removeEventListener('change', foldOnTurn));
-    const toolbar = $('game').querySelector<HTMLElement>('.toolbar')!;
-    const foldAfterUse = (e: Event) => {
-      const btn = (e.target as HTMLElement).closest('button');
-      if (btn) window.setTimeout(() => this.setBarOpen(false), btn.id === 'btn-mic' ? 700 : 0);
-    };
-    toolbar.addEventListener('click', foldAfterUse);
-    this.cleanups.push(() => toolbar.removeEventListener('click', foldAfterUse));
-    const arena = $('game').querySelector<HTMLElement>('.arena')!;
-    const foldOnPlay = (e: Event) => {
-      const t = e.target as HTMLElement;
-      if (!t.closest('.toolbar, #bar-tab')) this.setBarOpen(false);
-    };
-    arena.addEventListener('pointerdown', foldOnPlay);
-    this.cleanups.push(() => arena.removeEventListener('pointerdown', foldOnPlay));
     on('menu-mic', this.onMicMenuClick);
     on('invite-send', () => void this.sendInvite());
     on('invite-close', () => this.openSheet(null));
@@ -864,9 +851,33 @@ export class RoomApp {
       this.net.send({ t: 'lobby' });
       this.openSheet(null);
     });
-    on('menu-name-save', () => {
+    // Your name: tap your own tag in the menu, change it, Save (or Enter).
+    on('menu-people', (e) => {
+      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+      if (act === 'rename') this.openNameBox($('menu-name-row').hidden);
+      else if (act === 'invite') this.share();
+    });
+    const saveName = () => {
       const name = ($<HTMLInputElement>('menu-name')).value;
       this.net.send({ t: 'name', name });
+      this.openNameBox(false);
+    };
+    on('menu-name-save', saveName);
+    on('menu-name-cancel', () => this.openNameBox(false));
+    const nameKeys = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') saveName();
+      else if (e.key === 'Escape') {
+        e.stopPropagation();
+        this.openNameBox(false);
+      }
+    };
+    $('menu-name').addEventListener('keydown', nameKeys);
+    this.cleanups.push(() => $('menu-name').removeEventListener('keydown', nameKeys));
+    // The message filter: a funnel in Messages' heading opens it under the heading.
+    on('chat-filter-btn', () => {
+      const box = $('menu-filter');
+      box.hidden = !box.hidden;
+      $('chat-filter-btn').setAttribute('aria-expanded', String(!box.hidden));
     });
 
     const form = $<HTMLFormElement>('chat-form');
@@ -1039,12 +1050,13 @@ export class RoomApp {
     for (const id of SHEETS) $(id).hidden = id !== which;
     this.view?.setPaused?.(which === 'menu');
     if (which === 'menu') {
+      this.openNameBox(false);
       this.renderMenuGame();
       this.renderMutedList();
       this.renderMic();
     }
     // Always open at the top, not wherever it was scrolled to last time.
-    if (which) $(which).querySelector<HTMLElement>('.sheet')!.scrollTop = 0;
+    if (which) $(which).querySelector<HTMLElement>('.sheet-body, .sheet')!.scrollTop = 0;
   }
 
   /** The game's own menu actions, above Switch game. */

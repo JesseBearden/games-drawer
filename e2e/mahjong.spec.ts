@@ -19,7 +19,7 @@ test('Mahjong: choose points, roll the dice, then pick a tile and throw it away 
   const tiles = view.locator('.mj-row .mj-h');
   await expect(tiles).toHaveCount(14, { timeout: 10_000 });
   // Your turn shows on your tag (yellow), with Discard; the status line only carries news.
-  await expect(view.locator('.mj-head .ht-seat')).toHaveClass(/turn/, { timeout: 10_000 });
+  await expect(view.locator('.mj-me .ht-seat')).toHaveClass(/turn/, { timeout: 10_000 });
   await expect(view.locator('[data-act="discard"]')).toBeVisible();
   await expect(view.locator('.mj-left')).toContainText('tiles left');
   // Tap a tile to lift it, then Discard.
@@ -30,7 +30,7 @@ test('Mahjong: choose points, roll the dice, then pick a tile and throw it away 
   await view.locator('[data-act="discard"]').click();
   await expect(view.locator('.mj-pond-0 [role="img"]').last()).toHaveAttribute('aria-label', name.replace(' (new)', ''));
   await expect(tiles).toHaveCount(13);
-  // Everyone else's discards and sets: See all discards lists them.
+  // Everyone else's discards and sets: All discards lists them.
   await view.locator('[data-act="discards"]').click();
   await expect(view.locator('.mj-hist')).toHaveCount(4);
   await view.locator('[data-act="close"]').click();

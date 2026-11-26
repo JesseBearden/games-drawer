@@ -15,27 +15,16 @@ test('a table playing Tanks shows the battle @smoke', async ({ page }) => {
   }
   await expect(page.locator('#canvas')).toBeVisible();
   await expect(page.locator('#wind-speed')).not.toBeEmpty();
-  const tab = page.locator('#bar-tab');
-  if (phone) {
-    // Sideways on a phone the bar folds away and the battlefield runs to the top of the screen;
-    // a tab in the corner pulls it down, and using it folds it back up.
-    await expect(tab).toBeVisible();
-    await expect(page.locator('#btn-menu')).toBeHidden();
-    expect((await page.locator('#canvas').boundingBox())!.y).toBe(0);
-    await tab.click();
-    await expect(tab).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('#btn-help')).toBeVisible();
-    await page.locator('#btn-help').click();
-    await expect(page.locator('#help')).toBeVisible();
-    await expect(page.locator('#btn-help')).toBeHidden();
-    await page.locator('#help-close').click();
-    await tab.click();
-  } else {
-    await expect(tab).toBeHidden();
-  }
-  // The bar: mic, invite, help, menu (and Messages).
-  for (const id of ['#btn-mic', '#btn-share', '#btn-help', '#btn-menu']) await expect(page.locator(id)).toBeVisible();
+  // Sideways on a phone the battlefield runs to the top of the screen, under the tabs.
+  if (phone) expect((await page.locator('#canvas').boundingBox())!.y).toBe(0);
+  // The bar: the mic and the menu (and Messages); Invite and Help are in the menu.
+  for (const id of ['#btn-mic', '#btn-menu']) await expect(page.locator(id)).toBeVisible();
+  await expect(page.locator('#btn-help')).toBeHidden();
   // Messages: its button, or the panel itself when it's open (computers start with it open).
   await expect(page.locator('#btn-chat:visible, #chat-input:visible').first()).toBeVisible();
+  await page.locator('#btn-menu').click();
+  await page.locator('#btn-help').click();
+  await expect(page.locator('#help')).toBeVisible();
+  await page.locator('#help-close').click();
   expect(errors).toEqual([]);
 });

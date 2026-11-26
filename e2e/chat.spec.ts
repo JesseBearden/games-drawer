@@ -19,8 +19,10 @@ test('tables star out swearing by default, and anyone can switch the filter', as
   await send.click();
   await expect(friend.locator('#chat-log')).toContainText('well ****');
 
-  // The friend switches to Block from the menu; everyone sees the change.
-  await tapBar(friend, '#btn-menu');
+  // The friend switches to Block from Messages (its funnel); everyone sees the change.
+  if (!(await friend.locator('#chat-input').isVisible())) await tapBar(friend, '#btn-chat');
+  await friend.locator('#chat-filter-btn').click();
+  await expect(friend.locator('#chat-filter-btn')).toHaveAttribute('aria-expanded', 'true');
   await friend.locator('#menu-filter [data-filter="block"]').click();
   await expect(friend.locator('#menu-filter [data-filter="block"]')).toHaveAttribute('aria-checked', 'true');
   await expect(host.locator('#chat-log')).toContainText('set the chat filter to Block');

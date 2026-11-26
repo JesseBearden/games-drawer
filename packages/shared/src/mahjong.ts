@@ -441,7 +441,7 @@ export class MahjongHand {
   flowers: MjTile[][] = [[], [], [], []];
   /** Each seat's discards still on the table (one taken for a set leaves). */
   discards: MjTile[][] = [[], [], [], []];
-  /** Every discard, in order (for "See all discards"). */
+  /** Every discard, in order (for "All discards"). */
   log: MjDiscard[] = [];
   turn: number;
   step: MjStep = 'discard';

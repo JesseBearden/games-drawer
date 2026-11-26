@@ -1,7 +1,7 @@
 import { PROTOCOL_VERSION } from '../packages/shared/src/protocol';
 import { expect, test } from './fixtures';
 import { E2E_ADMIN_PASSWORD } from './testPassword';
-import { at, createRoom, enterName, newPlayer, openBar, tapBar, watchErrors } from './helpers';
+import { at, createRoom, enterName, newPlayer, tapBar, watchErrors } from './helpers';
 
 test('home: start a table or type a code; starting lists the games @smoke', async ({ page }) => {
   const errors = watchErrors(page);
@@ -169,11 +169,15 @@ test('an invite made for someone by name fills it in for them @smoke', async ({ 
 
 test('the bar: Help explains the game, Messages shows only while closed, and leaving goes home', async ({ page }) => {
   await createRoom(page, 'Fay', 'hearts');
-  // On a phone the bar is folded behind a caret tab (only the mic shows); the tab opens it.
-  await openBar(page);
+  // The bar is the mic, Messages and the menu on every screen; Invite and Help are in the menu.
+  await expect(page.locator('#btn-share')).toBeHidden();
+  await page.locator('#btn-menu').click();
   await expect(page.locator('#btn-share')).toBeVisible();
+  // Who's at the table, you included, as on Your table.
+  await expect(page.locator('#menu-people li[data-alias]')).toHaveText(['FayYou']);
   // Help: how to play the game on screen.
   await page.locator('#btn-help').click();
+  await expect(page.locator('#menu')).toBeHidden();
   await expect(page.locator('#help-title')).toHaveText('How to play Hearts');
   await expect(page.locator('#help-body')).toContainText('Pass 3 cards');
   await page.locator('#help-close').click();
@@ -184,7 +188,6 @@ test('the bar: Help explains the game, Messages shows only while closed, and lea
   await expect(page.locator('#chat-input')).toBeVisible();
   await expect(btn).toBeHidden();
   await page.locator('#chat-collapse').click();
-  await openBar(page);
   await expect(btn).toBeVisible();
   await tapBar(page, '#btn-menu');
   await page.locator('#menu-leave').click();

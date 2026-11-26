@@ -2,7 +2,7 @@ import { isOffered, choosesPlayers, GAMES, SEAT_FILL_ORDER, gameInfo, isGameId, 
 import { patchHtml } from './dom';
 import { personFelt } from './felts';
 import { escapeHtml } from './html';
-import type { ShellApi, View } from './views';
+import type { MicMark, ShellApi, View } from './views';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -34,6 +34,40 @@ function focusKey(el: HTMLElement): string | null {
 const SEAT_PLACE = ['s-near', 's-left', 's-far', 's-right'];
 /** Mahjong goes round the other way (counter-clockwise): the next player is on your right. */
 const SEAT_PLACE_CCW = ['s-near', 's-right', 's-far', 's-left'];
+
+const MIC_PATH = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>';
+const MIC_SVG: Record<MicMark, string> = {
+  on: `<svg viewBox="0 0 24 24" aria-hidden="true">${MIC_PATH}</svg>`,
+  // Muted and off: the mic struck through (muted in tomato, off in grey).
+  muted: `<svg viewBox="0 0 24 24" aria-hidden="true">${MIC_PATH}<path d="M4 3l16 18"/></svg>`,
+  off: `<svg viewBox="0 0 24 24" aria-hidden="true">${MIC_PATH}<path d="M4 3l16 18"/></svg>`,
+};
+const MIC_WORDS: Record<MicMark, string> = { on: 'Mic on', muted: 'Mic muted', off: 'Mic off' };
+
+/**
+ * Someone's name tag, in their own felt (the colour their name has in the games too), with the
+ * rings that ripple out while they talk, a mark for their mic (user, 2026-11-25: who's on the mic
+ * is part of who's here) and small notes under the name ("You · Ready"). Your table's and the
+ * menu's. `edit`: yours in the menu, a button that opens the box to change your name.
+ */
+export function memberTagHtml(m: MemberInfo, notes: string[], talking: boolean, opts: { extraClass?: string; mic?: MicMark | null; edit?: boolean } = {}): string {
+  const note = notes.filter(Boolean).join(' · ');
+  const mic = opts.mic ? `<span class="pc-mic is-${opts.mic}" role="img" aria-label="${MIC_WORDS[opts.mic]}" title="${MIC_WORDS[opts.mic]}">${MIC_SVG[opts.mic]}</span>` : '';
+  const pencil = opts.edit ? '<span class="pc-edit" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></svg></span>' : '';
+  // (The pencil goes by the name it changes, the mic after it: user, 2026-11-25.)
+  const inner = `<b><span class="pc-talk"></span><span class="pc-nm">${escapeHtml(m.name)}</span>${pencil}${mic}</b>${note ? `<span class="pc-note">${note}</span>` : ''}`;
+  const cls = `pc-tag${m.connected ? '' : ' is-away'}${opts.extraClass ?? ''}${opts.edit ? ' is-editable' : ''}${talking ? ' is-talking' : ''}`;
+  const body = opts.edit ? `<button class="pc-tag-btn" type="button" data-act="rename" aria-label="${escapeHtml(m.name)}: change your name">${inner}</button>` : inner;
+  return `<li data-alias="${escapeHtml(m.id)}" data-felt="${personFelt(m.color)}" class="${cls}">${body}</li>`;
+}
+
+/**
+ * Invite someone, as the next name tag along (user, 2026-11-25): an empty tag with a big + in
+ * the middle, after everyone who's here. A button, so it stands up. `id`: the menu's has one.
+ */
+export function inviteTagHtml(id = ''): string {
+  return `<li class="pc-tag pc-tag-add"><button${id ? ` id="${id}"` : ''} class="pc-tag-btn" type="button" data-act="invite" aria-label="Invite someone" title="Invite someone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></li>`;
+}
 
 /**
  * The table, between games: where people gather before playing. Who's here (and who's ready),
@@ -96,12 +130,11 @@ export class LobbyView implements View {
     // (The parts have keys, so one coming or going doesn't rebuild the buttons in the next.)
     html += '<section class="tb-here" data-key="here"><ul class="lobby-people">';
     for (const m of this.members) {
-      const isReady = t.pick && ready.has(m.id);
-      const notes = [m.id === s.alias ? 'You' : '', m.connected ? '' : 'Away', isReady ? 'Ready' : ''].filter(Boolean).join(' · ');
-      // In their own felt, the colour their name has in the game too.
-      html += `<li data-alias="${escapeHtml(m.id)}" data-felt="${personFelt(m.color)}" class="pc-tag${m.connected ? '' : ' is-away'}${isReady ? ' is-ready' : ''}${this.speaking.has(m.id) ? ' is-talking' : ''}"><b><span class="pc-talk"></span><span class="pc-nm">${escapeHtml(m.name)}</span></b>${notes ? `<span class="pc-note">${notes}</span>` : ''}</li>`;
+      const isReady = !!t.pick && ready.has(m.id);
+      const notes = [m.id === s.alias ? 'You' : '', m.connected ? '' : 'Away', isReady ? 'Ready' : ''];
+      html += memberTagHtml(m, notes, this.speaking.has(m.id), { extraClass: isReady ? ' is-ready' : '', mic: s.voice.micOf(m.id) });
     }
-    html += '</ul><button class="pc-btn pc-btn-plain tb-invite" data-act="invite" type="button">Invite someone</button></section>';
+    html += `${inviteTagHtml()}</ul></section>`;
 
     if (s.voice.available && !s.voice.inVoice) {
       const why =

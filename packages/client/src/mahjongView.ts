@@ -1,7 +1,7 @@
 import './mahjong.css';
 import { CARD_SOUNDS } from './audio';
 import {
-  mjClaimWhyNot,
+  mjClaimShow,
   mjIndex,
   mjLostClaim,
   mjMissedClaim,
@@ -15,10 +15,10 @@ import {
   type MahjongView,
   type MjClaim,
   type MjClaimKind,
+  type MjClaimShow,
   type MjLearnChoice,
   type MjMeld,
   type MjTile,
-  type MjWhyNot,
 } from '@tank/shared';
 import { seatFelts } from './felts';
 import { patchHtml, syncKeyed, type KeyedItem } from './dom';
@@ -40,6 +40,46 @@ const DEAL_MS = 2200;
 const DRAG_SLOP = 8;
 
 type Overlay = null | 'scores' | 'discards' | { seat: number };
+
+/**
+ * The table is laid out at one of a few fixed sizes and scaled to fit the screen, rather than
+ * reflowing for every screen (user, 2026-11-25): what fits at a design's size fits everywhere it's
+ * used. A phone upright, a phone on its side, and the whole table with its wall for tablets and
+ * computers (on their side or upright). Between the upright phone and the whole table, an upright
+ * window with a little more room keeps the phone's table but has your buttons in their block of
+ * four beside your tiles (`block`, user, 2026-11-25). The whole table whenever it fits at
+ * MJ_ROOMY_LEAST of its size or more (smaller, its words would be too small); otherwise whichever
+ * other design fills more of the screen (the block one only at that size or more too). The felt
+ * around the design runs to the screen's edges, your strip with it.
+ */
+export const MJ_DESIGNS = [
+  { layout: 'tall', w: 390, h: 660, block: false },
+  { layout: 'tall', w: 560, h: 680, block: true },
+  { layout: 'wide', w: 760, h: 350, block: false },
+  { layout: 'roomy', w: 900, h: 640, block: false },
+  { layout: 'roomy', w: 780, h: 980, block: false },
+] as const;
+export type MjDesign = (typeof MJ_DESIGNS)[number];
+export const MJ_ROOMY_LEAST = 0.85;
+/** No bigger than this on a big screen: past it the table stays this size, with felt round it. */
+export const MJ_MAX_SCALE = 1.4;
+
+/** The design for a screen `w` × `h` (px, inside its safe area), and its scale. */
+export function mjDesignFor(w: number, h: number): { d: MjDesign; s: number } {
+  const all = MJ_DESIGNS.map((d) => {
+    const s = Math.min(MJ_MAX_SCALE, w / d.w, h / d.h);
+    // (How much of the screen it fills.)
+    return { d, s, fill: (s * d.w * s * d.h) / (w * h) };
+  });
+  // (The whole table the way the screen is turned, if it fits; on a big screen both fit at the
+  // most, and the upright one would fill more of a wide screen than the wide one.)
+  const roomy = all.filter((x) => x.d.layout === 'roomy' && x.s >= MJ_ROOMY_LEAST);
+  const turned = roomy.filter((x) => x.d.h > x.d.w === h > w);
+  const others = all.filter((x) => x.d.layout !== 'roomy' && (!x.d.block || x.s >= MJ_ROOMY_LEAST));
+  const pool = turned.length ? turned : roomy.length ? roomy : others;
+  const best = pool.reduce((a, b) => (b.fill > a.fill ? b : a));
+  return { d: best.d, s: best.s };
+}
 
 /** "5 dots", "East wind", "Red dragon", "Flower 2". */
 export const tileName = mjTileName;
@@ -161,6 +201,8 @@ export class MahjongTable implements View {
   private drag: { key: string; el: HTMLElement; x: number; y: number; id: number; moving: boolean } | null = null;
   private noClickUntil = 0;
   private observer = new ResizeObserver(() => this.layout());
+  /** The table's scale on screen (see MJ_DESIGNS): screen px per px of the design. */
+  private scale = 1;
   private timers: number[] = [];
   /** We asked the page to scroll so the browser's bars can tuck away (undone on leaving). */
   private untuck: () => void;
@@ -169,10 +211,10 @@ export class MahjongTable implements View {
   /** The deal being shown: when it started, and how many steps of it are on screen. */
   private deal: { at: number; done: number; timer: number } | null = null;
   /**
-   * Learning Mode, the tile on offer (which one, by offerKey): the choice explained (its tiles lit
-   * in your hand), "are you sure" before passing on your winning tile, or picking between Chows.
+   * Learning Mode, the tile on offer (which one, by offerKey): the play you tapped, shown on the
+   * card (its tiles lit in your hand), or 'pass' when passing would throw away your winning tile.
    */
-  private learn: { key: string; why: MjWhyNot | null; confirm: boolean; chows: boolean } | null = null;
+  private learn: { key: string; pick: MjLearnChoice | 'pass' | null; show: MjClaimShow | null; run: MjTile | null } | null = null;
   /** Learning Mode, your own turn: the tiles an explanation is about, and "are you sure" before throwing away a winning hand. */
   private turnHelp: MjTile[] = [];
   private turnConfirm = false;
@@ -185,6 +227,7 @@ export class MahjongTable implements View {
   constructor(private shell: ShellApi) {
     this.el.hidden = false;
     this.el.innerHTML = `
+      <div class="mj-stage">
       <div class="mj" data-layout="tall">
         <div class="mj-op mj-pos-2" data-seat-pos="2"></div>
         <div class="mj-op mj-pos-3" data-seat-pos="3"></div>
@@ -198,17 +241,19 @@ export class MahjongTable implements View {
             <div class="mj-pond mj-pond-1"></div>
             <div class="mj-pond mj-pond-0"></div>
           </div>
-          <div class="mj-round"></div>
         </div>
+        <div class="mj-me"><div class="ht-seat ht-pos-0"></div><span class="mj-myflowers"></span></div>
         <div class="mj-mine">
-          <div class="mj-head"><div class="ht-seat ht-pos-0"></div><span class="mj-myflowers"></span><p class="mj-status" aria-live="polite"></p><button class="pc-btn pc-btn-plain mj-scores-btn" type="button">Scores</button></div>
           <div class="mj-hand"></div>
           <div class="mj-actions"></div>
         </div>
+        <p class="mj-status" aria-live="polite"></p>
         <div class="mj-learn" hidden></div>
         <p class="mj-tip" role="status" hidden></p>
-        <div class="ht-overlay mj-overlay" hidden></div>
-      </div>`;
+      </div>
+      </div>
+      <div class="ht-overlay mj-overlay" hidden></div>
+      <div class="mj-safe" aria-hidden="true"></div>`;
     this.el.addEventListener('click', this.onClick);
     const hand = this.handEl();
     hand.addEventListener('pointerdown', this.onPointerDown);
@@ -311,10 +356,12 @@ export class MahjongTable implements View {
   }
 
   /**
-   * Learning Mode (user, 2026-11-24): someone else's tile is on offer, and a card over the table
-   * asks what you'd do with it: the tile big, Pung, Chow, Kong, Mahjong and Pass (all one size,
-   * Pass in its own colour), what can't be done explained under them, and See all discards. It
-   * leaves your tiles in view. There's no timer.
+   * Learning Mode (user, 2026-11-24; laid out again 2026-11-25): someone else's tile is on offer,
+   * and a card over the table asks what you'd do with it. At the top the tile and its name; then
+   * Pung, Chow, Kong and Mahjong. Tapping one shows what it takes, "To make a Pung": the tiles
+   * from your hand (the ones you're missing dashed), plus the discard, and a sentence. One you
+   * can make offers its own button beside Pass; until you tap one the card says "Make a play or
+   * pass to continue". Pass on your winning tile asks first. There's no timer.
    */
   private renderLearn() {
     const v = this.view!;
@@ -328,51 +375,111 @@ export class MahjongTable implements View {
       return;
     }
     const key = offerKey(v);
-    if (this.learn?.key !== key) this.learn = { key, why: null, confirm: false, chows: false };
+    if (this.learn?.key !== key) this.learn = { key, pick: null, show: null, run: null };
     const L = this.learn;
-    const run = (lo: MjTile) => [0, 1, 2].map((k) => tileHtml(mjSortRun(lo)[k], 'mj-mini')).join('');
-    let html = `<div class="ht-panel mj-learn-card" role="dialog" aria-label="What will you do with this tile?"><p class="mj-learn-who">${nameHtml(this.name(offer.seat))} ${offer.kong ? 'added to a Pung' : 'threw away'}</p>`;
-    html += `${tileHtml(offer.tile, 'mj-learn-tile')}<p class="mj-learn-name">${tileName(offer.tile)}</p>`;
-    if (L.confirm) {
-      html += '<p class="mj-learn-why">Are you sure? This tile finishes your hand.</p><div class="mj-learn-btns mj-learn-two">';
-      html += '<button class="pc-btn pc-btn-plain" data-learn="win" type="button"><span>Mahjong</span></button><button class="pc-btn pc-btn-main mj-learn-pass" data-learn="pass-anyway" type="button"><span>Pass anyway</span></button></div>';
-    } else if (L.chows) {
-      html += '<p class="mj-learn-why">Which Chow?</p><div class="mj-learn-btns mj-learn-two">';
-      for (const lo of o.chows) html += `<button class="pc-btn pc-btn-plain mj-chow" data-claim="chow" data-chow="${lo}" type="button"><span class="mj-run">${run(lo)}</span></button>`;
-      html += '<button class="pc-btn pc-btn-plain" data-learn="back" type="button"><span>Back</span></button></div>';
+    let html = '<div class="ht-panel mj-learn-card" role="dialog" aria-label="What will you do with this tile?">';
+    html += `<div class="mj-learn-head">${tileHtml(offer.tile, 'mj-learn-tile')}<p><span class="mj-learn-who">${nameHtml(this.name(offer.seat))} ${offer.kong ? 'added to a Pung' : 'discarded'}</span><b class="mj-learn-name">${tileName(offer.tile)}</b></p></div>`;
+    // (The play you picked wears a blue ring; tap it again to put it down, or tap another.)
+    // (Just the names: picking one explains it. User, 2026-11-25.)
+    const b = (c: string, label: string) => `<button class="pc-btn pc-btn-plain${L.pick === c ? ' is-picked' : ''}" data-learn="${c}" type="button" aria-pressed="${L.pick === c}">${label}</button>`;
+    html += `<div class="mj-learn-btns">${b('pung', 'Pung')}${b('chow', 'Chow')}${b('kong', 'Kong')}${b('win', 'Mahjong')}</div>`;
+    // What the play you picked takes (its room is always kept, so nothing moves as it changes).
+    const s = L.show;
+    let shown = '';
+    let go = '<button class="pc-btn pc-btn-main" data-learn="pass" type="button">Pass</button>';
+    if (L.pick === 'pass') {
+      shown = '<p class="mj-learn-title">This tile wins you the hand</p><p class="mj-learn-why">It finishes your hand: four sets and a pair. Go Mahjong, or pass anyway?</p>';
+      go = '<button class="pc-btn pc-btn-main" data-learn="go-win" type="button">Mahjong</button><button class="pc-btn pc-btn-plain" data-learn="pass-anyway" type="button">Pass anyway</button>';
+    } else if (s && L.pick === 'chow' && s.can && o.chows.length > 1) {
+      // More than one run: pick one (it wears the ring), then Confirm.
+      const runs = o.chows.map((lo) => `<button class="pc-btn pc-btn-plain mj-learn-run${L.run === lo ? ' is-picked' : ''}" data-learn-run="${lo}" type="button" aria-pressed="${L.run === lo}" aria-label="Chow ${mjSortRun(lo).map(tileName).join(', ')}">${mjSortRun(lo).map((t) => tileHtml(t, t === offer.tile ? 'mj-learn-disc' : '')).join('')}</button>`);
+      shown = `<p class="mj-learn-title">${s.title}</p><div class="mj-learn-runs">${runs.join('')}</div><p class="mj-learn-why">You can make ${o.chows.length === 2 ? 'two runs' : 'three runs'} with it: pick one.</p>`;
+      go = `<button class="pc-btn pc-btn-main" data-learn="go" type="button"${L.run ? '' : ' disabled'}>Confirm</button>`;
+    } else if (s) {
+      shown = `<p class="mj-learn-title">${s.title}</p>${s.hand ? this.learnPicture(s.hand, offer.tile) : ''}<p class="mj-learn-why">${escapeHtml(s.text)}</p>`;
+      // A play you can make: Confirm makes it (put the play down to pass instead).
+      if (s.can) go = '<button class="pc-btn pc-btn-main" data-learn="go" type="button">Confirm</button>';
     } else {
-      const b = (c: string, label: string, sub: string) => `<button class="pc-btn pc-btn-plain" data-learn="${c}" type="button"><span>${label}</span><small>${sub}</small></button>`;
-      html += `<div class="mj-learn-btns">${b('pung', 'Pung', '3 of a kind')}${b('chow', 'Chow', 'Run')}${b('kong', 'Kong', '4 of a kind')}${b('win', 'Mahjong', '')}`;
-      html += '<button class="pc-btn pc-btn-main mj-learn-pass" data-learn="pass" type="button"><span>Pass</span><small></small></button></div>';
-      // (Its room is kept when there's nothing to say, so the card doesn't move when there is.)
-      html += `<p class="mj-learn-why">${L.why ? escapeHtml(L.why.text) : ''}</p>`;
+      shown = '<p class="mj-learn-hint">Make a play or pass to continue</p>';
     }
-    html += '<button class="pc-btn pc-btn-plain mj-learn-all" data-act="discards" type="button">See all discards</button></div>';
+    html += `<div class="mj-learn-show">${shown}</div>`;
+    html += `<div class="mj-learn-go">${go}</div>`;
+    html += '<button class="mj-learn-all" data-act="discards" type="button">All discards</button></div>';
     patchHtml(box, html);
+    this.fitLearn();
   }
 
-  /** Learning Mode: a choice on the card. One that can't be made is explained; Pass on your winning tile asks first. */
+  /**
+   * The Learning card never scrolls (user, 2026-11-25): when its space is shorter (or narrower)
+   * than the card, the whole card is scaled down to fit. Its height doesn't change from play to
+   * play, so neither does the scale.
+   */
+  private learnFit: ResizeObserver | null = null;
+  private fitLearn() {
+    const box = this.el.querySelector<HTMLElement>('.mj-learn');
+    const card = box?.querySelector<HTMLElement>('.mj-learn-card');
+    if (!box || box.hidden || !card) return;
+    // (Again whenever the card or its space changes size: a late font, the phone turned. The
+    // scale doesn't change either's own size, so this can't loop.)
+    if (!this.learnFit && typeof ResizeObserver !== 'undefined') this.learnFit = new ResizeObserver(() => this.fitLearn());
+    this.learnFit?.observe(box);
+    this.learnFit?.observe(card);
+    const cs = getComputedStyle(box);
+    const h = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const w = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    // (offsetWidth/Height are the card's own size, before the scale.)
+    const k0 = Math.min(1, h / card.offsetHeight, w / card.offsetWidth);
+    const k = k0 > 0 ? k0 : 1;
+    box.style.setProperty('--learn-k', k.toFixed(4));
+    box.style.setProperty('--learn-y', `${Math.max(0, (h - card.offsetHeight * k) / 2).toFixed(1)}px`);
+  }
+
+  /** The picture of a play: "Your hand" (the tiles it takes, the missing ones dashed) + the discard. */
+  private learnPicture(hand: { tile: MjTile; have: boolean }[], tile: MjTile): string {
+    const have = hand.filter((x) => x.have).length;
+    const tiles = hand.map((x) => tileHtml(x.tile, x.have ? '' : 'mj-missing')).join('');
+    const cap = `Need ${hand.length} · You have ${have}`;
+    return `<div class="mj-learn-pic"><div class="mj-pic-hand"><span class="mj-pic-label">Your hand</span><span class="mj-pic-tiles">${tiles}</span><span class="mj-pic-cap">${cap}</span></div><span class="mj-pic-plus" aria-hidden="true">+</span><div class="mj-pic-disc"><span class="mj-pic-label">Discard</span><span class="mj-pic-tiles">${tileHtml(tile)}</span><span class="mj-pic-cap"></span></div></div>`;
+  }
+
+  /** Learning Mode: a choice on the card. Tapping a play shows it; its own button then makes it. Pass on your winning tile asks first. */
   private onLearn(c: string) {
     const v = this.view!;
     const L = this.learn;
     const o = v.options;
     const offer = v.offer;
     if (!L || !o || !offer || v.seat === null || this.pending) return;
-    if (c === 'back') {
-      L.chows = false;
-      return this.renderLearn();
-    }
-    if (c === 'pass' && o.win) {
-      L.confirm = true;
-      L.why = null;
-      return this.renderLearn();
+    if (c === 'pass' && o.win && L.pick !== 'pass') {
+      L.pick = 'pass';
+      L.show = null;
+      this.renderLearn();
+      return this.renderMine();
     }
     if (c === 'pass' || c === 'pass-anyway') {
       this.sendClaim({ t: 'pass' });
       this.showTip(mjMissedClaim(o, offer.tile, v.tiles));
       return;
     }
-    const why = mjClaimWhyNot(c as MjLearnChoice, {
+    if (c === 'go-win') return this.sendClaim({ t: 'win' });
+    if (c === 'go') {
+      if (!L.show?.can || !L.pick || L.pick === 'pass') return;
+      if (L.pick === 'chow') {
+        const chow = o.chows.length > 1 ? L.run : o.chows[0];
+        return chow ? this.sendClaim({ t: 'chow', chow }) : undefined;
+      }
+      return this.sendClaim({ t: L.pick as MjClaimKind });
+    }
+    // Tapping the play you'd picked puts it down again.
+    if (c === L.pick) {
+      L.pick = null;
+      L.show = null;
+      L.run = null;
+      this.renderLearn();
+      return this.renderMine();
+    }
+    L.run = null;
+    L.pick = c as MjLearnChoice;
+    L.show = mjClaimShow(L.pick, {
       tile: offer.tile,
       hand: v.tiles,
       addedKong: offer.kong,
@@ -382,18 +489,10 @@ export class MahjongTable implements View {
       names: v.seats.map((s) => s.name),
       options: o,
     });
-    if (why) {
-      L.why = why;
-      L.confirm = false;
-      this.renderLearn();
-      return this.renderMine();
-    }
-    if (c === 'chow' && o.chows.length > 1) {
-      L.chows = true;
-      L.why = null;
-      return this.renderLearn();
-    }
-    this.sendClaim(c === 'chow' ? { t: 'chow', chow: o.chows[0] } : { t: c as MjClaimKind });
+    // (More than one run you could make: light up all their tiles.)
+    if (L.pick === 'chow' && L.show.can && o.chows.length > 1) L.show.help = [...new Set(o.chows.flatMap((lo) => mjSortRun(lo)).filter((t) => t !== offer.tile))];
+    this.renderLearn();
+    this.renderMine();
   }
 
   private sendClaim(c: MjClaim) {
@@ -419,7 +518,7 @@ export class MahjongTable implements View {
   private helpTiles(): MjTile[] {
     const v = this.view;
     if (!v || !this.learning()) return [];
-    if (this.learn && v.offer && this.learn.key === offerKey(v) && this.learn.why) return this.learn.why.help;
+    if (this.learn && v.offer && this.learn.key === offerKey(v) && this.learn.show) return this.learn.show.help;
     return this.myTurnToDiscard() ? this.turnHelp : [];
   }
 
@@ -436,8 +535,10 @@ export class MahjongTable implements View {
     const word = meld.kind === 'chow' ? 'Chow!' : meld.kind === 'pung' ? 'Pung!' : 'Kong!';
     const root = this.q('.mj');
     const box = root.getBoundingClientRect();
+    // (Measured on screen; placed in the table's own px, which the scale enlarges.)
+    const k = 1 / this.scale;
     const p = this.pos(made.seat);
-    const tag = p === 0 ? this.q('.mj-head .ht-seat') : this.q(`.mj-pos-${p} .ht-seat`);
+    const tag = p === 0 ? this.q('.mj-me .ht-seat') : this.q(`.mj-pos-${p} .ht-seat`);
     const t = tag?.getBoundingClientRect();
     if (t) {
       const pop = document.createElement('div');
@@ -445,8 +546,8 @@ export class MahjongTable implements View {
       pop.textContent = word;
       pop.setAttribute('aria-hidden', 'true');
       // Beside their tag, toward the middle of the table.
-      const x = p === 3 ? t.right - box.left + 10 : p === 1 ? t.left - box.left - 10 : t.left - box.left + t.width / 2;
-      const y = p === 2 ? t.bottom - box.top + 8 : p === 0 ? t.top - box.top - 8 : t.top - box.top + t.height / 2;
+      const x = p === 3 ? (t.right - box.left) * k + 10 : p === 1 ? (t.left - box.left) * k - 10 : (t.left - box.left + t.width / 2) * k;
+      const y = p === 2 ? (t.bottom - box.top) * k + 8 : p === 0 ? (t.top - box.top) * k - 8 : (t.top - box.top + t.height / 2) * k;
       pop.style.left = `${x}px`;
       pop.style.top = `${y}px`;
       root.append(pop);
@@ -464,12 +565,12 @@ export class MahjongTable implements View {
     const turn = turned ? getComputedStyle(set!).getPropertyValue('--turn').trim() || '90deg' : '0deg';
     const fly = document.createElement('span');
     fly.className = turned ? 'mj-t mj-flying mj-sideways' : 'mj-t mj-flying';
-    fly.setAttribute('style', `${sprite(mjIndex(taken))};--w:${turned ? to.height : to.width}px;--turn:${turn};left:${to.left - box.left}px;top:${to.top - box.top}px`);
+    fly.setAttribute('style', `${sprite(mjIndex(taken))};--w:${(turned ? to.height : to.width) * k}px;--turn:${turn};left:${(to.left - box.left) * k}px;top:${(to.top - box.top) * k}px`);
     root.append(fly);
     dest.style.visibility = 'hidden';
     const s = from.width / (turned ? to.height : to.width);
-    const dx = from.left + from.width / 2 - (to.left + to.width / 2);
-    const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+    const dx = (from.left + from.width / 2 - (to.left + to.width / 2)) * k;
+    const dy = (from.top + from.height / 2 - (to.top + to.height / 2)) * k;
     const anim = fly.animate(
       [
         { transform: `translate(${dx}px, ${dy}px) rotate(calc(${turn} * -1)) scale(${s})`, transformOrigin: 'center' },
@@ -512,10 +613,14 @@ export class MahjongTable implements View {
   }
 
   /** How many tiles a seat holds, or before the deal how many they will (the dealer 14). */
-  private tilesOf(seat: number): number {
-    const v = this.view!;
-    const n = v.seats[seat].tiles;
-    return v.phase === 'opening' && !n ? (seat === v.dealer ? 14 : 13) : n;
+  /**
+   * The room someone's hidden tiles keep: the most they can hold (14, three fewer for each set
+   * face up), from the deal until the next shuffle. So nothing moves as they draw and throw away
+   * (user, 2026-11-25: the table jumped every turn).
+   */
+  private roomOf(seat: number): number {
+    const s = this.view!.seats[seat];
+    return Math.max(s.tiles, 14 - 3 * s.melds.length);
   }
 
   /** While the deal is on screen: what's been dealt so far (null when there's no deal to show). */
@@ -641,7 +746,7 @@ export class MahjongTable implements View {
     for (let seat = 0; seat < 4; seat++) {
       const s = v.seats[seat];
       const p = this.pos(seat);
-      const el = p === 0 ? this.q('.mj-head .ht-seat') : this.q(`.mj-pos-${p}`).querySelector<HTMLElement>('.ht-seat');
+      const el = p === 0 ? this.q('.mj-me .ht-seat') : this.q(`.mj-pos-${p}`).querySelector<HTMLElement>('.ht-seat');
       if (!el) continue;
       const wind = `<b class="mj-wind" title="${WIND_NAMES[s.wind]}${s.wind === 0 ? ', the dealer' : ''}">${WIND_LETTERS[s.wind]}</b>`;
       const you = p === 0 ? '<span class="mj-you">· You</span>' : '';
@@ -653,7 +758,7 @@ export class MahjongTable implements View {
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
-    if (changed) fitSeatText(this.el);
+    if (changed) fitSeatText(this.el, this.scale);
   }
 
   /** Everyone else: their tag, their tiles face down, and their sets and flowers face up. */
@@ -667,13 +772,16 @@ export class MahjongTable implements View {
       const btn = box.querySelector<HTMLElement>('.mj-theirs')!;
       btn.setAttribute('aria-label', `${s.name}: ${s.tiles} tile${s.tiles === 1 ? '' : 's'}${s.melds.length ? `, ${s.melds.length} set${s.melds.length === 1 ? '' : 's'} face up` : ''}. Show them bigger.`);
       const dealt = this.dealt();
-      // Through the opening their whole hand's room is kept from the start (tiles not dealt yet
-      // are there but unseen), so nothing on the table moves as the tiles arrive (user, 2026-11-24).
+      // Their whole hand's room is kept from the start (tiles not dealt yet, or not drawn yet, are
+      // there but unseen), so nothing on the table moves as the tiles arrive (user, 2026-11-24) or
+      // as they draw and throw away (2026-11-25).
       const opening = v.phase === 'opening';
       const shown = dealt ? Math.min(s.tiles, dealt.seats[seat]) : opening && v.opening !== 'deal' ? 0 : s.tiles;
-      patchHtml(btn.querySelector('.mj-backs')!, tileHtml(null).repeat(shown) + (opening ? tileHtml(null, 'mj-ghost').repeat(Math.max(0, this.tilesOf(seat) - shown)) : ''));
+      patchHtml(btn.querySelector('.mj-backs')!, tileHtml(null).repeat(shown) + tileHtml(null, 'mj-ghost').repeat(Math.max(0, this.roomOf(seat) - shown)));
       const sets = dealt ? '' : s.melds.map((m, i) => setHtml(m, this.fresh?.seat === seat && this.fresh.index === i ? 'mj-fresh' : '')).join('') + (s.flowers.length ? `<span class="mj-set mj-flowers">${s.flowers.map((f) => tileHtml(f, 'mj-flower')).join('')}</span>` : '');
-      patchHtml(btn.querySelector('.mj-sets')!, sets);
+      // With no sets yet, the room for one is kept (unseen), so the first flower or set, often
+      // at the end of the deal, doesn't push the table about (user, 2026-11-25).
+      patchHtml(btn.querySelector('.mj-sets')!, sets || `<span class="mj-set mj-flowers mj-ghost">${tileHtml(null, 'mj-flower')}</span>`);
       btn.classList.toggle('has-sets', !!sets);
     }
   }
@@ -711,7 +819,7 @@ export class MahjongTable implements View {
       }
       patchHtml(el, html);
     }
-    // The middle of the middle: the opening, or See all discards and what's left.
+    // The middle of the middle: the opening, or All discards and what's left.
     const c = this.q('.mj-centre');
     let html = '';
     if (v.phase === 'opening') {
@@ -735,12 +843,13 @@ export class MahjongTable implements View {
         html += `<p class="mj-note">${v.dice ? `${v.dice.join(' + ')} = ${v.dice.reduce((a, b) => a + b, 0)}` : v.dealer === v.seat ? 'You deal: roll the dice' : `${nameHtml(this.name(v.dealer))} rolls the dice`}</p>`;
       }
     } else {
-      // (On a phone held sideways your strip is one row: Scores and the line saying what's
-      // happening come here instead, mahjong.css.)
-      html = `<button class="pc-btn pc-btn-plain mj-all" type="button" data-act="discards">See all discards</button><button class="pc-btn pc-btn-plain mj-scores-btn mj-scores-mid" type="button">Scores</button><p class="mj-note mj-left">${v.wall.left} tiles left</p><p class="mj-note mj-mid-status" aria-hidden="true">${this.statusText()}</p>`;
+      // (The line saying what's happening is here, under the tiles left. With points the round's
+      // wind is by the tiles left: a Pung of it scores. Without, it changes nothing, so it's only
+      // in the Scores sheet. User, 2026-11-25.)
+      const round = v.rules.points ? ` · ${WIND_NAMES[v.prevailing]} round` : '';
+      html = `<button class="pc-btn pc-btn-plain mj-all" type="button" data-act="discards">All discards</button><p class="mj-note mj-left">${v.wall.left} tiles left${round}</p><p class="mj-note mj-mid-status" aria-hidden="true">${this.statusText()}</p>`;
     }
     patchHtml(c, html);
-    patchHtml(this.q('.mj-round'), `${WIND_NAMES[v.prevailing]} round`);
   }
 
   private renderMine() {
@@ -809,18 +918,25 @@ export class MahjongTable implements View {
     return '';
   }
 
-  /** The buttons under your tiles: Discard, Mahjong and Kongs on your turn; the claims when a tile's on offer; the dice. */
+  /**
+   * Your buttons: Discard, Mahjong and Kongs on your turn; the claims when a tile's on offer; the
+   * dice. Scores is always with them (user, 2026-11-25), beside Discard: a block of four, Mahjong
+   * and Kong over Scores and Discard, beside your tiles, or a row under them on a phone.
+   */
   private renderActions() {
     const v = this.view!;
     const box = this.q('.mj-actions');
     // (A new offer restarts the timer: keyed by what's on offer.)
     const key = v.options && v.offer ? `${v.offer.seat}${v.offer.tile}${v.log.length}` : '';
+    const scores = '<button class="pc-btn pc-btn-plain mj-scores-btn" type="button">Scores</button>';
     let html = '';
     if (v.phase === 'opening' && v.opening === 'dice' && v.dealer === v.seat && !v.dice) {
-      html = '<button class="pc-btn pc-btn-main pc-btn-big" data-act="roll" type="button">Roll the dice</button>';
+      html = `${scores}<button class="pc-btn pc-btn-main pc-btn-big mj-roll" data-act="roll" type="button">Roll the dice</button>`;
     } else if (v.options && v.offer && this.learning()) {
       // (The card over the table asks.)
+      html = scores;
     } else if (v.options && v.offer) {
+      // (The claims have the whole block for their few seconds.)
       const o = v.options;
       html = '<span class="mj-claims">';
       if (o.win) html += '<button class="pc-btn pc-btn-main" data-claim="win" type="button">Mahjong</button>';
@@ -841,6 +957,7 @@ export class MahjongTable implements View {
       // Learning Mode: about to throw away a hand that's finished (the question is in the note
       // over your tiles, so the buttons keep their room).
       html += '<span class="mj-extra"><button class="pc-btn pc-btn-main" data-act="win" type="button">Mahjong</button></span>';
+      html += scores;
       html += `<button class="pc-btn pc-btn-plain pc-btn-big mj-discard" data-act="discard-anyway" type="button"${this.selected && !this.pending ? '' : ' disabled'}>Throw it away</button>`;
     } else if (this.myTurnToDiscard()) {
       const s = v.self!;
@@ -854,7 +971,11 @@ export class MahjongTable implements View {
       for (const k of s.kongs) extra += `<button class="pc-btn pc-btn-plain" data-kong="${k}" type="button">Kong ${tileHtml(k, 'mj-mini')}</button>`;
       if (learning && !s.kongs.length) extra += '<button class="pc-btn pc-btn-plain" data-turn-learn="kong" type="button">Kong</button>';
       if (extra) html += `<span class="mj-extra">${extra}</span>`;
+      html += scores;
       html += `<button class="pc-btn ${s.win ? 'pc-btn-plain' : 'pc-btn-main'} pc-btn-big mj-discard" data-act="discard" type="button"${this.selected && !this.pending ? '' : ' disabled'}>Discard</button>`;
+    } else {
+      // Waiting for your turn: Scores keeps its place.
+      html = scores;
     }
     if (box.dataset.offer !== key) {
       box.dataset.offer = key;
@@ -864,22 +985,60 @@ export class MahjongTable implements View {
     box.classList.toggle('mj-offering', !!v.options);
   }
 
-  /** Sizes that depend on the room the table has. */
+  /**
+   * Picks the design for the screen (MJ_DESIGNS) and scales the table to it: centred across, your
+   * strip on the foot of the screen (inside the safe area). The felt beyond the design runs to the
+   * screen's edges (--bleed-*, in the design's px): your strip reaches into it at the sides and
+   * bottom on phones. Height to spare (--extra) goes half above the table and half below it, so
+   * everything but your strip sits in the middle of the green (user, 2026-11-25).
+   */
+  private fit(): MjDesign | null {
+    const W = this.el.clientWidth;
+    const H = this.el.clientHeight;
+    if (!W || !H) return null;
+    const cs = getComputedStyle(this.q('.mj-safe'));
+    const sl = parseFloat(cs.paddingLeft) || 0;
+    const sr = parseFloat(cs.paddingRight) || 0;
+    const sb = parseFloat(cs.paddingBottom) || 0;
+    const { d, s } = mjDesignFor(W - sl - sr, H - sb);
+    this.scale = s;
+    const x = sl + (W - sl - sr - d.w * s) / 2;
+    const extra = Math.max(0, (H - sb) / s - d.h);
+    const y = H - sb - (d.h + extra) * s;
+    const stage = this.q('.mj-stage');
+    stage.style.width = `${d.w}px`;
+    stage.style.height = `${d.h + extra}px`;
+    stage.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+    // Your strip runs to the screen's sides only when the table already (nearly) fills the width,
+    // as on most phones; with felt beside the table it stops at the table's edges, a card with
+    // rounded corners, on every design alike (user, 2026-11-25).
+    const hug = (W - sl - sr - d.w * s) / 2 < 24;
+    stage.style.setProperty('--bleed-l', `${hug ? x / s : 0}px`);
+    stage.style.setProperty('--bleed-r', `${hug ? (W - x - d.w * s) / s : 0}px`);
+    stage.style.setProperty('--bleed-b', `${sb / s}px`);
+    stage.style.setProperty('--extra', `${extra}px`);
+    return d;
+  }
+
+  /** Sizes that depend on the design (and on what's on the table). */
   private layout() {
     const v = this.view;
     const root = this.q('.mj');
-    const w = this.el.clientWidth;
-    const h = this.el.clientHeight;
-    if (!w || !h) return;
-    const roomy = w >= 720 && h >= 560;
-    // A phone held sideways (wider than tall, and short): one row of tiles with the buttons beside
-    // them. Upright, your strip is your name, your tiles and a row of buttons: two rows of tiles
-    // only when the screen is much taller than wide (an upright phone); otherwise one, so the strip
-    // never runs to four rows (user, 2026-11-24: a window just wider than tall wasted space).
-    const wide = !roomy && w > h && h < 480;
-    const oneRow = !roomy && !wide && h < w * 1.3;
-    root.dataset.layout = roomy ? 'roomy' : wide ? 'wide' : 'tall';
-    root.toggleAttribute('data-one-row', oneRow);
+    const d = this.fit();
+    if (!d) return;
+    const { w, h } = d;
+    const roomy = d.layout === 'roomy';
+    // A phone held sideways: one row of tiles with the buttons beside them, your name at its left
+    // end. Upright: two rows of tiles and a row of buttons (or the block of four beside them, with
+    // a little more room), your name on the green above. Tablets and computers: one row of tiles
+    // and the block of four, your name on the green above.
+    const wide = d.layout === 'wide';
+    root.dataset.layout = d.layout;
+    root.toggleAttribute('data-block', d.block);
+    const strip = this.q('.mj-mine');
+    const tag = this.q('.mj-me');
+    if (wide && tag.parentElement !== strip) strip.prepend(tag);
+    else if (!wide && tag.parentElement === strip) strip.before(tag);
     const me = v?.seat != null ? v.seats[v.seat] : null;
     // Your tiles: two rows of 7 upright on a phone, otherwise one row (sets at the front).
     const setSlots = me ? me.melds.length * 3 * 0.72 + (me.melds.length ? 0.6 : 0) : 0;
@@ -892,13 +1051,13 @@ export class MahjongTable implements View {
     let hw: number;
     if (roomy) hw = Math.min(62, handW / Math.max(slots, 14.6));
     else if (wide) hw = Math.min(52, handW / Math.max(slots, 14.6), h * 0.135);
-    else if (oneRow) hw = Math.min(56, handW / Math.max(slots, 14.6), h * 0.09);
     else {
       // Two rows of 7 across your strip's own width (less its padding and the 3 px gaps), with
       // room in the second row for the gap before a new tile (a third of a tile).
-      const mine = this.q('.mj-mine');
-      const cs = getComputedStyle(mine);
-      const inner = mine.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      // (Beside the block of four, the room it leaves.)
+      const cs = getComputedStyle(strip);
+      let inner = strip.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      if (d.block) inner -= this.q('.mj-actions').offsetWidth + (parseFloat(cs.columnGap) || 0);
       hw = Math.min(60, (inner - 18 - 4) / 7.4, h * 0.08);
     }
     // (Never so small they can't be read; on a small phone held sideways, smaller still rather
@@ -910,7 +1069,7 @@ export class MahjongTable implements View {
     // wide with about a third of one between sets, and the strip has 10 px of padding.
     const hand = this.handEl();
     const sets = me?.melds.length ?? 0;
-    if (!roomy && !wide && !oneRow && sets) {
+    if (!roomy && !wide && sets) {
       const room = hand.clientWidth - 10 - (sets - 1) * 2;
       const setW = Math.min(hwPx * 0.72, room / (sets * 3 + (sets - 1) * 0.3));
       hand.style.setProperty('--set-w', `${Math.floor(setW)}px`);
@@ -925,12 +1084,12 @@ export class MahjongTable implements View {
         const tops = [...this.handEl().querySelectorAll<HTMLElement>('.mj-strip:not([hidden]), .mj-h')].map((e) => e.offsetTop + e.offsetHeight).sort((x, y) => x - y);
         return tops.filter((b, i) => i === 0 || b - tops[i - 1] > hwPx / 2).length;
       };
-      while (hwPx > 24 && rows() > (oneRow ? 1 : 2)) root.style.setProperty('--hw', `${--hwPx}px`);
+      while (hwPx > 24 && rows() > 2) root.style.setProperty('--hw', `${--hwPx}px`);
     }
     // Everyone else's tiles, the discards and the wall scale with the table.
     const short = Math.min(w, h);
     const mid = this.q('.mj-mid');
-    // Sideways on a phone the mic and caret tabs sit in the top corners: the side players keep to
+    // Sideways on a phone the mic, Messages and menu tabs sit in the top corners: the side players keep to
     // the lower part of their edge, clear of them.
     // (Otherwise the side players run the whole height of their edge, beside the top player too.)
     const sideLen = wide ? mid.clientHeight - 14 : mid.clientHeight + this.q('.mj-pos-2').offsetHeight + 6 - 8;
@@ -940,20 +1099,33 @@ export class MahjongTable implements View {
     // 2026-11-23): as big as the player across has room for. Up each side their tiles lie in one
     // column, or two when one won't fit (smaller still only if two won't). Their sets go under
     // their tiles, or beside them on a phone held sideways.
-    // (Through the opening, sized for the hands about to be dealt: nothing moves as they arrive.)
+    // (Sized for the most each can hold, not what they hold now: nothing moves as the tiles are
+    // dealt, or as they draw and throw away. And with at least a flower's room, as the table keeps
+    // one for someone with no sets: before the deal nobody has flowers yet, and the wall shouldn't
+    // change size when they're dealt. User, 2026-11-25.)
     const acrossSeat = ((v?.seat ?? 0) + 2) % 4;
     const across = v ? v.seats[acrossSeat] : null;
-    const acrossNeed = across ? this.tilesOf(acrossSeat) + across.melds.length * 3.3 + across.flowers.length + 1 : 15;
+    const acrossNeed = across ? this.roomOf(acrossSeat) + Math.max(1, across.melds.length * 3.3 + across.flowers.length) + 1 : 16;
     let bw = Math.min(roomy ? 22 : 16, (w * (wide ? 0.42 : 0.62)) / acrossNeed);
     const sideSeat = (p: number) => ((v?.seat ?? 0) + p) % 4;
-    const sides = v ? [1, 3].map((p) => ({ p, s: v.seats[sideSeat(p)], n: this.tilesOf(sideSeat(p)) })) : [];
-    const setRows = (s: MahjongView['seats'][number]) => (s.melds.length + (s.flowers.length ? 1 : 0)) * 1.7;
+    const sides = v ? [1, 3].map((p) => ({ p, s: v.seats[sideSeat(p)], n: this.roomOf(sideSeat(p)) })) : [];
+    const setRows = (s: MahjongView['seats'][number]) => Math.max(1, s.melds.length + (s.flowers.length ? 1 : 0)) * 1.7;
     for (const { s, n } of sides) {
       bw = Math.min(bw, sideLen / (Math.ceil(n / 2) * 1.06 + (wide ? 0 : setRows(s)) + 0.5));
       if (wide) bw = Math.min(bw, sideLen / (setRows(s) + 0.5));
     }
+    // Sideways on a phone (short and wide) their tiles never wrap into a second column: everyone's
+    // are smaller instead, small enough for the most a hand holds (14), so the size never changes
+    // from turn to turn (user, 2026-11-25: one tile wrapped).
+    if (wide && sides.length) bw = Math.min(bw, sideLen / (14 * 1.06 + 0.5));
     const bwPx = Math.max(7, Math.floor(bw));
     root.style.setProperty('--bw', `${bwPx}px`);
+    // Down the side columns each tile's step (the tile and the gap under it) is a whole number of
+    // screen pixels, so the gaps all come out the same once the table is scaled (user,
+    // 2026-11-25: they looked uneven). About 6% of a tile, never less than a pixel.
+    const s = this.scale || 1;
+    const stepScreen = Math.max(Math.round(bwPx * 1.06 * s), Math.ceil(bwPx * s) + 1);
+    root.style.setProperty('--side-gap', `${(stepScreen / s - bwPx).toFixed(5)}px`);
     for (const { p, s, n } of sides) {
       // Their face-up sets lie sideways like their tiles when that fits (user, 2026-11-24): under
       // their tiles leaving them one column or two, or (sideways on a phone) beside them in the
@@ -972,9 +1144,18 @@ export class MahjongTable implements View {
       if (!turned) rows = Math.min(n, Math.floor((sideLen - (wide ? 0 : setRows(s) * bwPx)) / (bwPx * 1.06)));
       this.q(`.mj-pos-${p} .mj-backs`)?.style.setProperty('--rows', String(Math.max(1, rows, half)));
     }
-    // (Sideways the middle also holds Scores and the line saying what's happening.)
-    if (wide) root.style.setProperty('--dw', `${Math.max(14, Math.min(24, Math.floor((mid.clientHeight - 80) / 3.3)))}px`);
+    // (Sideways the discards along the top and bottom share the height with what's between them:
+    // All discards, the tiles left and the line saying what's happening (about 130 px), and the
+    // side columns of 4 beside those (6.2 tiles' height). Two rows of gaps: about 14 px.)
+    if (wide) root.style.setProperty('--dw', `${Math.max(14, Math.min(24, Math.floor((mid.clientHeight - 130) / 3.1), Math.floor((mid.clientHeight - 14) / 9.3)))}px`);
     else if (!roomy) root.style.setProperty('--dw', `${Math.max(18, Math.min(26, Math.floor(short / 15)))}px`);
+    // Sideways the Learning card starts just under the mic and menu tabs in the top corners.
+    if (wide) {
+      const tabs = Math.max($('btn-mic').getBoundingClientRect().bottom, $('btn-menu').getBoundingClientRect().bottom);
+      const top = root.getBoundingClientRect().top + 8 * this.scale;
+      root.style.setProperty('--learn-top', `${Math.max(6, Math.ceil((tabs - top) / this.scale + 5))}px`);
+    }
+    this.fitLearn();
     // The wall is four sides of 18 stacks, each sticking out past the next (a pinwheel, like a
     // real table: user, 2026-11-23): 21 stacks across. On tablets and computers
     // every discard lies inside it, smaller than the one on offer.
@@ -985,12 +1166,13 @@ export class MahjongTable implements View {
     root.style.setProperty('--ws', `${wsFit}px`);
     if (roomy) {
       // Inside the wall: a column of 5 up each side (the full height), and between them a row of
-      // 5 top and bottom with See all discards (about 90 px tall, 160 wide) in the middle.
+      // 5 top and bottom with All discards, the tiles left and the line saying what's happening
+      // (about 125 px tall, 160 wide) in the middle.
       const inner = wsFit * 15 - 24;
-      const dw = Math.min(36, (inner - 15) / 7.75, (inner - 100) / 3.3, (inner - 30) / 7.1, (inner - 172) / 2.1);
+      const dw = Math.min(36, (inner - 15) / 7.75, (inner - 137) / 3.1, (inner - 30) / 7.1, (inner - 172) / 2.1);
       root.style.setProperty('--dw', `${Math.max(16, Math.floor(dw))}px`);
     }
-    fitSeatText(this.el);
+    fitSeatText(this.el, this.scale);
   }
 
   // ------------------------------------------------------------------ the sheets over the table
@@ -1017,7 +1199,8 @@ export class MahjongTable implements View {
   private sheetHtml(fresh: boolean) {
     const v = this.view!;
     const rows = seatRows(v.seats, v.history, v.seat);
-    return `${scoreSheetHtml(rows, fresh)}<p class="pc-small">${v.rules.points ? `Points: ${v.rounds === 16 ? 'a full game, four rounds' : 'one round'}.` : 'Hands won.'}</p>`;
+    // (The round's wind is always named here; on the table only with points, where it scores.)
+    return `${scoreSheetHtml(rows, fresh)}<p class="pc-small">${WIND_NAMES[v.prevailing]} round. ${v.rules.points ? `Points: ${v.rounds === 16 ? 'a full game, four rounds' : 'one round'}.` : 'Hands won.'}</p>`;
   }
 
   private resultHtml(): string {
@@ -1135,6 +1318,12 @@ export class MahjongTable implements View {
     if (act) return this.act(act);
     const learn = t.closest<HTMLElement>('[data-learn]')?.dataset.learn;
     if (learn) return this.onLearn(learn);
+    // Learning Mode, more than one run: picking one (tap it again to put it down).
+    const run = t.closest<HTMLElement>('[data-learn-run]')?.dataset.learnRun;
+    if (run && this.learn) {
+      this.learn.run = this.learn.run === run ? null : (run as MjTile);
+      return this.renderLearn();
+    }
     const turnLearn = t.closest<HTMLElement>('[data-turn-learn]')?.dataset.turnLearn;
     if (turnLearn === 'win' || turnLearn === 'kong') return this.onTurnLearn(turnLearn);
     if (t.closest('.mj-tip')) return this.showTip(null);
@@ -1263,7 +1452,8 @@ export class MahjongTable implements View {
       d.moving = true;
       d.el.classList.add('held');
     }
-    d.el.style.transform = `translate(${dx}px, ${dy}px)`;
+    // (The finger moves in screen px; the tile in the table's, which the scale enlarges.)
+    d.el.style.transform = `translate(${dx / this.scale}px, ${dy / this.scale}px)`;
   };
 
   private onPointerUp = (e: PointerEvent) => {
@@ -1305,6 +1495,7 @@ export class MahjongTable implements View {
   dispose() {
     this.untuck();
     this.observer.disconnect();
+    this.learnFit?.disconnect();
     this.stopDeal();
     for (const t of this.timers) clearTimeout(t);
     window.clearTimeout(this.freshTimer);

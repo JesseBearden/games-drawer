@@ -161,7 +161,7 @@ body *::after {
    the menu's switches, Report and Mute in Messages, the Tanks touch buttons) lie flat; a picked
    one turns cobalt or lifts. */
 #game .pz-btn,
-#menu .seg button,
+:is(#menu, #chat) .seg button,
 #game .tbtn {
   box-shadow: var(--lift-1);
 }
@@ -395,7 +395,7 @@ body {
 .pc-alert,
 #game .pz-btn.picked,
 #game .pz-btn[aria-pressed='true'],
-#menu .seg button.active,
+:is(#menu, #chat) .seg button.active,
 #game .tbtn.held,
 #game .ht-status,
 #game .dm-empty,
@@ -487,7 +487,7 @@ body {
 /* On a computer, things you can press lift off the felt under the pointer (their shadow drops
    further), and sink back in when pressed. */
 #game .pz-btn,
-#menu .seg button {
+:is(#menu, #chat) .seg button {
   transition:
     transform 0.12s var(--settle),
     box-shadow 0.12s;
@@ -495,7 +495,7 @@ body {
 @media (hover: hover) {
   .pc-btn:hover:not(:disabled),
   #game .pz-btn:hover:not(:disabled),
-  #menu .seg button:hover,
+  :is(#menu, #chat) .seg button:hover,
   #game .tbtn:hover {
     transform: translateY(-2px);
     box-shadow: var(--lift-2);
@@ -503,7 +503,7 @@ body {
 }
 .pc-btn:active:not(:disabled),
 #game .pz-btn:active:not(:disabled),
-#menu .seg button:active {
+:is(#menu, #chat) .seg button:active {
   transform: translateY(1px);
   box-shadow: var(--lift-0);
 }

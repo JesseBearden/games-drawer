@@ -12,10 +12,12 @@ test('two people who join with their mics on can hear each other', async ({ page
   for (const p of [host, friend]) await expect(p.locator('#btn-mic')).toHaveText('Mute mic');
 
   await tapBar(host, '#btn-menu');
-  const peer = host.locator('#menu-mic li[data-peer]', { hasText: 'Vic' });
-  await expect(peer).toBeVisible({ timeout: 20_000 });
-  // Connected: no "(connecting…)" or "(couldn't connect)" next to their name.
-  await expect(peer).not.toContainText('connect', { timeout: 20_000 });
+  // Their name tag in the menu has a mic mark (on), and yours does too.
+  const peer = host.locator('#menu-people li[data-alias]', { hasText: 'Vic' });
+  await expect(peer.locator('.pc-mic.is-on')).toBeVisible({ timeout: 20_000 });
+  await expect(host.locator('#menu-people li', { hasText: 'Vera' }).locator('.pc-mic.is-on')).toBeVisible();
+  // Connected: no "Connecting…" or "Couldn't connect" under their name.
+  await expect(peer).not.toContainText('onnect', { timeout: 20_000 });
   await friend.context().close();
 });
 

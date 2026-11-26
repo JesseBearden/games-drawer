@@ -2,6 +2,9 @@ import type { ChatFilterMode, GameId, GameInput, GameServerMessage, MemberInfo, 
 import type { PlayOptions, Sfx, SoundName } from './audio';
 import type { Gamepads, PadPress } from './gamepad';
 
+/** A mic mark on a name tag: on the mic, on it but muted (only known for yourself), or off it. */
+export type MicMark = 'on' | 'muted' | 'off';
+
 export interface Device {
   touch: boolean;
   small: boolean;
@@ -38,6 +41,8 @@ export interface ShellApi {
     /** Why the mic didn't come on last time, if it didn't. */
     micProblem: 'blocked' | 'missing' | null;
     join(): void;
+    /** Someone's mic, for the mark on their name tag: null where there's no voice at all. */
+    micOf(alias: string): MicMark | null;
   };
   /** Game controllers (analog sticks for games that read them every frame). */
   readonly pads: Gamepads | null;

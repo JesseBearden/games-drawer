@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   MahjongHand,
+  MAX_NAME_LENGTH,
+  mjClaimShow,
   mjClaimWhyNot,
   mjLostClaim,
   mjMissedClaim,
@@ -36,25 +38,22 @@ describe('Learning Mode: why a discard can’t be taken that way', () => {
 
   it('a Pung needs two of the tile; a Kong three', () => {
     const p = mjClaimWhyNot('pung', offer('d5', ['d5', 'b2']))!;
-    expect(p.text).toBe('A Pung is three of a kind: you’d need two 5 dots in your hand, and you have one.');
+    expect(p.text).toBe('A Pung is three of a kind: you’d need two 5 dots in your hand.');
     expect(p.help).toEqual(['d5']);
     const k = mjClaimWhyNot('kong', offer('we', ['we', 'we']))!;
-    expect(k.text).toBe('A Kong is four of a kind: you’d need three East winds in your hand, and you have two.');
+    expect(k.text).toBe('A Kong is four of a kind: you’d need three East winds in your hand.');
     expect(k.help).toEqual(['we', 'we']);
-    expect(mjClaimWhyNot('pung', offer('dr', []))!.text).toContain('you have none');
   });
 
   it('a Chow only from the player right before you, never winds or dragons, and needs a run', () => {
-    expect(mjClaimWhyNot('chow', offer('d5', ['d4', 'd6'], 1))!.text).toBe(
-      'You can only make a Chow with a tile from Rusty, the player right before you. A tile from anyone can make a Pung, a Kong or Mahjong.',
-    );
+    expect(mjClaimWhyNot('chow', offer('d5', ['d4', 'd6'], 1))!.text).toBe('Only a tile from Rusty, the player right before you, can make a Chow.');
     expect(mjClaimWhyNot('chow', offer('dg', ['dg']))!.text).toBe('Winds and dragons can’t make a run, so they can’t make a Chow.');
     const c = mjClaimWhyNot('chow', offer('d5', ['d4', 'd9', 'b6', 'd7']))!;
-    expect(c.text).toBe('A Chow is a run of three in one suit: with the 5 dots you’d need 3 and 4, 4 and 6, or 6 and 7 dots in your hand.');
+    expect(c.text).toBe('A Chow is a run in one suit: you’d need 3 and 4, 4 and 6, or 6 and 7 dots.');
     expect(c.help.sort()).toEqual(['d4', 'd7']);
     // At the ends of a suit there's only one way, or two.
-    expect(mjClaimWhyNot('chow', offer('c1', []))!.text).toContain('with the 1 characters you’d need 2 and 3 characters');
-    expect(mjClaimWhyNot('chow', offer('b8', []))!.text).toContain('with the 8 bamboo you’d need 6 and 7, or 7 and 9 bamboo');
+    expect(mjClaimWhyNot('chow', offer('c1', []))!.text).toContain('you’d need 2 and 3 characters');
+    expect(mjClaimWhyNot('chow', offer('b8', []))!.text).toContain('you’d need 6 and 7, or 7 and 9 bamboo');
   });
 
   it('Mahjong, the last tile, and a tile added to a Pung', () => {
@@ -82,6 +81,72 @@ describe('Learning Mode: why a discard can’t be taken that way', () => {
       }
     }
     expect(checked).toBeGreaterThan(100);
+  });
+});
+
+describe('Learning Mode: the card’s picture of a play', () => {
+  it('a Pung or Kong you’re short of: your tiles, the missing ones, and what you need', () => {
+    const p = mjClaimShow('pung', offer('dr', ['dr', 'b2']));
+    expect(p.can).toBe(false);
+    expect(p.title).toBe('To make a Pung');
+    expect(p.hand).toEqual([
+      { tile: 'dr', have: true },
+      { tile: 'dr', have: false },
+    ]);
+    expect(p.text).toBe('A Pung is three of a kind: you need one more Red dragon in your hand.');
+    expect(mjClaimShow('kong', offer('d5', [])).text).toBe('A Kong is four of a kind: you need three 5 dots in your hand.');
+    expect(mjClaimShow('kong', offer('d5', [])).hand!.map((x) => x.have)).toEqual([false, false, false]);
+  });
+
+  it('a Chow you’re short of shows the run you’re closest to', () => {
+    const c = mjClaimShow('chow', offer('d5', ['d6', 'd7', 'b1']));
+    expect(c.hand).toEqual([
+      { tile: 'd6', have: true },
+      { tile: 'd7', have: true },
+    ]);
+    const near = mjClaimShow('chow', offer('d5', ['d3']));
+    expect(near.hand).toEqual([
+      { tile: 'd3', have: true },
+      { tile: 'd4', have: false },
+    ]);
+  });
+
+  it('every sentence fits in two lines on the card (80 letters at most)', () => {
+    // Every tile, every play, every hand from nothing to three of it, from each player, with names
+    // as long as a name can be.
+    const long = ['You', ...[1, 2, 3].map((n) => `Player ${n}`.padEnd(MAX_NAME_LENGTH, 'x'))];
+    const texts = new Set<string>();
+    for (const tile of ['d1', 'd5', 'd9', 'b1', 'b8', 'c1', 'c5', 'c9', 'we', 'wn', 'dr', 'dg', 'dw'] as MjTile[]) {
+      for (const hand of [[], [tile], [tile, tile], [tile, tile, tile]]) {
+        for (const from of [1, 2, 3]) {
+          for (const extra of [{}, { wallLeft: 0 }, { addedKong: true }]) {
+            for (const choice of ['pung', 'chow', 'kong', 'win'] as const) {
+              texts.add(mjClaimShow(choice, offer(tile, hand, from, { names: long, ...extra })).text);
+            }
+          }
+        }
+      }
+    }
+    const tooLong = [...texts].filter((t) => t.length > 80);
+    expect(tooLong).toEqual([]);
+  });
+
+  it('what a rule rules out, and Mahjong, are words only', () => {
+    expect(mjClaimShow('chow', offer('d5', ['d4', 'd6'], 1)).hand).toBeUndefined();
+    expect(mjClaimShow('chow', offer('dg', ['dg'])).hand).toBeUndefined();
+    expect(mjClaimShow('pung', offer('d5', ['d5'], 3, { wallLeft: 0 })).hand).toBeUndefined();
+    expect(mjClaimShow('win', offer('d5', [])).hand).toBeUndefined();
+  });
+
+  it('a play you can make: all your tiles there, and what they make', () => {
+    const o: MjOptions = { win: false, kong: false, pung: true, chows: ['d4'] };
+    const p = mjClaimShow('pung', offer('d5', ['d5', 'd5'], 3, { options: o }));
+    expect(p).toMatchObject({ can: true, title: 'To make a Pung', text: 'Your two 5 dots and this one make a Pung.' });
+    expect(p.hand!.every((x) => x.have)).toBe(true);
+    const c = mjClaimShow('chow', offer('d5', ['d4', 'd6'], 3, { options: o }));
+    expect(c.hand!.map((x) => x.tile)).toEqual(['d4', 'd6']);
+    expect(c.text).toBe('Your 4 and 6 dots and this one make a run.');
+    expect(mjClaimShow('win', offer('d5', [], 3, { options: { ...none, win: true } }))).toMatchObject({ can: true, title: 'Mahjong!' });
   });
 });
 

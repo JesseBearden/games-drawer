@@ -55,18 +55,12 @@ export async function createRoom(page: Page, name: string, game: GameId = 'jigsa
 }
 
 /**
- * On a phone the bar folds away behind a caret tab in the top-right corner (only the mic tab
- * shows): open it, the way a player would.
+ * Tap a button on the bar: the mic, Messages or the menu, or Invite and Help, which are in the
+ * menu (user, 2026-11-25): it's opened first for those, the way a player would.
  */
-export async function openBar(page: Page) {
-  const tab = page.locator('#bar-tab');
-  if ((await tab.isVisible()) && (await tab.getAttribute('aria-expanded')) !== 'true') await tab.click();
-}
-
-/** Tap a button on the bar (opening the folded bar first on a phone). */
 export async function tapBar(page: Page, selector: string) {
   const btn = page.locator(selector);
-  if (!(await btn.isVisible())) await openBar(page);
+  if (!(await btn.isVisible()) && (await page.locator(`#menu ${selector}`).count())) await page.locator('#btn-menu').click();
   await btn.click();
 }
 
@@ -75,7 +69,7 @@ export async function joinByInvite(page: Page, code: string, name: string, mic: 
   await page.goto(at(`/r/${code}`));
   await enterName(page, 'join', name);
   await page.getByRole('button', { name: `Join with mic ${mic}` }).click();
-  await expect(page.locator('#btn-menu:visible, #bar-tab:visible').first()).toBeVisible();
+  await expect(page.locator('#btn-menu')).toBeVisible();
 }
 
 /** Menu, then Switch game: back to the table. */

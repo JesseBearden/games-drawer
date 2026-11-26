@@ -58,7 +58,7 @@ test('friends meet at a table, chat, play Hearts and switch games @smoke', async
   await tapBar(friend, '#btn-menu');
   await friend.locator('#menu-lobby').click();
   for (const p of [host, friend]) await expect(p.locator('#game')).toHaveAttribute('data-view', 'lobby');
-  await expect(host.locator('.lobby-people li')).toHaveCount(2);
+  await expect(host.locator('#lobby-view .lobby-people li[data-alias]')).toHaveCount(2);
   await friend.locator('[data-game="dominoes"]').click();
   await expect(host.locator('.lobby-games [data-game="dominoes"]')).toHaveAttribute('aria-pressed', 'true');
   for (const p of [host, friend]) await ready(p);

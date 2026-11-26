@@ -59,19 +59,20 @@ export function fitScoreTable(root: HTMLElement) {
 /**
  * The name tags around a card table: names and scores on one line. Long ones shrink to fit (then
  * end in "…"). The other players' tags share one size, the smallest that fits, so side by side
- * they match; your own tag sizes itself.
+ * they match; your own tag sizes itself. `scale`: how much the table is enlarged on screen (Mahjong
+ * scales its table to fit).
  */
-export function fitSeatText(root: HTMLElement) {
+export function fitSeatText(root: HTMLElement, scale = 1) {
   for (const [sel, minPx] of [['.ht-nm', 12], ['.ht-score', 11]] as const) {
     const mine = root.querySelector<HTMLElement>(`.ht-pos-0 ${sel}`);
-    if (mine) fitOneLine(mine, minPx);
-    fitTogether([1, 2, 3].flatMap((p) => [...root.querySelectorAll<HTMLElement>(`.ht-pos-${p} ${sel}`)]), minPx);
+    if (mine) fitOneLine(mine, minPx, scale);
+    fitTogether([1, 2, 3].flatMap((p) => [...root.querySelectorAll<HTMLElement>(`.ht-pos-${p} ${sel}`)]), minPx, scale);
   }
 }
 
 /** Fits each line, then gives them all the smallest size any of them needed. */
-function fitTogether(els: HTMLElement[], minPx: number) {
-  for (const el of els) fitOneLine(el, minPx);
+function fitTogether(els: HTMLElement[], minPx: number, scale = 1) {
+  for (const el of els) fitOneLine(el, minPx, scale);
   const least = Math.min(...els.map((el) => parseFloat(getComputedStyle(el).fontSize)));
   if (Number.isFinite(least)) for (const el of els) el.style.fontSize = `${least}px`;
 }
@@ -79,17 +80,18 @@ function fitTogether(els: HTMLElement[], minPx: number) {
 /**
  * Keeps a line of text (a name on a name tag) on one line: if it's too wide for its box, the font
  * shrinks to fit, but never below minPx; past that, CSS cuts it off with "…". One measurement is
- * enough, since text width grows with font size.
+ * enough, since text width grows with font size. `scale`: how much it's enlarged on screen
+ * (measurements are on screen; padding and font sizes aren't).
  */
-export function fitOneLine(el: HTMLElement, minPx: number) {
+export function fitOneLine(el: HTMLElement, minPx: number, scale = 1) {
   el.style.fontSize = '';
   const cs = getComputedStyle(el);
   // A name tag turned on its side (Dominoes on an upright phone) runs its line downward.
   const sideways = cs.writingMode.startsWith('vertical');
   const box = el.getBoundingClientRect();
   const room = sideways
-    ? box.height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-    : box.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    ? box.height / scale - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+    : box.width / scale - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   if (!(room > 0)) return;
   // The text's own length, to the fraction of a pixel: a line a third of a pixel too long still
   // ends in "…", and scrollWidth rounds that away ("Sparky 3000" on a phone held sideways).
@@ -98,7 +100,7 @@ export function fitOneLine(el: HTMLElement, minPx: number) {
   range.selectNodeContents(el);
   const text = range.getBoundingClientRect();
   const over = sideways ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth;
-  const need = Math.max(sideways ? text.height : text.width, over > 0 ? room + over : 0);
+  const need = Math.max((sideways ? text.height : text.width) / scale, over > 0 ? room + over : 0);
   if (need <= room) return;
   const base = parseFloat(cs.fontSize);
   el.style.fontSize = `${Math.max(minPx, Math.floor(((base * room) / need) * 10) / 10)}px`;

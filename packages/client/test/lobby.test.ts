@@ -12,7 +12,7 @@ describe('how many players, at the table', () => {
     const el = { hidden: true, addEventListener() {}, removeEventListener() {}, contains: () => false, innerHTML: '' };
     vi.stubGlobal('document', { getElementById: () => el, activeElement: null });
     const table = { pick: 'threethirteen', seats: [null, null, null, null], ready: [], players: 2 };
-    const view = new LobbyView({ alias: 'jesse', table: () => table, voice: { available: false } } as never);
+    const view = new LobbyView({ alias: 'jesse', table: () => table, voice: { available: false, micOf: () => null } } as never);
     view.onMembers([
       { id: 'jesse', name: 'Jesse', color: 0, connected: true },
       { id: 'mom', name: 'Mom', color: 1, connected: true },

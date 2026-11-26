@@ -17,139 +17,111 @@
   color: var(--ink);
 }
 
-/* ------------------------------------------------------------------ the bar */
+/* ------------------------------------------------------------------ the bar (user, 2026-11-25)
+
+   The same on every screen, as phones had it: your mic as a felt tab hanging from the top-left
+   corner (the one button people use all the time), and two paper tabs in the top-right corner,
+   Messages (a speech bubble, with a dot when something new has come in) and the menu (three
+   lines). Invite and Help are in the menu. Messages hides while its panel is open (the panel has
+   its own Close). */
 
 #game .arena {
-  --bar-h: calc(64px + var(--safe-t));
+  --tabs-h: calc(48px + var(--safe-t));
 }
-@media (max-height: 520px) {
-  /* Phones on their side: a slimmer bar leaves the game room. */
-  #game .arena {
-    --bar-h: calc(52px + var(--safe-t));
-  }
-  #game .toolbar.pc-toolbar .pc-btn {
-    font-size: 0.95rem;
+/* Phones on their side: height is precious, so the game runs to the top and each game keeps its
+   top corners clear for the tabs (below). */
+@media (max-height: 500px) {
+  #game:is(.phone, .compact) .arena {
+    --tabs-h: 0px;
   }
 }
-
+/* The game sits below the tabs. Inside it, the tabs already cover the screen's notch. */
+#game .arena > .view {
+  top: var(--tabs-h);
+  --safe-t: 0px;
+}
 #game .toolbar.pc-toolbar {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: auto;
+  z-index: 34;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
+  height: auto;
+  padding: 0 calc(10px + var(--safe-r)) 0 calc(10px + var(--safe-l));
+  background: none;
+  box-shadow: none;
   transform: none;
-  z-index: 30;
-  height: var(--bar-h);
-  justify-content: center;
-  align-items: stretch;
-  padding: calc(8px + var(--safe-t)) calc(10px + var(--safe-r)) 8px calc(10px + var(--safe-l));
+  pointer-events: none;
+}
+#game .toolbar.pc-toolbar > * {
+  pointer-events: auto;
+}
+#game .toolbar.pc-toolbar #btn-mic {
+  flex: none;
+  margin-right: auto;
+  min-height: calc(46px + var(--safe-t));
+  padding: var(--safe-t) 16px 0;
+  border-radius: 0 0 14px 14px;
+  font-size: 1rem;
+}
+#game .toolbar.pc-toolbar #btn-mic::before {
+  content: '';
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-right: 7px;
+  background: currentColor;
+  -webkit-mask: var(--ico) center / contain no-repeat;
+  mask: var(--ico) center / contain no-repeat;
+}
+#btn-mic {
+  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0M12 18v3'/%3E%3C/svg%3E");
+}
+/* Messages and the menu: the same size, side by side in the corner. */
+#game .toolbar .bar-tab {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: calc(46px + var(--safe-t));
+  padding: var(--safe-t) 0 0;
+  border: 0;
+  border-radius: 0 0 14px 14px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--cobalt);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#game .toolbar .bar-tab:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+#game .toolbar .bar-tab:active {
   box-shadow: var(--laid);
-}
-/* Buttons grow to share the bar but keep room for their words (five fit a 360 px phone). */
-#game .toolbar.pc-toolbar .pc-btn {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 170px;
-  min-height: 0;
-}
-/* Mute mic, Invite, Help and Menu sit in the middle; Messages at the right end, by where its
-   panel opens. It hides while Messages is open (the panel has its own Close). */
-#game .toolbar.pc-toolbar > :first-child {
-  margin-left: auto;
-}
-#game .toolbar.pc-toolbar #btn-menu {
-  margin-right: auto;
 }
 #game:not(.chat-collapsed) .toolbar .chat-toggle {
   display: none;
 }
-@media (max-width: 420px) {
-  #game .toolbar.pc-toolbar {
-    gap: 5px;
-    padding-left: calc(6px + var(--safe-l));
-    padding-right: calc(6px + var(--safe-r));
-  }
-  #game .toolbar.pc-toolbar .pc-btn {
-    padding-inline: 7px;
-    font-size: 0.85rem;
-  }
+/* Something new in Messages while it's closed: a dot on its tab. */
+#game .toolbar .bar-dot {
+  position: absolute;
+  top: calc(8px + var(--safe-t));
+  right: 10px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--tomato);
 }
-
-/* Tanks on a phone held sideways needs every bit of height, so the bar folds up out of sight and
-   the battlefield runs to the top of the screen. A small paper tab hanging from the top right
-   corner pulls the bar down; the tab then hangs under the bar, pointing up, to push it back. */
-#game .bar-tab {
+#game .toolbar .bar-dot[hidden] {
   display: none;
-}
-@media (max-height: 520px) {
-  #game:not(.phone, .slim, .compact)[data-view='tanks'] .arena > .view {
-    top: 0;
-  }
-  #game:not(.phone, .slim, .compact)[data-view='tanks'] .toolbar.pc-toolbar {
-    transform: translateY(-100%);
-    visibility: hidden;
-    transition:
-      transform 0.22s var(--settle),
-      visibility 0s 0.22s;
-  }
-  #game:not(.phone, .slim, .compact)[data-view='tanks'].bar-open .toolbar.pc-toolbar {
-    transform: none;
-    visibility: visible;
-    box-shadow: var(--laid);
-    transition: transform 0.22s var(--settle);
-  }
-  #game:not(.phone, .slim, .compact)[data-view='tanks'] .bar-tab {
-    position: absolute;
-    z-index: 31;
-    top: 0;
-    right: calc(14px + var(--safe-r));
-    display: grid;
-    place-items: center;
-    width: 58px;
-    height: 36px;
-    padding: 0;
-    border: 0;
-    border-radius: 0 0 14px 14px;
-    --fc: var(--paper);
-    background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-    box-shadow: var(--lift-1);
-    color: var(--cobalt);
-    cursor: pointer;
-    transition: top 0.22s var(--settle);
-  }
-  #game[data-view='tanks'] .bar-tab svg {
-    transition: transform 0.22s var(--settle);
-  }
-  #game:not(.phone, .slim, .compact)[data-view='tanks'].bar-open .bar-tab {
-    top: var(--bar-h);
-  }
-  #game:not(.phone, .slim, .compact)[data-view='tanks'].bar-open .bar-tab svg {
-    transform: rotate(180deg);
-  }
-  /* A new message while the bar is folded: a dot on the tab. */
-  #game .bar-tab-dot {
-    position: absolute;
-    top: 6px;
-    right: 8px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--tomato);
-  }
-  /* The aim tag steps left of the tab. */
-  #game:not(.phone, .slim, .compact)[data-view='tanks'] .aim-box {
-    right: calc(14px + 58px + 10px + var(--safe-r));
-  }
-}
-
-/* The game sits below the bar. Inside it, the bar already covers the screen's notch, and the
-   space the old floating buttons needed is no longer kept free. */
-#game .arena > .view {
-  top: var(--bar-h);
-  --safe-t: 0px;
 }
 #game .lobby-view {
   padding-top: 18px;
@@ -267,6 +239,14 @@
   align-items: center;
   gap: 14px;
 }
+/* One width whether it says "Turn sound off" or "Turn sound on", so the slider beside it never
+   shifts (user, 2026-11-25). */
+.sound-row #btn-sound {
+  flex: none;
+  width: 10.5em;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
 .sound-row input[type='range'] {
   flex: 1;
   min-width: 0;
@@ -287,7 +267,7 @@
 
 /* The message filter: three separate paper buttons, the chosen one cobalt. (The old segmented
    control clipped their outlines and drew dividers between them.) */
-#menu .seg {
+:is(#menu, #chat) .seg {
   display: flex;
   gap: 10px;
   padding: 3px;
@@ -295,10 +275,10 @@
   border-radius: 0;
   overflow: visible;
 }
-#menu .seg button + button {
+:is(#menu, #chat) .seg button + button {
   border-left: 0;
 }
-#menu .seg button {
+:is(#menu, #chat) .seg button {
   flex: 1;
   min-height: 44px;
   border: 0;
@@ -312,38 +292,12 @@
   font: 800 1rem var(--font);
   cursor: pointer;
 }
-#menu .seg button.active {
+:is(#menu, #chat) .seg button.active {
   --fc: var(--cobalt);
   background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
   color: #fff;
 }
 
-/* Who's on the mic: a row each, with their talking bars and a mute just for you. */
-.mic-people {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.mic-people li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-/* The name on one line; "(connecting…)" under it. */
-.mic-people .mic-name {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  font-weight: 800;
-}
-.mic-people .pc-btn {
-  min-height: 40px;
-  padding: 6px 12px;
-  font-size: 0.95rem;
-}
 .menu-muted {
   display: grid;
   gap: 8px;
@@ -810,6 +764,298 @@
   margin: 0;
 }
 
+/* The menu's "At the table": the same name tags as Your table, wrapping onto more rows on a
+   narrow screen, then Invite someone under them. */
+.menu-here .pc-h3 {
+  margin: 0;
+}
+.menu-here .lobby-people:empty {
+  display: none;
+}
+.menu-mic {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.menu-mic:empty {
+  display: none;
+}
+.menu-name-row[hidden] {
+  display: none;
+}
+.menu-name-row {
+  width: 100%;
+}
+
+/* The menu's heading and Close stay at the top while it scrolls (user, 2026-11-25), on a strip of
+   kraft felt raised off the sheet, so it reads as the sheet's header. (Its felt is --head; any
+   swatch from felt.css can go there.) */
+.sheet-top {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 12px 20px;
+  border-radius: 18px 18px 0 0;
+  --fc: var(--head);
+  background: var(--head) var(--head-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+}
+/* A sheet with a header: the header stays, and only the body under it scrolls (so does its
+   scroll bar: user, 2026-11-25). */
+.sheet.has-top {
+  /* Its felts: the sheet, the header, and the thin strips between its parts (and the scroll
+     bar). data-look picks a brighter set (user, 2026-11-25, trying them out). */
+  --body: var(--paper);
+  --body-img: var(--paper-img);
+  --head: var(--kraft);
+  --head-img: var(--kraft-img);
+  --line: var(--kraft);
+  --line-img: var(--kraft-img);
+  --fc: var(--body);
+  background: var(--body) var(--body-img) 0 0 / var(--paper-size);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+/* Butter, with a sunflower header. */
+.sheet.has-top[data-look='butter'] {
+  --body: var(--butter);
+  --body-img: var(--butter-img);
+  --head: var(--sunflower);
+  --head-img: var(--sunflower-img);
+  --line: var(--sunflower);
+  --line-img: var(--sunflower-img);
+}
+/* Peach, with a blush header. */
+.sheet.has-top[data-look='peach'] {
+  --body: var(--peach);
+  --body-img: var(--peach-img);
+  --head: var(--blush);
+  --head-img: var(--blush-img);
+  --line: var(--blush);
+  --line-img: var(--blush-img);
+}
+/* Mint, with a lilac header. */
+.sheet.has-top[data-look='mint'] {
+  --body: var(--mint);
+  --body-img: var(--mint-img);
+  --head: var(--lilac);
+  --head-img: var(--lilac-img);
+  --line: var(--lilac);
+  --line-img: var(--lilac-img);
+}
+.sheet-body {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 20px 22px;
+}
+/* Its scroll bar, on computers: a strip of kraft felt you can drag, in a groove (Chrome, Edge and
+   Safari; Firefox takes only plain colours; phones and iPads show no bar to drag). */
+.sheet-body::-webkit-scrollbar {
+  width: 14px;
+}
+.sheet-body::-webkit-scrollbar-track {
+  margin: 6px 0;
+  border-radius: 7px;
+  background: rgb(var(--shade) / 0.08);
+  box-shadow: inset 0 1px 2px rgb(var(--shade) / 0.25);
+}
+.sheet-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 7px;
+  background: var(--line) var(--line-img) 0 0 / var(--paper-size) padding-box;
+  box-shadow: 0 1px 2px rgb(var(--shade) / 0.4);
+}
+.sheet-body::-webkit-scrollbar-thumb:active {
+  background-color: var(--line);
+  filter: brightness(0.92);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .sheet-body {
+    scrollbar-color: var(--line) rgb(var(--shade) / 0.08);
+  }
+}
+/* Between the menu's parts: a thin strip of felt laid across, in place of headings (user,
+   2026-11-25: "Sound" seemed to head Full screen and Game Rules too). */
+.has-top .sheet-part {
+  position: relative;
+  padding-top: 18px;
+}
+.has-top .sheet-part::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  height: 5px;
+  border-radius: 3px;
+  --fc: var(--line);
+  background: var(--line) var(--line-img) 0 0 / var(--paper-size);
+  box-shadow: var(--laid);
+}
+.menu-fullscreen {
+  display: grid;
+}
+.menu-fullscreen[hidden] {
+  display: none;
+}
+/* Invite someone, as the next name tag: empty, with a big +, standing up as a button does. */
+.pc-tag.pc-tag-add {
+  min-width: 96px;
+  padding: 0;
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+}
+.pc-tag.pc-tag-add:active {
+  box-shadow: var(--laid);
+}
+.pc-tag-add .pc-tag-btn {
+  place-items: center;
+  height: 100%;
+  min-height: 56px;
+  padding: 6px 16px;
+  color: var(--cobalt);
+}
+.pc-tag-add svg {
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.sheet-top .pc-h3 {
+  margin: 0;
+}
+.sheet-top .pc-btn {
+  min-height: 40px;
+  padding: 6px 16px;
+}
+
+/* A mark for each person's mic on their name tag (user, 2026-11-25): on, or struck through when
+   off (grey) or muted (tomato: only ever your own). */
+.pc-tag .pc-mic {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--ink);
+}
+.pc-tag .pc-mic svg,
+.pc-tag .pc-edit svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pc-tag .pc-mic.is-off {
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+.pc-tag .pc-mic.is-muted {
+  color: var(--tomato);
+}
+/* Your own tag in the menu is a button (tap it to change your name): it stands up off the paper,
+   with a pencil, as buttons do. */
+.pc-tag.is-editable {
+  padding: 0;
+  box-shadow: var(--lift-1);
+}
+.pc-tag.is-editable:active {
+  box-shadow: var(--laid);
+}
+.pc-tag-btn {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 16px 11px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pc-tag-btn:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+.pc-tag .pc-edit {
+  display: inline-grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--cobalt);
+}
+
+/* The message filter, under Messages' heading: a funnel opens it (user, 2026-11-25). */
+#game .chat-filter-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 40px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--lift-1);
+  color: var(--cobalt);
+  cursor: pointer;
+}
+#game .chat-filter-btn[aria-expanded='true'] {
+  --fc: var(--cobalt);
+  background: var(--cobalt) var(--cobalt-img) 0 0 / var(--paper-size);
+  color: #fff;
+}
+#game .chat-head {
+  gap: 8px;
+}
+/* The funnel and Close are one height (user, 2026-11-25). */
+#game .chat-head #chat-collapse,
+#game .chat-head .chat-filter-btn {
+  height: 44px;
+  min-height: 44px;
+}
+#game .chat-filter {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  --fc: var(--white);
+  background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+  box-shadow: var(--laid);
+}
+#game .chat-filter[hidden] {
+  display: none;
+}
+#game .chat-filter .pc-h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+#game .chat-filter p {
+  margin: 0;
+}
+
 /* The game's own menu actions sit in the same column as Switch game and Leave table. */
 .menu-game {
   display: contents;
@@ -837,7 +1083,7 @@
 #game .chat-head .pc-btn {
   min-height: 48px;
 }
-#menu .seg button {
+:is(#menu, #chat) .seg button {
   min-height: 48px;
 }
 
@@ -850,185 +1096,6 @@
     width: min(380px, 62%);
     z-index: 35;
   }
-}
-
-/* ------------------------------------------------------------------ the bar, reworked (2026-11-21)
-
-   iPad and computer: your mic on the left (the one button people use all the time), then
-   Messages, Invite, Help and Menu together on the right. Each has a small icon beside its word.
-
-   Phones: the bar folds away. Your mic stays in view as a felt tab hanging from the top-left
-   corner; a tab with a caret in the top-right corner drops the rest of the bar down over the
-   game. Using the bar, or touching the game, folds it again. */
-
-#game .toolbar.pc-toolbar {
-  justify-content: flex-start;
-}
-#game .toolbar.pc-toolbar > :first-child,
-#game .toolbar.pc-toolbar #btn-menu {
-  margin-left: 0;
-  margin-right: 0;
-}
-#game .toolbar.pc-toolbar #btn-mic {
-  order: 0;
-  margin-right: auto;
-}
-#game .toolbar.pc-toolbar #btn-chat {
-  order: 1;
-}
-#game .toolbar.pc-toolbar #btn-share {
-  order: 2;
-}
-#game .toolbar.pc-toolbar #btn-help {
-  order: 3;
-}
-#game .toolbar.pc-toolbar #btn-menu {
-  order: 4;
-}
-/* Messages stays in the group (its panel's own Close hides it while it's open). */
-#game .toolbar.pc-toolbar .pc-btn {
-  gap: 7px;
-}
-#game .toolbar .pc-btn::before {
-  content: '';
-  flex: none;
-  width: 20px;
-  height: 20px;
-  background: currentColor;
-  -webkit-mask: var(--ico) center / contain no-repeat;
-  mask: var(--ico) center / contain no-repeat;
-}
-#btn-mic {
-  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='3' width='6' height='11' rx='3'/%3E%3Cpath d='M5 11a7 7 0 0 0 14 0M12 18v3'/%3E%3C/svg%3E");
-}
-#btn-chat {
-  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v11H9l-5 4z'/%3E%3C/svg%3E");
-}
-#btn-share {
-  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='10' cy='8' r='4'/%3E%3Cpath d='M3 20c1-4 4-6 7-6s6 2 7 6M19 7v6M16 10h6'/%3E%3C/svg%3E");
-}
-#btn-help {
-  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01'/%3E%3C/svg%3E");
-}
-#btn-menu {
-  --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 7h16M4 12h16M4 17h16'/%3E%3C/svg%3E");
-}
-
-/* Phones. Held upright, a slim row along the top holds the two tabs (the games' top rows of name
-   tags need it clear); held sideways, height is precious, so the game runs to the top and each
-   game keeps its top corners clear for the tabs (below). */
-#game:is(.phone, .slim, .compact) .arena {
-  --tabs-h: calc(48px + var(--safe-t));
-}
-@media (max-height: 500px) {
-  #game:is(.phone, .compact) .arena {
-    --tabs-h: 0px;
-  }
-}
-#game:is(.phone, .slim, .compact) .arena > .view {
-  top: var(--tabs-h);
-}
-/* Folded: only the mic tab shows. Open: the mic tab stays, and Messages, Invite, Help and Menu
-   hang in a stack of felt buttons under the caret tab. */
-#game:is(.phone, .slim, .compact) .toolbar.pc-toolbar {
-  height: auto;
-  padding: 0 calc(10px + var(--safe-r)) 0 calc(10px + var(--safe-l));
-  background: none;
-  box-shadow: none;
-  pointer-events: none;
-}
-#game:is(.phone, .slim, .compact):not(.bar-open) .toolbar.pc-toolbar > :not(#btn-mic) {
-  display: none;
-}
-#game:is(.phone, .slim, .compact) .toolbar.pc-toolbar #btn-mic {
-  flex: none;
-  max-width: none;
-  min-height: calc(46px + var(--safe-t));
-  padding: var(--safe-t) 16px 0;
-  border-radius: 0 0 14px 14px;
-  font-size: 1rem;
-  pointer-events: auto;
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar {
-  display: grid;
-  grid-template-columns: auto 1fr min(230px, 60vw);
-  grid-auto-rows: auto;
-  align-content: start;
-  align-items: start;
-  gap: 8px 0;
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-mic {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: start;
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar > :not(#btn-mic) {
-  grid-column: 3;
-  width: 100%;
-  max-width: none;
-  min-height: 48px;
-  justify-content: flex-start;
-  padding-inline: 16px;
-  font-size: 1.05rem;
-  pointer-events: auto;
-  box-shadow: var(--lift-2);
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-chat {
-  grid-row: 2;
-  margin-top: 4px;
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-share {
-  grid-row: 3;
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-help {
-  grid-row: 4;
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-menu {
-  grid-row: 5;
-}
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-chat[hidden],
-#game:is(.phone, .slim, .compact).bar-open .toolbar.pc-toolbar #btn-share[hidden] {
-  display: none;
-}
-/* The caret tab, top right; under the open bar it points up to fold it again. */
-#game:is(.phone, .slim, .compact) .bar-tab {
-  position: absolute;
-  z-index: 31;
-  top: 0;
-  right: calc(10px + var(--safe-r));
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: calc(46px + var(--safe-t));
-  padding: var(--safe-t) 0 0;
-  border: 0;
-  border-radius: 0 0 14px 14px;
-  --fc: var(--paper);
-  background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
-  box-shadow: var(--lift-1);
-  color: var(--cobalt);
-  cursor: pointer;
-}
-#game:is(.phone, .slim, .compact) .bar-tab svg {
-  transition: transform 0.22s var(--settle);
-}
-
-#game:is(.phone, .slim, .compact).bar-open .bar-tab svg {
-  transform: rotate(180deg);
-}
-#game:is(.phone, .slim, .compact) .bar-tab-dot {
-  position: absolute;
-  top: calc(8px + var(--safe-t));
-  right: 10px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--tomato);
-}
-/* The tabs stay usable over Tanks' "turn sideways" card. */
-#game:is(.phone, .slim, .compact) .toolbar.pc-toolbar,
-#game:is(.phone, .slim, .compact) .bar-tab {
-  z-index: 34;
 }
 
 /* Sideways phones: each game keeps its top corners clear for the tabs. */
@@ -1044,16 +1111,19 @@
   }
 }
 
-/* Tanks on a sideways phone: one slim row across the top (user, 2026-11-23). The mic and caret
-   tabs are a fifth shorter; the lives tag (hearts, then level and knock-outs on the same line)
-   sits beside the mic tab, and the wind beside the caret tab, over the controls it matters to.
-   The battlefield is framed below the row (tankView.stripInset). */
+/* Tanks on a sideways phone: one slim row across the top (user, 2026-11-23). The tabs are a
+   fifth shorter; the lives tag (hearts, then level and knock-outs on the same line) sits beside
+   the mic tab, and the wind beside Messages and the menu, over the controls it matters to. The
+   battlefield is framed below the row (tankView.stripInset). */
 @media (max-height: 500px) {
   #game:is(.phone, .compact)[data-view='tanks'] .toolbar.pc-toolbar #btn-mic {
     min-height: calc(37px + var(--safe-t));
   }
-  #game:is(.phone, .compact)[data-view='tanks'] .bar-tab {
+  #game:is(.phone, .compact)[data-view='tanks'] .toolbar .bar-tab {
     height: calc(37px + var(--safe-t));
+  }
+  #game:is(.phone, .compact)[data-view='tanks'] .toolbar .bar-dot {
+    top: calc(5px + var(--safe-t));
   }
   #game:is(.phone, .compact) .tank-view .hud-top-left,
   #game:is(.phone, .compact) .tank-view .wind {
@@ -1082,7 +1152,7 @@
   }
   #game:is(.phone, .compact) .tank-view .wind {
     left: auto;
-    right: calc(10px + var(--safe-r) + 64px + 8px);
+    right: calc(10px + var(--safe-r) + 64px + 8px + 64px + 8px);
     transform: none;
     padding: 0 10px 0 6px;
     font-size: 1rem;

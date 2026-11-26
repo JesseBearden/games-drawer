@@ -74,26 +74,86 @@ export function mjClaimWhyNot(choice: MjLearnChoice, c: MjOfferContext): MjWhyNo
   if (choice === 'win') return { text: 'This tile doesn’t finish your hand: you need four sets and a pair.', help: [] };
   if (c.addedKong) return { text: 'A tile added to a Pung to make a Kong can only be taken for Mahjong.', help: [] };
   if (!c.wallLeft) return { text: 'That was the last tile from the wall: it can only be taken for Mahjong.', help: [] };
-  if (choice === 'pung') {
-    return { text: `A Pung is three of a kind: you’d need two ${name} in your hand, and you have ${NUMBER_WORDS[have]}.`, help: same };
-  }
-  if (choice === 'kong') {
-    return { text: `A Kong is four of a kind: you’d need three ${name} in your hand, and you have ${NUMBER_WORDS[have]}.`, help: same };
-  }
+  if (choice === 'pung') return { text: `A Pung is three of a kind: you’d need two ${name} in your hand.`, help: same };
+  if (choice === 'kong') return { text: `A Kong is four of a kind: you’d need three ${name} in your hand.`, help: same };
   // A Chow.
+  // (Each says it in two lines at most on the Learning card: user, 2026-11-25.)
   const before = (c.seat + 3) % 4;
-  if (c.from !== before) {
-    return {
-      text: `You can only make a Chow with a tile from ${c.names[before]}, the player right before you. A tile from anyone can make a Pung, a Kong or Mahjong.`,
-      help: [],
-    };
-  }
+  if (c.from !== before) return { text: `Only a tile from ${c.names[before]}, the player right before you, can make a Chow.`, help: [] };
   const i = mjIndex(c.tile);
   if (!suitedIndex(i)) return { text: 'Winds and dragons can’t make a run, so they can’t make a Chow.', help: [] };
   // Tiles of the same suit close by: the ones that would help.
   const near = new Set(runPairs(c.tile).flat());
   const help = [...new Set(c.hand.filter((x) => near.has(x)))];
-  return { text: `A Chow is a run of three in one suit: with the ${mjTileName(c.tile)} you’d need ${pairsText(c.tile)} in your hand.`, help };
+  return { text: `A Chow is a run in one suit: you’d need ${pairsText(c.tile)}.`, help };
+}
+
+/** One of your tiles in the picture of a play, or one you're missing. */
+export interface MjShowTile {
+  tile: MjTile;
+  have: boolean;
+}
+
+/**
+ * What the Learning card shows for a play you tap (user, 2026-11-25): a heading, a picture of the
+ * tiles it takes from your hand (the ones you're missing dashed) beside the discard, and a
+ * sentence. `can`: you can make it, and the card offers to. Mahjong, and a play a rule rules out,
+ * have no picture, only the sentence.
+ */
+export interface MjClaimShow {
+  can: boolean;
+  title: string;
+  /** The tiles from your hand it takes, in order (absent: no picture). */
+  hand?: MjShowTile[];
+  text: string;
+  /** The tiles in your hand it's about, lit up there. */
+  help: MjTile[];
+}
+
+const PLAY_NAMES: Record<MjLearnChoice, string> = { pung: 'Pung', kong: 'Kong', chow: 'Chow', win: 'Mahjong' };
+
+/** The three tiles of the run starting at lo. */
+const runFrom = (lo: MjTile): MjTile[] => [0, 1, 2].map((k) => MJ_KINDS[mjIndex(lo) + k]);
+/** "4 and 6 dots". */
+const runText = (tiles: readonly MjTile[]) => `${tiles.map((t) => (mjIndex(t) % 9) + 1).join(' and ')} ${SUIT_WORDS[Math.floor(mjIndex(tiles[0]) / 9)]}`;
+
+/** Someone else's tile is on offer and you tapped a play: what the card shows for it. */
+export function mjClaimShow(choice: MjLearnChoice, c: MjOfferContext): MjClaimShow {
+  const why = mjClaimWhyNot(choice, c);
+  const play = PLAY_NAMES[choice];
+  const title = choice === 'win' ? 'To go Mahjong' : `To make a ${play}`;
+  const name = mjTilesName(c.tile);
+  if (!why) {
+    if (choice === 'win') return { can: true, title: 'Mahjong!', text: 'This tile finishes your hand: four sets and a pair.', help: [] };
+    if (choice === 'chow') {
+      const run = runFrom(c.options.chows[0]).filter((t) => t !== c.tile);
+      return { can: true, title, hand: run.map((tile) => ({ tile, have: true })), text: `Your ${runText(run)} and this one make a run.`, help: run };
+    }
+    const n = choice === 'pung' ? 2 : 3;
+    const same: MjTile[] = Array(n).fill(c.tile);
+    return { can: true, title, hand: same.map((tile) => ({ tile, have: true })), text: `Your ${NUMBER_WORDS[n]} ${name} and this one make a ${play}.`, help: same };
+  }
+  const plain = { can: false, title, text: why.text, help: why.help };
+  // (A rule rules it out, whatever your tiles: just the sentence.)
+  if (choice === 'win' || c.addedKong || !c.wallLeft) return plain;
+  if (choice === 'chow') {
+    if (c.from !== (c.seat + 3) % 4 || !suitedIndex(mjIndex(c.tile))) return plain;
+    // The run you're closest to: the one with most of its other two tiles in your hand.
+    const pairs = runPairs(c.tile);
+    const held = (p: [MjTile, MjTile]) => p.filter((t) => c.hand.includes(t)).length;
+    const best = pairs.reduce((a, b) => (held(b) > held(a) ? b : a));
+    return { ...plain, hand: best.map((tile) => ({ tile, have: c.hand.includes(tile) })) };
+  }
+  const n = choice === 'pung' ? 2 : 3;
+  const have = countIn(c.hand, c.tile);
+  if (have >= n) return plain;
+  const short = n - have;
+  const more = have ? `${NUMBER_WORDS[short]} more` : NUMBER_WORDS[short];
+  return {
+    ...plain,
+    hand: Array.from({ length: n }, (_, i) => ({ tile: c.tile, have: i < have })),
+    text: `A ${play} is ${choice === 'pung' ? 'three' : 'four'} of a kind: you need ${more} ${short === 1 ? mjTileName(c.tile) : name} in your hand.`,
+  };
 }
 
 export interface MjTurnContext {
