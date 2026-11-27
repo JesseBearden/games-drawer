@@ -31,9 +31,11 @@
 
 /* ------------------------------------------------------------------ name tags */
 
+/* The name is Text and the points and counts under it Note, the same on a phone as on a computer
+   (DESIGN.md); fitSeatText shrinks a long name to Note at the least, then it ends in "…". */
 #game .ht-seat {
   border: 0;
-  border-radius: var(--radius);
+  border-radius: var(--corner-m);
   padding: 7px 12px 8px;
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
@@ -49,7 +51,7 @@
 /* (Talking: rings ripple out from the tag, paper.css.) */
 #game .ht-name {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: var(--type-text);
   gap: 6px;
 }
 #game .ht-seat.turn .ht-score {
@@ -57,7 +59,7 @@
 }
 #game .ht-score {
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-size: var(--type-note);
   font-weight: 400;
 }
 #game .ht-score i {
@@ -115,7 +117,6 @@
 #game .ht-scores-btn {
   min-height: 40px;
   padding: 6px 14px;
-  font-size: 0.95rem;
 }
 
 /* ------------------------------------------------------------------ cards */
@@ -309,8 +310,8 @@ body.pad-mode #game .card.pad-cursor {
     flex: 1 1 40%;
     width: auto;
     min-width: 0;
-    padding-inline: 6px;
-    font-size: 0.9375rem;
+    /* (Room for "See the board" on one line in Text on a 320 px phone.) */
+    padding-inline: 4px;
   }
 }
 /* A name too long for a whole line of a heading ends in "…" (it never wraps). */
@@ -468,6 +469,9 @@ body.pad-mode #game .card.pad-cursor {
   align-items: center;
   min-width: 0;
   max-width: 100%;
+  /* As tall as a line of Text even when a long name has shrunk, so the tag stays the size of
+     everyone else's (a length, so the name inside keeps it). */
+  line-height: 1.3em;
 }
 #game .hearts-view .ht-nm {
   min-width: 0;
@@ -568,7 +572,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
     gap: 0.35em;
     min-width: 0;
     padding: 5px 10px;
-    font-size: 0.8125rem;
+    font-size: var(--type-text);
   }
   #game .hearts-view .ht-seat .ht-name {
     flex: 0 1 auto;
@@ -579,7 +583,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .hearts-view .ht-seat .ht-score {
     flex: none;
     white-space: nowrap;
-    font-size: 0.75rem;
+    font-size: var(--type-note);
   }
   #game .hearts-view :is(.ht-pos-0, .ht-pos-2) .ht-score::before {
     content: '· ';
@@ -653,6 +657,10 @@ body.pad-mode #game .dm-mine.pad-cursor {
     max-width: none;
     padding-block: 4px;
   }
+  /* (Your name there is Text now: a slimmer tag keeps the three as tall as they were.) */
+  #game .tt-view .ht-mine > .ht-seat.ht-pos-0 {
+    padding-block: 2px;
+  }
   /* Your tiles are right there, so your tag leaves out how many you have. */
   #game .dominoes-view .ht-pos-0 .dm-tiles {
     display: none;
@@ -662,7 +670,6 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .dominoes-view .ht-scores-btn {
     min-height: 32px;
     padding: 4px 8px;
-    font-size: 0.8125rem;
   }
   #game .dominoes-view .dm-side {
     display: contents;
@@ -858,7 +865,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
     align-items: center;
     justify-content: center;
     gap: 0.35em;
-    font-size: 0.8125rem;
+    font-size: var(--type-text);
   }
   #game .hearts-view .ht-pos-2 {
     width: var(--tag-len);
@@ -909,7 +916,7 @@ body.pad-mode #game .dm-mine.pad-cursor {
   #game .hearts-view .ht-seat .ht-score {
     flex: none;
     white-space: nowrap;
-    font-size: 0.75rem;
+    font-size: var(--type-note);
   }
   #game .hearts-view .ht-seat .ht-score::before {
     content: '· ';

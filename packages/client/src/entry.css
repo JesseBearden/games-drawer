@@ -3,6 +3,20 @@
  * (buttons, fields, game tiles) come from paper.css; this file only lays the pages out.
  */
 
+/* The way in's sentences are Text, like the rest of the site (a trial, user 2026-11-27): the
+   pages' own words (--page-text, paper.css .pc-page) and the line under a page's heading
+   (--lead-text, .pc-lead). This is the one place to change them back: they were 1.125rem, and
+   clamp(1.125rem, 2.2vw, 1.3rem) under the heading (18 px on a phone, about 21 on a laptop). */
+:root {
+  --page-text: var(--type-text);
+  --lead-text: var(--type-text);
+}
+/* The name we already know ("Your name  Liz  Change") stays Strong, like the label by a box
+   (paper.css .pc-field), whatever the sentences are. */
+.pc-page .pc-namerow {
+  font-size: var(--type-strong);
+}
+
 /* The page scrolls inside itself (the body is fixed for the games). */
 .entry {
   position: fixed;
@@ -109,10 +123,8 @@
   text-align: center;
 }
 
-/* The name: a line with Change when we know it, a box (with a dice for a random one) when we don't. */
-.entry-name .pc-namerow span {
-  font-size: 1.125rem;
-}
+/* The name: a line with Change when we know it, a box (with a dice for a random one) when we
+   don't. (Their sizes: the top of this file.) */
 .entry-dice {
   flex: none;
   width: 52px;

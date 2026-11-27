@@ -45,7 +45,8 @@
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   color: var(--ink);
-  font: 400 1.125rem/1.5 var(--font);
+  /* (--page-text: set once for the way in, in entry.css.) */
+  font: 400 var(--page-text)/1.5 var(--font);
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
 }
@@ -77,7 +78,7 @@
   letter-spacing: -0.01em;
 }
 .pc-lead {
-  font-size: clamp(1.125rem, 2.2vw, 1.3rem);
+  font-size: var(--lead-text);
   text-wrap: balance;
 }
 .pc-small {
@@ -130,8 +131,8 @@
   min-height: var(--tap);
   padding: 10px 22px;
   border: 0;
-  border-radius: var(--radius);
-  font: 800 1.0625rem/1.2 var(--font);
+  border-radius: var(--corner-m);
+  font: 800 var(--type-text)/1.2 var(--font);
   text-decoration: none;
   cursor: pointer;
   box-shadow: var(--lift-1);
@@ -167,7 +168,7 @@
 }
 .pc-btn-big {
   min-height: 60px;
-  font-size: 1.2rem;
+  font-size: var(--type-strong);
   padding-inline: 28px;
 }
 @media (hover: hover) {
@@ -211,7 +212,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   border: 0;
   background: none;
   color: var(--cobalt);
-  font: 800 1.0625rem var(--font);
+  font: 800 var(--type-text) var(--font);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -223,6 +224,8 @@ body.pad-mode .pc-choice:has(input:focus) {
 .pc-field {
   display: grid;
   gap: 6px;
+  /* (The label by the box, wherever it is: Your name, Have a table code?, Their name.) */
+  font-size: var(--type-strong);
   font-weight: 800;
 }
 .pc-input {
@@ -230,11 +233,12 @@ body.pad-mode .pc-choice:has(input:focus) {
   min-height: 52px;
   padding: 10px 14px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--corner-m);
   background: #fff;
   box-shadow: var(--cut-in);
   color: var(--ink);
-  font: 400 1.125rem var(--font);
+  /* (Never under 16 px: an iPhone zooms the page in on a box with smaller words.) */
+  font: 400 var(--type-text) var(--font);
 }
 .pc-input::placeholder {
   color: #6f7ba3;
@@ -387,39 +391,39 @@ body.pad-mode .pc-choice:has(input:focus) {
   gap: 2px;
   min-width: 140px;
   padding: 10px 16px 11px;
-  border-radius: var(--radius);
+  border-radius: var(--corner-m);
   --fc: var(--paper);
   background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
   /* A name tag isn't a button: it lies flat (user, 2026-11-22). */
   box-shadow: var(--laid, var(--lift-1));
 }
+/* The name (with its marks): Text, bold, in full ink. */
 .pc-tag b {
   display: flex;
   align-items: center;
   min-width: 0;
   gap: 8px;
-  font-size: 1.125rem;
+  color: var(--ink);
+  font-size: var(--type-text);
+  font-weight: 800;
 }
-.pc-tag span {
-  font-size: 0.95rem;
+/* The line under it (You, Ready, Away): Note. Only that line: the spans inside the name's b
+   (the name itself, its marks) keep the name's size and ink. */
+.pc-tag .pc-note {
+  font-size: var(--type-note);
+  font-weight: 800;
   color: var(--ink-soft);
 }
 /* Facts ("20 pts", "5 tiles") never split in the middle when a tag is narrow. */
-.pc-tag span i {
+.pc-tag .pc-note i {
   font-style: normal;
   white-space: nowrap;
-}
-.pc-tag .pc-note {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: var(--ink-soft);
 }
 /* Whose turn it is: sunflower, still lying flat (the colour says it). */
 .pc-tag.is-turn {
   --fc: var(--sunflower);
   background: var(--sunflower) var(--sunflower-img) 0 0 / var(--paper-size);
 }
-.pc-tag.is-turn span,
 .pc-tag.is-turn .pc-note {
   color: var(--ink);
 }
@@ -480,7 +484,7 @@ body.pad-mode .pc-choice:has(input:focus) {
   inset: 0;
   display: block;
   height: auto;
-  border-radius: var(--radius);
+  border-radius: var(--corner-m);
   opacity: 1;
   pointer-events: none;
 }

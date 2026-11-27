@@ -8,6 +8,18 @@
  * tile with depth, its face on a sliver of its blue back.
  */
 
+/* Pinned for now (2026-11-27): the site's buttons moved onto DESIGN.md's text sizes (Text, and
+   Strong for the big one), but this table is drawn at fixed sizes and moves onto the lists later,
+   with its own fixes. Until then its buttons keep the sizes they had (17 px, the big one 19.2 px).
+   First in this file, so every Mahjong rule below still wins over them. (Its name tags keep their
+   old smallest size too: MJ_FIT_LEAST in mahjongView.ts.) */
+#game .mahjong-view .pc-btn {
+  font-size: 1.0625rem;
+}
+#game .mahjong-view .pc-btn-big {
+  font-size: 1.2rem;
+}
+
 #game[data-view='mahjong'] {
   --fc: var(--baize);
   background: var(--baize) var(--baize-img) 0 0 / var(--paper-size);

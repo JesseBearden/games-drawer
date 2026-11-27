@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Felt design</title>
+    <link rel="icon" href="/art/drawer.svg" type="image/svg+xml" />
+    <!-- Dev-only page (like sfx-lab.html and felt-swatches.html): the felt design system's named
+         values (DESIGN.md) and every shared piece in every state, drawn with the site's own
+         stylesheets (src/design.ts loads them in the site's order), with what each piece
+         measures as built beside it. Not part of the build: vite.config.ts builds index.html
+         only. With ?frame=phone it draws a card table at a phone's size, for the iframe on the
+         page itself.
+
+         These styles are the page's own frame: everything is .ds-*, and the few rules that touch
+         the site's classes only undo where the game screen pins a piece (position, or hiding
+         Messages), never how it looks. The site's stylesheets load after this, so those rules
+         carry html.ds-root or #game to win. -->
+    <style>
+      /* The page scrolls (the site's body is pinned for the games). */
+      html.ds-root,
+      html.ds-root body {
+        height: auto;
+        min-height: 100%;
+        overflow: visible;
+        position: static;
+        background: var(--paper);
+        overscroll-behavior: auto;
+      }
+      html.ds-root #game.ds-game {
+        position: static;
+        display: block;
+        inset: auto;
+        --fc: var(--paper);
+        background: none;
+      }
+      /* Pieces the game pins in place, laid out where they are shown here instead. */
+      html.ds-root #game .ds-stage .sheet-wrap {
+        position: relative;
+        inset: auto;
+        z-index: auto;
+      }
+      html.ds-root #game.ds-game .ds-stage .chat {
+        display: flex;
+        position: relative;
+        inset: auto;
+        width: min(340px, 100%);
+        z-index: auto;
+      }
+      html.ds-root #game .ds-stage .sp-score {
+        position: static;
+      }
+      html.ds-root #game .ds-stage .toasts {
+        position: static;
+        transform: none;
+        width: auto;
+        max-width: 100%;
+        align-items: flex-start;
+      }
+      html.ds-root #game .ds-stage .toasts div {
+        animation: none;
+      }
+      html.ds-root #game .ds-cards > .card {
+        position: relative;
+        top: auto;
+        left: auto;
+        flex: none;
+      }
+
+      /* ------------------------------------------------------------ the page's frame */
+
+      /* Cream felt like the way in, but not .pc-page: pieces at a table take their text size from
+         the page (16 px), as the game screen gives them, not the way in's own (--page-text in
+         entry.css, a trial). Stages for the way in's pieces are .pc-page themselves. */
+      .ds-page {
+        min-height: 100vh;
+        --fc: var(--paper);
+        background: var(--paper) var(--paper-img) 0 0 / var(--paper-size);
+        color: var(--ink);
+        font-family: var(--font);
+      }
+      .ds-stage.pc-page {
+        min-height: 0;
+      }
+
+      .ds-wrap {
+        width: min(100%, 1240px);
+        margin: 0 auto;
+        padding: 24px 16px 72px;
+      }
+      @media (min-width: 700px) {
+        .ds-wrap {
+          padding-inline: 32px;
+        }
+      }
+      .ds-h1 {
+        margin: 0 0 8px;
+        font-size: var(--type-head);
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+      }
+      .ds-h2 {
+        margin: 56px 0 8px;
+        font-size: var(--type-sub);
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+      }
+      .ds-h3 {
+        margin: 32px 0 12px;
+        font-size: var(--type-strong);
+        font-weight: 800;
+        line-height: 1.25;
+      }
+      .ds-p {
+        max-width: 70ch;
+        margin: 0 0 12px;
+        font-size: var(--type-text);
+        line-height: 1.5;
+      }
+      .ds-small {
+        font-size: var(--type-note);
+        color: var(--ink-soft);
+      }
+      .ds-code {
+        font: 400 var(--type-note) / 1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+        color: var(--ink-soft);
+        text-shadow: none;
+        overflow-wrap: anywhere;
+      }
+      .ds-link {
+        color: var(--cobalt);
+        font-weight: 800;
+        text-underline-offset: 3px;
+      }
+      .ds-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin: 16px 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--type-text);
+      }
+      .ds-count {
+        display: grid;
+        gap: 4px;
+        margin-top: 20px;
+        padding: 14px 18px;
+        border-radius: var(--corner-l);
+        --fc: var(--white);
+        background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+        box-shadow: var(--laid);
+      }
+      .ds-count b {
+        font-size: var(--type-sub);
+      }
+
+      /* Colours */
+      .ds-swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+        gap: 22px 18px;
+      }
+      .ds-swatches.is-signals {
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+      }
+      .ds-felt {
+        height: 88px;
+        border-radius: var(--corner-m);
+        box-shadow: var(--laid);
+      }
+      .is-signals .ds-felt {
+        height: 110px;
+      }
+      .ds-swatch-cap {
+        display: grid;
+        gap: 2px;
+        padding-top: 10px;
+        font-size: var(--type-note);
+        line-height: 1.35;
+      }
+      .ds-swatch-cap b {
+        font-size: var(--type-text);
+      }
+      .ds-shade {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: stretch;
+      }
+      .ds-shade > div {
+        display: grid;
+        gap: 8px;
+        width: min(100%, 260px);
+      }
+
+      /* Text */
+      .ds-type {
+        display: grid;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .ds-type li {
+        display: grid;
+        grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+        gap: 8px 24px;
+        align-items: baseline;
+        padding: 18px 0;
+        border-top: 1.5px solid rgb(var(--shade) / 0.12);
+      }
+      .ds-type-meta {
+        display: grid;
+        gap: 2px;
+        font-size: var(--type-note);
+        line-height: 1.35;
+      }
+      .ds-type-meta b {
+        font-size: var(--type-text);
+      }
+      .ds-type-sample {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+      }
+      @media (max-width: 640px) {
+        .ds-type li {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      /* Corners and heights */
+      .ds-pieces {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 28px 24px;
+        align-items: flex-end;
+      }
+      .ds-piece {
+        display: grid;
+        max-width: 220px;
+        gap: 10px;
+        justify-items: start;
+        font-size: var(--type-note);
+        line-height: 1.35;
+      }
+      .ds-piece b {
+        font-size: var(--type-text);
+      }
+      .ds-block {
+        display: grid;
+        place-items: center;
+        width: 132px;
+        height: 88px;
+        padding: 8px;
+        --fc: var(--white);
+        background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+        box-shadow: var(--laid);
+        text-align: center;
+        font-size: var(--type-note);
+        font-weight: 800;
+        line-height: 1.2;
+      }
+      .ds-heights .ds-block.pc-input {
+        width: 132px;
+        min-height: 0;
+        height: 88px;
+        border-radius: var(--corner-m);
+      }
+      .ds-dot {
+        width: 24px;
+        height: 24px;
+      }
+
+      /* A stage: the felt a piece lies on. */
+      .ds-stage {
+        position: relative;
+        min-width: 0;
+        padding: 22px;
+        border-radius: var(--corner-l);
+        box-shadow: var(--laid);
+        overflow: auto;
+      }
+      .ds-stage.is-flush {
+        padding: 0;
+      }
+      .ds-stage.is-bare {
+        padding: 0;
+        background: none;
+        box-shadow: none;
+      }
+      .ds-baize {
+        --fc: var(--baize);
+        background: var(--baize) var(--baize-img) 0 0 / var(--paper-size);
+      }
+      .ds-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+      }
+      .ds-row.is-top {
+        align-items: flex-start;
+      }
+      .ds-col {
+        width: min(100%, 640px);
+      }
+      .ds-bar-stage {
+        min-height: 118px;
+      }
+      .ds-board {
+        width: 140px;
+        height: 96px;
+        flex: none;
+      }
+      .ds-frame {
+        display: block;
+        width: min(390px, 100%);
+        height: 700px;
+        margin: 0 auto;
+        border: 0;
+        border-radius: var(--corner-l);
+        box-shadow: var(--laid);
+        background: var(--baize);
+      }
+
+      /* Specimens: a stage, then what it is and what it measures. */
+      .ds-specs {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+        gap: 28px 22px;
+        align-items: start;
+      }
+      .ds-spec {
+        display: grid;
+        min-width: 0;
+      }
+      .ds-spec.is-wide {
+        grid-column: 1 / -1;
+      }
+      .ds-cap {
+        display: grid;
+        gap: 3px;
+        padding: 12px 2px 0;
+        font-size: var(--type-note);
+        line-height: 1.4;
+      }
+      .ds-cap-title {
+        font-size: var(--type-text);
+        font-weight: 800;
+      }
+      .ds-from {
+        color: var(--ink-soft);
+      }
+      .ds-from.is-copied {
+        color: var(--ink);
+      }
+      .ds-readout {
+        display: grid;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .ds-part {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 10px;
+        align-items: baseline;
+      }
+      .ds-part > b {
+        font-weight: 800;
+      }
+      .ds-chip {
+        padding: 0 7px 1px;
+        border-radius: var(--corner-s);
+        --fc: var(--white);
+        background: var(--white) var(--white-img) 0 0 / var(--paper-size);
+        box-shadow: var(--laid);
+        font-size: var(--type-note);
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .ds-chip.is-off {
+        --fc: var(--tomato);
+        background: var(--tomato) var(--tomato-img) 0 0 / var(--paper-size);
+        color: var(--white);
+        text-shadow: 0 -1px 0 rgb(var(--shade) / 0.64);
+      }
+      .ds-chip.is-skip {
+        --fc: var(--paper);
+        background: none;
+        box-shadow: inset 0 0 0 1.5px rgb(var(--shade) / 0.25);
+        color: var(--ink-soft);
+      }
+      .ds-m {
+        white-space: nowrap;
+      }
+      .ds-v {
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .ds-v.is-off {
+        text-decoration: underline wavy var(--tomato);
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 4px;
+      }
+      .ds-why {
+        color: var(--ink-soft);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- The shared SVG fills (copied from index.html: domino faces use them). -->
+    <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id="gd-stock" patternUnits="userSpaceOnUse" width="300" height="300"><image width="300" height="300" /></pattern><linearGradient id="gd-ivory" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#fffbf2" /><stop offset="0.55" stop-color="#f6eedd" /><stop offset="1" stop-color="#ebdfc6" /></linearGradient><linearGradient id="gd-ceramic" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4efe7" /><stop offset="0.6" stop-color="#ede7dd" /><stop offset="1" stop-color="#e4ddd1" /></linearGradient><linearGradient id="gd-pip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070d1c" /><stop offset="0.55" stop-color="#141d33" /><stop offset="1" stop-color="#2c3754" /></linearGradient><linearGradient id="gd-bevel" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.75" /><stop offset="0.12" stop-color="#fff" stop-opacity="0.2" /><stop offset="0.5" stop-color="#fff" stop-opacity="0" /><stop offset="0.88" stop-color="#8a7046" stop-opacity="0.12" /><stop offset="1" stop-color="#7d6342" stop-opacity="0.4" /></linearGradient></defs></svg>
+    <script type="module" src="/src/design.ts"></script>
+  </body>
+</html>

@@ -63,6 +63,24 @@
   /* Boxes you type into are cut into the felt: white felt at the bottom of the cut, a shadow
      along its top wall and a darker rim (no navy line). */
   --cut-in: inset 0 2px 4px rgb(var(--shade) / 0.32), inset 0 0 0 1.5px rgb(var(--shade) / 0.4);
+
+  /* The agreed short lists (DESIGN.md sections 1 and 4, user 2026-11-27), moved onto area by
+     area: so far buttons, boxes you type into, name tags and the way in's sentences use them
+     (the design page, /design.html on the dev server, shows them and every piece as built). */
+  /* Five text sizes, the same on every device apart from a page's heading. In rem, so a
+     browser's own text size setting still scales them: 15, 16, 18, 22 and 28 px at the default. */
+  --type-note: 0.9375rem; /* a name tag's second line, scores, counts, times, small notes */
+  --type-text: 1rem; /* sentences, messages, boxes you type into, buttons, the name on a name tag */
+  --type-strong: 1.125rem; /* the big main button, a game's name on its tile, the line over a game */
+  --type-sub: 1.375rem; /* a sheet's title, a section's heading */
+  --type-head: 1.75rem; /* a page's heading (and 40 px on a large layout, which this doesn't do yet) */
+  /* The one size that grows with the screen: the home page's title only (entry.css). */
+  --type-headline: clamp(2rem, min(7vw, 7.5dvh), 4.5rem);
+  /* Three corners, so pieces of a kind are cut alike, and fully round for dots and pills. */
+  --corner-s: 6px; /* marks and the smallest pieces */
+  --corner-m: 12px; /* buttons, boxes you type into, name tags, chips, game tiles, the bar's tabs */
+  --corner-l: 18px; /* sheets and strips */
+  --corner-round: 999px;
 }
 
 /* Each person's own felt (personFelt in felts.ts): their name tag on Your table, their seat there
@@ -377,7 +395,7 @@ body {
   text-shadow: 0 1px 0 rgb(255 255 255 / 0.6);
 }
 .pc-small,
-.pc-tag span,
+.pc-tag .pc-note,
 #game .ht-score,
 #game .ht-sheet th,
 #game .chat-log .time {

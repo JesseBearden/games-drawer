@@ -63,6 +63,12 @@ export type MjDesign = (typeof MJ_DESIGNS)[number];
 export const MJ_ROOMY_LEAST = 0.85;
 /** No bigger than this on a big screen: past it the table stays this size, with felt round it. */
 export const MJ_MAX_SCALE = 1.4;
+/**
+ * The smallest a long name on a tag shrinks to before it ends in "…", at the design's own size.
+ * Pinned (2026-11-27): the card games' tags shrink to Note at the least now (fitSeatText), but
+ * this table moves onto DESIGN.md's lists later, with its own fixes (mahjong.css pins its buttons).
+ */
+const MJ_FIT_LEAST = { name: 12, score: 11 };
 
 /** The design for a screen `w` × `h` (px, inside its safe area), and its scale. */
 export function mjDesignFor(w: number, h: number): { d: MjDesign; s: number } {
@@ -767,7 +773,7 @@ export class MahjongTable implements View {
       else delete el.dataset.alias;
       el.classList.toggle('speaking', !!s.alias && this.speaking.has(s.alias));
     }
-    if (changed) fitSeatText(this.el, this.scale);
+    if (changed) fitSeatText(this.el, this.scale, MJ_FIT_LEAST);
   }
 
   /** Everyone else: their tag, their tiles face down, and their sets and flowers face up. */
@@ -1181,7 +1187,7 @@ export class MahjongTable implements View {
       const dw = Math.min(36, (inner - 15) / 7.75, (inner - 137) / 3.1, (inner - 30) / 7.1, (inner - 172) / 2.1);
       root.style.setProperty('--dw', `${Math.max(16, Math.floor(dw))}px`);
     }
-    fitSeatText(this.el, this.scale);
+    fitSeatText(this.el, this.scale, MJ_FIT_LEAST);
   }
 
   // ------------------------------------------------------------------ the sheets over the table

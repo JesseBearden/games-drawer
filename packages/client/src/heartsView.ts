@@ -56,14 +56,27 @@ export function fitScoreTable(root: HTMLElement) {
   fitTogether([...root.querySelectorAll<HTMLElement>('.ht-sheet .ht-who .pc-nm')], 12);
 }
 
+/** Note, the smallest text there is (DESIGN.md), in px as this browser works it out. */
+export function notePx() {
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;font-size:var(--type-note)';
+  document.body.append(probe);
+  const px = parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
+  return px;
+}
+
 /**
- * The name tags around a card table: names and scores on one line. Long ones shrink to fit (then
- * end in "…"). The other players' tags share one size, the smallest that fits, so side by side
- * they match; your own tag sizes itself. `scale`: how much the table is enlarged on screen (Mahjong
- * scales its table to fit).
+ * The name tags around a card table: names and scores on one line. Long ones shrink to fit, to
+ * Note at the least (then end in "…"). The other players' tags share one size, the smallest that
+ * fits, so side by side they match; your own tag sizes itself. `scale`: how much the table is
+ * enlarged on screen (Mahjong scales its table to fit). `least`: smallest sizes other than Note,
+ * for a table not on DESIGN.md's lists yet (Mahjong).
  */
-export function fitSeatText(root: HTMLElement, scale = 1) {
-  for (const [sel, minPx] of [['.ht-nm', 12], ['.ht-score', 11]] as const) {
+export function fitSeatText(root: HTMLElement, scale = 1, least?: { name: number; score: number }) {
+  const note = least ? 0 : notePx();
+  const floor = least ?? { name: note, score: note };
+  for (const [sel, minPx] of [['.ht-nm', floor.name], ['.ht-score', floor.score]] as const) {
     const mine = root.querySelector<HTMLElement>(`.ht-pos-0 ${sel}`);
     if (mine) fitOneLine(mine, minPx, scale);
     fitTogether([1, 2, 3].flatMap((p) => [...root.querySelectorAll<HTMLElement>(`.ht-pos-${p} ${sel}`)]), minPx, scale);
@@ -79,9 +92,9 @@ function fitTogether(els: HTMLElement[], minPx: number, scale = 1) {
 
 /**
  * Keeps a line of text (a name on a name tag) on one line: if it's too wide for its box, the font
- * shrinks to fit, but never below minPx; past that, CSS cuts it off with "…". One measurement is
- * enough, since text width grows with font size. `scale`: how much it's enlarged on screen
- * (measurements are on screen; padding and font sizes aren't).
+ * shrinks to fit, but never below minPx (Note, notePx(), on a name tag); past that, CSS cuts it
+ * off with "…". One measurement is enough, since text width grows with font size. `scale`: how
+ * much it's enlarged on screen (measurements are on screen; padding and font sizes aren't).
  */
 export function fitOneLine(el: HTMLElement, minPx: number, scale = 1) {
   el.style.fontSize = '';
