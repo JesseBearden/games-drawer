@@ -12,7 +12,6 @@
 // The site's stylesheets, in main.ts's order (mahjong.css comes with mahjongView, below).
 import '@fontsource/atkinson-hyperlegible-next/400.css';
 import '@fontsource/atkinson-hyperlegible-next/800.css';
-import '@fontsource/lilita-one/400.css';
 import './styles.css';
 import './room.css';
 import './paper.css';
@@ -938,7 +937,6 @@ const COLOURS: { signal?: boolean; name: string; label: string; for: string }[] 
   { name: 'blush', label: 'Blush', for: 'Three Thirteen’s tile; a person’s felt.' },
   { name: 'kraft', label: 'Kraft', for: 'Mahjong’s tile, sheet headers and the strips between the menu’s parts; a person’s felt.' },
   { name: 'grass', label: 'Grass', for: 'A player colour on the board (Tanks, Jigsaw) and Three Thirteen’s “All in melds”. Never a person’s felt: it vanishes into the green table.' },
-  { name: 'sage', label: 'Sage', for: 'Tried for the Jigsaw table. Named in felt.css, but not used and not on DESIGN.md’s list.' },
 ];
 
 const HEIGHTS = [

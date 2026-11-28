@@ -44,11 +44,9 @@
   /* The card games are played on green card-table felt (the user's mock), not the grey mat. */
   --baize: #617b57;
   --baize-img: url('/art/felt/baize.webp');
-  /* Lighter, calmer tables tried under Jigsaw. */
+  /* The lighter, calmer table under Jigsaw. */
   --dove: #b4b7bc;
   --dove-img: url('/art/felt/dove.webp');
-  --sage: #8ea888;
-  --sage-img: url('/art/felt/sage.webp');
 
   /* The shadow a piece of felt casts: warm and dark, like the mock's (felt shadows aren't blue). */
   --shade: 34 26 18;

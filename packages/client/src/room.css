@@ -67,11 +67,6 @@
   padding: calc(64px + var(--safe-t)) 16px calc(24px + var(--safe-b));
 }
 
-.room-code {
-  color: var(--accent);
-  letter-spacing: 2px;
-}
-
 /* ------------------------------------------------------------------ hearts */
 
 .hearts-view {
@@ -428,7 +423,6 @@
 }
 
 .ht-panel h2 {
-  font-family: var(--display);
   font-weight: 400;
   margin: 0 0 8px;
   text-align: center;
@@ -808,7 +802,6 @@
   left: 50%;
   top: 40%;
   transform: translate(-50%, 0);
-  font-family: var(--display);
   font-size: 28px;
   color: var(--accent);
   text-shadow: 0 3px 0 #b5561f, 0 6px 14px rgba(0, 0, 0, 0.35);
@@ -953,7 +946,6 @@ body.pad-mode .dm-mine.pad-cursor {
 .pz-setup-card h2,
 .pz-setup-card h3,
 .pz-setup-card h4 {
-  font-family: var(--display);
   font-weight: 400;
   margin: 0;
 }
@@ -988,7 +980,7 @@ body.pad-mode .dm-mine.pad-cursor {
   border: 3px solid transparent;
   border-radius: 12px;
   color: var(--text);
-  font: 700 13px var(--body);
+  font: 700 13px var(--font);
   cursor: pointer;
   text-align: left;
 }
@@ -1026,7 +1018,7 @@ body.pad-mode .dm-mine.pad-cursor {
   border: 2px solid rgba(255, 255, 255, 0.18);
   background: var(--navy-2);
   color: var(--text);
-  font: 800 15px var(--body);
+  font: 800 15px var(--font);
   cursor: pointer;
 }
 
@@ -1227,7 +1219,6 @@ body.pad-mode .dm-mine.pad-cursor {
 }
 
 .pz-done b {
-  font-family: var(--display);
   font-weight: 400;
   font-size: 24px;
   color: var(--accent);

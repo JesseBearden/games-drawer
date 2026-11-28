@@ -494,11 +494,6 @@
 .lobby-people .pc-tag {
   min-width: 0;
 }
-.lobby-paper .room-code {
-  color: var(--ink);
-  font-weight: 800;
-  letter-spacing: 0.15em;
-}
 
 /* ------------------------------------------------------------------ the table: gathering */
 

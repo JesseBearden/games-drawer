@@ -1,16 +1,15 @@
 # Credits
 
-## Fonts
+## Font
 
-Both are served from the site itself (installed from [Fontsource](https://fontsource.org), which
-packages them as Google Fonts publishes them), under the SIL Open Font License 1.1, which allows
-bundling them with a site. Their license texts ship with the site, in
-`packages/client/public/licenses/`.
+The site has one font. It's served from the site itself (installed from
+[Fontsource](https://fontsource.org), which packages it as Google Fonts publishes it), under the
+SIL Open Font License 1.1, which allows bundling it with a site. Its license text ships with the
+site, in `packages/client/public/licenses/`.
 
 | Font | Used for | By | License |
 | --- | --- | --- | --- |
 | Atkinson Hyperlegible Next | All the site's words | The Atkinson Hyperlegible Next Project Authors (Braille Institute) | SIL Open Font License 1.1 |
-| Lilita One | Game titles | Juan Montoreano | SIL Open Font License 1.1 (Reserved Font Name "Lilita One") |
 
 ## Sound effects
 

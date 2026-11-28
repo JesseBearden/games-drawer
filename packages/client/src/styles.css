@@ -6,12 +6,7 @@
   --text: #f4f6ff;
   --muted: #a9b1e6;
   --accent: #ffcc33;
-  --accent-2: #ff8a3d;
-  --danger: #ff5a6a;
-  --ok: #7be05a;
   --chat-w: 300px;
-  --display: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
-  --body: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -29,7 +24,7 @@ body {
   height: 100%;
   background: var(--navy);
   color: var(--text);
-  font-family: var(--body);
+  font-family: var(--font);
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -329,7 +324,6 @@ input:focus {
 }
 
 .chat-head h2 {
-  font-family: var(--display);
   font-weight: 400;
   font-size: 30px;
   margin: 0;
@@ -394,7 +388,6 @@ input:focus {
 
 .level-line {
   margin-top: 4px;
-  font-family: var(--display);
   font-size: 18px;
   text-shadow: 0 2px 2px rgba(0, 0, 0, 0.45);
 }
@@ -410,7 +403,6 @@ input:focus {
   padding: 4px 12px 4px 8px;
   background: var(--panel);
   border-radius: 14px;
-  font-family: var(--display);
   font-size: 24px;
   pointer-events: none;
 }
@@ -431,7 +423,6 @@ input:focus {
   background: var(--panel);
   border-radius: 14px;
   padding: 8px 16px;
-  font-family: var(--display);
   font-size: 24px;
   line-height: 1.25;
   pointer-events: none;
@@ -468,7 +459,6 @@ input:focus {
   top: 26%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-family: var(--display);
   font-size: clamp(30px, 6vw, 64px);
   color: var(--accent);
   text-shadow: 0 4px 0 #b5561f, 0 8px 24px rgba(0, 0, 0, 0.5);
@@ -567,16 +557,6 @@ input:focus {
   gap: 6px;
 }
 
-.badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--danger);
-}
-
 .game:not(.chat-collapsed) .chat-toggle {
   display: none;
 }
@@ -618,7 +598,6 @@ input:focus {
 .tbtn.fire {
   width: 112px;
   height: 84px;
-  font-family: var(--display);
   font-size: 30px;
   background: rgba(255, 90, 60, 0.85);
   border-color: rgba(255, 255, 255, 0.5);
@@ -713,7 +692,6 @@ input:focus {
 
 .overlay-card {
   text-align: center;
-  font-family: var(--display);
   font-size: 26px;
   width: auto;
 }

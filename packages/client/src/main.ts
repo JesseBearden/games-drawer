@@ -1,8 +1,7 @@
-// The fonts are served from the site itself (not Google Fonts), so visitors' addresses go to no
-// one else. Both are under the SIL Open Font License (public/licenses/, CREDITS.md).
+// The site's one font is served from the site itself (not Google Fonts), so visitors' addresses
+// go to no one else. It's under the SIL Open Font License (public/licenses/, CREDITS.md).
 import '@fontsource/atkinson-hyperlegible-next/400.css';
 import '@fontsource/atkinson-hyperlegible-next/800.css';
-import '@fontsource/lilita-one/400.css';
 import './styles.css';
 import './room.css';
 import './paper.css';
